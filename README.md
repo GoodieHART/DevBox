@@ -86,6 +86,37 @@ ssh root@<host> -p <port>
 
 Copy and paste this command into a new terminal window to connect to your remote DevBox.
 
+### Alias for Quick Launch
+
+To make launching your DevBox even faster, you can create an alias for the `modal run devbox.py` command in your shell configuration file (e.g., `.bashrc`, `.zshrc`, or PowerShell profile).
+
+**For Bash/Zsh:**
+
+Add the following line to your `~/.bashrc` or `~/.zshrc` file:
+
+```bash
+alias devbox="modal run /path/to/your/modal-terminal/devbox.py"
+```
+
+Remember to replace `/path/to/your/modal-terminal/` with the actual path to your `devbox.py` file. After saving, reload your shell configuration:
+
+```bash
+source ~/.bashrc  # or source ~/.zshrc
+```
+
+Now you can simply type `devbox` in your terminal to launch your DevBox.
+
+**For PowerShell:**
+
+Add the following lines to your PowerShell profile (you can open it by typing `$profile` and then `notepad $profile` in PowerShell):
+
+```powershell
+function Start-DevBox { modal run C:\path\to\your\modal-terminal\devbox.py }
+Set-Alias -Name devbox -Value Start-DevBox
+```
+
+Remember to replace `C:\path\to\your\modal-terminal\devbox.py` with the actual path to your `devbox.py` file. After saving, restart PowerShell or run `. $profile`.
+
 ### Important Notes
 
 -   **Persistent Storage**: Only the `/data` directory is persistent. Your home directory (`/root`) is ephemeral and will be reset every time the container starts. **Always save your important work in the `/data` directory.**
