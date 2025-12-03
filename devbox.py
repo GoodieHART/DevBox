@@ -61,9 +61,14 @@ doc_processing_image = (
 # NEW: Define a dedicated image for the Gemini CLI.
 gemini_cli_image = (
     modal.Image.debian_slim()
-    .apt_install("openssh-server", "git", "vim", "curl", "wget", "unzip", "procps", "nodejs", "npm") # Add nodejs and npm
+    .apt_install("openssh-server", "git", "vim", "curl", "wget", "unzip", "procps", "nano", "neovim")
     .run_commands(
-        "npm install -g @google/gemini-cli", # Correct, official installation
+        # Install Node.js 20.x from NodeSource
+        "curl -fsSL https://deb.nodesource.com/setup_20.x | bash -",
+        "apt-get install -y nodejs",
+        # Install Gemini CLI globally
+        "npm install -g @google/gemini-cli",
+        # Standard SSH setup
         "mkdir -p /root/.ssh",
         "chmod 700 /root/.ssh",
         "touch /root/.ssh/authorized_keys",
@@ -315,13 +320,8 @@ def launch_gemini_cli_box():
         ".gitconfig",
         ".ssh/config",
         ".ssh/known_hosts",
-        # Gemini CLI specific persistence
-        ".gemini/GEMINI.md",
-        ".gemini/google_account_id",
-        ".gemini/google_accounts.json",
-        ".gemini/mcp-oauth-tokens-v2.json",
-        ".gemini/settings.json",
-        ".gemini/extensions", # This is a directory
+        # Gemini CLI specific persistence: symlink the entire directory
+        ".gemini",
     ]
 
     for item in items_to_persist:
