@@ -7,11 +7,28 @@ import time
 # Container will shut down if no one is connected via SSH for this many seconds.
 IDLE_TIMEOUT_SECONDS = 300  # 5 minutes
 
-# 2. Define a base image with essential tools + OpenSSH server.
-# `procps` is included to provide the `ps` command for monitoring.
-devbox_image = (
+# 2. Define base images.
+# Standard image for CPU-only tasks.
+standard_devbox_image = (
     modal.Image.debian_slim()
     .apt_install("openssh-server", "git", "vim", "curl", "wget", "unzip", "procps", "zlib1g-dev", "build-essential", "pkg-config", "python3-dev")  # Good default tools
+    .run_commands(
+        "mkdir -p /root/.ssh",
+        "chmod 700 /root/.ssh",
+        "touch /root/.ssh/authorized_keys",
+        "chmod 600 /root/.ssh/authorized_keys",
+        "mkdir -p /var/run/sshd"
+    )
+)
+
+# CUDA image for GPU tasks, based on an official NVIDIA image.
+cuda_devbox_image = (
+    modal.Image.from_registry("nvidia/cuda:12.1.1-devel-ubuntu22.04", add_python="3.11")
+    .apt_install(
+        "openssh-server", "git", "vim", "curl", "wget", "unzip", "procps", 
+        "zlib1g-dev", "build-essential", "pkg-config", "python3-dev",
+        "libcudnn9-cuda-12", "libcudnn9-dev-cuda-12"  # Specify CUDA 12 version for cuDNN
+    )
     .run_commands(
         "mkdir -p /root/.ssh",
         "chmod 700 /root/.ssh",
@@ -66,23 +83,10 @@ app = modal.App(
 dev_volume = modal.Volume.from_name("my-dev-volume", create_if_missing=True)
 
 # 3. The remote function now accepts a list of packages to install.
-@app.function(
-    image=devbox_image, # Specify the base devbox image here
-    secrets=[modal.Secret.from_name("ssh-public-key")],
-    # Mount the volume at /data for persistent storage.
-    # Note: Your home directory /root is not persistent.
-    volumes={"/data": dev_volume},
-    cpu=0.5,
-    memory=2096,
-    # We set a generous timeout as a fallback safety net,
-    # but the idle check is the primary shutdown mechanism.
-    timeout=28800, # 8-hour safety net
-    enable_memory_snapshot=True
-)
-def launch_devbox(extra_packages: list[str] = None):
+def run_devbox_shared(extra_packages: list[str] = None):
     """
-    Launches a personal development environment with persistent storage
-    and optional, dynamically installed tools.
+    Shared logic for launching a personal development environment.
+    Sets up public key, persistent dotfiles, installs packages, and runs sshd.
     """
     import os
     import shutil
@@ -181,6 +185,37 @@ def launch_devbox(extra_packages: list[str] = None):
                 print(f"No active SSH connection. Shutting down in {remaining}s...", file=sys.stderr, end='\r')
         
         print(f"\nIdle timeout of {IDLE_TIMEOUT_SECONDS}s reached. Shutting down instance.", file=sys.stderr)
+
+# Common arguments for the devbox functions
+common_devbox_args = dict(
+    secrets=[modal.Secret.from_name("ssh-public-key")],
+    volumes={"/data": dev_volume},
+    cpu=0.5,
+    memory=2096,
+    timeout=28800,
+    enable_memory_snapshot=True,
+)
+
+@app.function(image=standard_devbox_image, **common_devbox_args)
+def launch_devbox(extra_packages: list[str] = None):
+    """Launches a non-GPU personal development environment."""
+    run_devbox_shared(extra_packages)
+
+@app.function(image=cuda_devbox_image, gpu="t4", **common_devbox_args)
+def launch_devbox_t4(extra_packages: list[str] = None):
+    """Launches a T4 GPU-powered personal development environment."""
+    run_devbox_shared(extra_packages)
+
+@app.function(image=cuda_devbox_image, gpu="l4", **common_devbox_args)
+def launch_devbox_l4(extra_packages: list[str] = None):
+    """Launches an L4 GPU-powered personal development environment."""
+    run_devbox_shared(extra_packages)
+
+@app.function(image=cuda_devbox_image, gpu="a10g", **common_devbox_args)
+def launch_devbox_a10g(extra_packages: list[str] = None):
+    """Launches an A10G GPU-powered personal development environment."""
+    run_devbox_shared(extra_packages)
+
 
 # NEW: Add a dedicated function for the document processing environment.
 @app.function(
@@ -364,7 +399,7 @@ def main():
         return
 
     if choice == '1':
-        print("\nRequesting a Standard DevBox.")
+        # --- Standard DevBox Logic ---
         try:
             tools_input = input("Enter any extra tools to install (space-separated, e.g., 'htop tmux'): ")
         except EOFError:
@@ -380,9 +415,41 @@ def main():
         if package_list:
             print(f"Requesting with additional tools: {package_list}")
         else:
-            print("No extra tools requested. Launching with default tools.")
+            print("No extra tools requested.")
 
-        launch_devbox.remote(extra_packages=package_list)
+        # Ask about GPU
+        try:
+            gpu_choice = input("Attach a GPU? (y/n, default: n): ").lower()
+        except EOFError:
+            gpu_choice = "n"
+
+        if gpu_choice == 'y':
+            print("\nSelect GPU type:")
+            print("1. T4 GPU (Cost-effective, good for inference)")
+            print("2. L4 GPU (Newer, more performant than T4)")
+            print("3. A10G GPU (Higher performance, more VRAM)")
+            
+            try:
+                gpu_type_choice = input("Enter your choice (1, 2, or 3): ")
+            except EOFError:
+                print("\nNo input received. Exiting.")
+                return
+
+            if gpu_type_choice == '1':
+                print("\nRequesting a DevBox with T4 GPU...")
+                launch_devbox_t4.remote(extra_packages=package_list)
+            elif gpu_type_choice == '2':
+                print("\nRequesting a DevBox with L4 GPU...")
+                launch_devbox_l4.remote(extra_packages=package_list)
+            elif gpu_type_choice == '3':
+                print("\nRequesting a DevBox with A10G GPU...")
+                launch_devbox_a10g.remote(extra_packages=package_list)
+            else:
+                print("Invalid GPU choice. Please run again.")
+                return
+        else:
+            print("\nRequesting a Standard DevBox (no GPU)...")
+            launch_devbox.remote(extra_packages=package_list)
 
     elif choice == '2':
         print("\nRequesting a dedicated Document Processing Box...")
