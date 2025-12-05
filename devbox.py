@@ -192,31 +192,38 @@ def run_devbox_shared(extra_packages: list[str] = None):
         print(f"\nIdle timeout of {IDLE_TIMEOUT_SECONDS}s reached. Shutting down instance.", file=sys.stderr)
 
 # Common arguments for the devbox functions
-common_devbox_args = dict(
+cpu_devbox_args = dict(
     secrets=[modal.Secret.from_name("ssh-public-key")],
     volumes={"/data": dev_volume},
     cpu=0.5,
-    memory=2096,
+    memory=1024,
     timeout=28800,
-    enable_memory_snapshot=True,
 )
 
-@app.function(image=standard_devbox_image, **common_devbox_args)
+gpu_devbox_args = dict(
+    secrets=[modal.Secret.from_name("ssh-public-key")],
+    volumes={"/data": dev_volume},
+    cpu=1.0,
+    memory=2048,
+    timeout=28800,
+)
+
+@app.function(image=standard_devbox_image, **cpu_devbox_args)
 def launch_devbox(extra_packages: list[str] = None):
     """Launches a non-GPU personal development environment."""
     run_devbox_shared(extra_packages)
 
-@app.function(image=cuda_devbox_image, gpu="t4", **common_devbox_args)
+@app.function(image=cuda_devbox_image, gpu="t4", **gpu_devbox_args)
 def launch_devbox_t4(extra_packages: list[str] = None):
     """Launches a T4 GPU-powered personal development environment."""
     run_devbox_shared(extra_packages)
 
-@app.function(image=cuda_devbox_image, gpu="l4", **common_devbox_args)
+@app.function(image=cuda_devbox_image, gpu="l4", **gpu_devbox_args)
 def launch_devbox_l4(extra_packages: list[str] = None):
     """Launches an L4 GPU-powered personal development environment."""
     run_devbox_shared(extra_packages)
 
-@app.function(image=cuda_devbox_image, gpu="a10g", **common_devbox_args)
+@app.function(image=cuda_devbox_image, gpu="a10g", **gpu_devbox_args)
 def launch_devbox_a10g(extra_packages: list[str] = None):
     """Launches an A10G GPU-powered personal development environment."""
     run_devbox_shared(extra_packages)
@@ -229,8 +236,7 @@ def launch_devbox_a10g(extra_packages: list[str] = None):
     volumes={"/data": dev_volume},
     cpu=1, # More CPU for potentially heavy pandoc jobs
     memory=4096, # More memory for texlive
-    timeout=28800,
-    enable_memory_snapshot=True
+    timeout=28000
 )
 def launch_doc_processor():
     """
@@ -287,9 +293,8 @@ def launch_doc_processor():
     ],
     volumes={"/data": dev_volume},
     cpu=0.5,
-    memory=2096,
+    memory=1024,
     timeout=28800,
-    enable_memory_snapshot=True
 )
 def launch_gemini_cli_box():
     """
