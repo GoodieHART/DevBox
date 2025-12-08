@@ -122,3 +122,5 @@ Remember to replace `C:\path\to\your\modal-terminal\devbox.py` with the actual p
 -   **Persistent Storage**: Only the `/data` directory is persistent. Your home directory (`/root`) is ephemeral and will be reset every time the container starts. **Always save your important work in the `/data` directory.**
 -   **Idle Timeout**: The container will automatically shut down after 5 minutes if there is no active SSH connection. A countdown will be displayed in the terminal where you ran the `modal run` command.
 -   **Package Installation**: If you need `python`, type `python-is-python3` in the package list to ensure the correct Debian package is installed. The script handles this replacement automatically if you enter `python`.
+
+## The Project Is Open To Your Contributions And Or Optimizations 🙏
