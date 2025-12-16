@@ -11,7 +11,7 @@ IDLE_TIMEOUT_SECONDS = 300  # 5 minutes
 # Standard image for CPU-only tasks.
 standard_devbox_image = (
     modal.Image.debian_slim()
-    .apt_install("openssh-server", "git", "vim", "curl", "wget", "unzip", "procps", "zlib1g-dev", "build-essential", "pkg-config", "python3-dev")  # Good default tools
+    .apt_install("openssh-server", "clang", "cmake", "htop", "nano" "git", "neovim", "curl", "wget", "unzip", "procps", "zlib1g-dev", "build-essential", "pkg-config", "python3-dev")  # Good default tools
     .run_commands(
         "mkdir -p /root/.ssh",
         "chmod 700 /root/.ssh",
@@ -25,9 +25,9 @@ standard_devbox_image = (
 cuda_devbox_image = (
     modal.Image.from_registry("nvidia/cuda:12.1.1-devel-ubuntu22.04", add_python="3.11")
     .apt_install(
-        "openssh-server", "git", "vim", "curl", "wget", "unzip", "procps", 
-        "zlib1g-dev", "build-essential", "pkg-config", "python3-dev",
-        "libcudnn9-cuda-12", "libcudnn9-dev-cuda-12"  # Specify CUDA 12 version for cuDNN
+        "openssh-server", "git", "neovim", "curl", "wget", "unzip", "procps", 
+        "zlib1g-dev", "build-essential", "htop", "pkg-config", "python3-dev",
+        "libcudnn9-cuda-12", "libcudnn9-dev-cuda-12", "nano"  # Specify CUDA 12 version for cuDNN
     )
     .run_commands(
         "mkdir -p /root/.ssh",
@@ -61,7 +61,7 @@ doc_processing_image = (
 # NEW: Define a dedicated image for the Gemini CLI.
 gemini_cli_image = (
     modal.Image.debian_slim()
-    .apt_install("openssh-server", "git", "vim", "curl", "wget", "unzip", "procps", "nano", "neovim")
+    .apt_install("openssh-server", "git", "htop", "curl", "wget", "unzip", "procps", "nano", "neovim")
     .run_commands(
         # Install Node.js 20.x from NodeSource
         "curl -fsSL https://deb.nodesource.com/setup_20.x | bash -",
@@ -197,7 +197,7 @@ cpu_devbox_args = dict(
     volumes={"/data": dev_volume},
     cpu=0.5,
     memory=1024,
-    timeout=28800,
+    timeout=3600,
 )
 
 gpu_devbox_args = dict(
