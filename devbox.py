@@ -600,19 +600,22 @@ def main():
 🎯 Choose your DevBox:
 
 1. 🛠️  Standard DevBox
-   General purpose development environment
-   with optional extra packages
+    General purpose development environment
+    with optional extra packages
 
 2. 📄 Document Processing Box
-   Pandoc + Full TeX Live for document work
+    Pandoc + Full TeX Live for document work
 
 3. 🤖 Gemini CLI Box
-   AI-powered development assistant
+    AI-powered development assistant
+
+4. 🪟 Windows Sandbox
+    Windows container via RDP (✅  Works!)
 """
     create_box(menu_box, "🚀 LAUNCH OPTIONS")
 
     try:
-        choice = input("Enter your choice (1-3): ").strip()
+        choice = input("Enter your choice (1-4): ").strip()
     except EOFError:
         print("\nNo input received. Exiting.")
         return
@@ -729,6 +732,56 @@ Examples: htop tmux git neovim curl wget
         show_spinner("Initializing AI assistant", 2)
         launch_gemini_cli_box.remote()
 
+    elif choice == "4":
+        print()
+        windows_warning = """
+🪟 Windows DevBox (LIMITED FUNCTIONALITY)
+
+⚠️  IMPORTANT LIMITATION:
+Modal does not support KVM virtualization required for Windows VMs.
+
+The dockur/windows container requires:
+• /dev/kvm device access (not supported)
+• /dev/net/tun device access (not supported)
+• NET_ADMIN capability (not supported)
+
+🚫 This will demonstrate the limitation but cannot run Windows VMs.
+
+Continue anyway to see the infrastructure?
+"""
+        create_box(windows_warning, "🪟 WINDOWS DEVBOX")
+
+        try:
+            proceed = input("Continue? (y/n): ").lower().strip()
+        except EOFError:
+            proceed = "n"
+
+        if proceed == "y":
+            print()
+            windows_info = """
+🪟 Windows Sandbox DevBox
+
+✅  This creates a REAL Windows environment!
+
+Features:
+• Windows container (not full VM, but functional)
+• RDP access on port 3389
+• Web viewer on port 8006
+• Persistent storage via Modal Volumes
+• Configurable RAM, CPU, and disk
+• 1-hour timeout
+
+Default credentials:
+• Username: Docker
+• Password: admin
+
+To launch: modal run windows_sandbox.py
+"""
+            create_box(windows_info, "🪟 WINDOWS SANDBOX")
+            print("\n💡 Run 'modal run windows_sandbox.py' to launch Windows!")
+        else:
+            print("Windows Sandbox launch cancelled.")
+
     else:
         error_box = """
 ❌ Invalid choice selected.
@@ -737,5 +790,6 @@ Please run the launcher again and choose:
 • 1 for Standard DevBox
 • 2 for Document Processing
 • 3 for Gemini CLI
+• 4 for Windows Sandbox
 """
         create_box(error_box, "❌ ERROR")
