@@ -29,11 +29,54 @@ The script launches a general-purpose DevBox, a Debian environment with essentia
 ## Features
 
 -   **Standard DevBox**: A general-purpose Debian environment with essential development tools (`git`, `vim`, `curl`, `build-essential`, etc.). Allows for dynamic installation of extra `apt` packages at launch time.
--   **Persistent Storage**: Uses a `modal.Volume` to provide a persistent `/data` directory, ensuring your work is saved between sessions.
+-   **GPU DevBoxes**: T4, L4, and A10G GPU instances for machine learning and compute-intensive tasks.
+-   **Document Processing Box**: Pandoc + Full TeX Live for academic and technical writing.
+-   **Gemini CLI Box**: AI-powered development assistant with pre-installed Google Gemini CLI.
+-   **Windows Sandbox**: Functional Windows containers via RDP (✅  Works with Modal Sandboxes).
+-   **Persistent Storage**: Uses `modal.Volume` to provide a persistent `/data` directory, ensuring your work is saved between sessions.
 -   **Secure SSH Access**: Automatically injects your public SSH key for secure, passwordless access.
 -   **Auto-Shutdown**: Includes an idle timer that automatically shuts down the container after 5 minutes of inactivity to save costs.
 -   **Resource Allocation**: The environment is configured with appropriate CPU and memory resources for its intended task.
 -   **Interactive Launcher**: A simple command-line prompt to customize your DevBox at launch.
+
+### Key Architectures and Virtualization Limitations
+
+**Modal Functions Architecture:**
+- Serverless execution model using Python functions
+- Automatic scaling and resource management
+- Requires Python runtime environment
+- No direct access to host devices or capabilities
+- Cannot run KVM-based virtualization
+- Suitable for stateless workloads and APIs
+
+**Modal Sandboxes Architecture:**
+- Interactive container execution with arbitrary code
+- Uses gVisor container runtime for strong isolation and security
+- Supports any container image and runtime (including Windows)
+- Virtualized networking environment with restricted device access
+- No access to `/dev/kvm`, `/dev/net/tun`, or `NET_ADMIN` capabilities
+- Cannot run KVM-based virtualization inside containers
+- Suitable for stateful applications and interactive sessions
+
+**Virtualization Limitations:**
+- **KVM Hardware Access**: Modal sandboxes cannot access host KVM devices for hardware virtualization
+- **Network Device Access**: No access to `/dev/net/tun` for network tunneling or bridging
+- **Linux Capabilities**: Missing `NET_ADMIN` capability required for network configuration
+- **gVisor Isolation**: Strong security isolation prevents privileged operations needed for VM hosting
+
+**dockurr/windows Requirements vs Modal Limitations:**
+- dockurr/windows requires: `/dev/kvm`, `/dev/net/tun`, `NET_ADMIN` capability
+- Modal sandboxes provide: gVisor isolation, virtual networking, no device passthrough
+- Result: dockurr/windows cannot create Windows VMs in Modal sandbox environment
+
+**Sources:**
+- [Modal Functions Documentation](https://modal.com/docs/guide/functions)
+- [Modal Sandboxes Documentation](https://modal.com/docs/guide/sandboxes)
+- [gVisor Security Model](https://gvisor.dev/docs/architecture/)
+- [dockurr/windows Requirements](https://github.com/dockur/windows)
+
+**Network Interface Auto-Detection:**
+The system automatically detects the correct network interface name in Modal sandboxes by trying common interface names (eth0, ens4, enp0s3, eno1, enp1s0, eth1) and attempting dynamic detection. This resolves the "Network interface does not exist" error.
 
 ## Prerequisites
 
