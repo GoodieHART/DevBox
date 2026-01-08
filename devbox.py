@@ -207,6 +207,8 @@ gemini_cli_image = (
         "apt-get install -y nodejs",
         # Install Gemini CLI globally
         "npm install -g @google/gemini-cli",
+        # Install OpenCode
+        "curl -fsSL https://opencode.ai/install | bash",
         # Standard SSH setup
         "mkdir -p /root/.ssh",
         "chmod 700 /root/.ssh",
@@ -491,6 +493,7 @@ def launch_gemini_cli_box():
         ".bash_history",
         ".bashrc",
         ".opentrader",
+        ".opencode",
         ".profile",
         ".viminfo",
         ".vimrc",
@@ -606,8 +609,8 @@ def main():
 2. 📄 Document Processing Box
    Pandoc + Full TeX Live for document work
 
-3. 🤖 Gemini CLI Box
-   AI-powered development assistant
+3. 🤖 AI Assistants Box
+   Includes OpenCode and Gemini CLI
 """
     create_box(menu_box, "🚀 LAUNCH OPTIONS")
 
@@ -721,12 +724,12 @@ Examples: htop tmux git neovim curl wget
     elif choice == "3":  # New logic branch
         print()
         gemini_box = """
-🤖 Launching Gemini CLI Box...
-🧠 AI-powered development assistant
+🤖 Launching AI Assistants Box...
+🧠 Includes OpenCode and Gemini CLI
 🚀 Let's build something amazing together!
 """
-        create_box(gemini_box, "🤖 GEMINI CLI")
-        show_spinner("Initializing AI assistant", 2)
+        create_box(gemini_box, "🤖 AI ASSISTANTS")
+        show_spinner("Initializing AI assistants", 2)
         launch_gemini_cli_box.remote()
 
     else:
@@ -736,6 +739,6 @@ Examples: htop tmux git neovim curl wget
 Please run the launcher again and choose:
 • 1 for Standard DevBox
 • 2 for Document Processing
-• 3 for Gemini CLI
+• 3 for AI Assistants Box
 """
         create_box(error_box, "❌ ERROR")
