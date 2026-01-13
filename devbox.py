@@ -722,21 +722,21 @@ def launch_llm_playroom():
         ".ollama",  # Persistent Ollama models and config
     ]
 
-        for item in items_to_persist:
-            home_path = f"/root/{item}"
-            volume_path = f"{persistent_storage_dir}/{item}"
+    for item in items_to_persist:
+        home_path = f"/root/{item}"
+        volume_path = f"{persistent_storage_dir}/{item}"
 
-            os.makedirs(os.path.dirname(home_path), exist_ok=True)
-            os.makedirs(os.path.dirname(volume_path), exist_ok=True)
+        os.makedirs(os.path.dirname(home_path), exist_ok=True)
+        os.makedirs(os.path.dirname(volume_path), exist_ok=True)
 
-            if os.path.lexists(home_path):
-                if os.path.isdir(home_path) and not os.path.islink(home_path):
-                    shutil.rmtree(home_path)
-                else:
-                    os.remove(home_path)
+        if os.path.lexists(home_path):
+            if os.path.isdir(home_path) and not os.path.islink(home_path):
+                shutil.rmtree(home_path)
+            else:
+                os.remove(home_path)
 
-            os.symlink(volume_path, home_path)
-            print(f"  - Linked {home_path} -> {volume_path}", file=sys.stderr)
+        os.symlink(volume_path, home_path)
+        print(f"  - Linked {home_path} -> {volume_path}", file=sys.stderr)
 
         print("...done linking files.", file=sys.stderr)
 
