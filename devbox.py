@@ -220,6 +220,22 @@ gemini_cli_image = (
     )
 )
 
+# NEW: Define a dedicated image for the LLM Playroom with Ollama.
+llm_playroom_image = (
+    modal.Image.debian_slim(python_version="3.10")
+    .apt_install([
+        "openssh-server", "curl", "wget", "unzip", "procps", "nano", "neovim",
+        "pciutils", "lshw"  # For GPU detection in Ollama (pciutils provides lspci)
+    ])
+    .run_commands([
+        "curl -fsSL https://ollama.ai/install.sh | sh",
+        "mkdir -p /root/.ssh && chmod 700 /root/.ssh",
+        "touch /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys",
+        "mkdir -p /var/run/sshd",
+
+    ])
+)
+
 
 app = modal.App(
     name="personal-devbox-launcher",
@@ -571,6 +587,198 @@ def launch_gemini_cli_box():
         )
 
 
+# NEW: LLM Playroom with Ollama and DeepSeek R1
+@app.function(
+    image=llm_playroom_image,
+    secrets=[modal.Secret.from_name("ssh-public-key")],
+    volumes={"/data": dev_volume},
+    gpu="L40S",
+    cpu=1.0,
+    memory=4096,
+    timeout=600,  # 10 minutes max
+    enable_memory_snapshot=True,
+    experimental_options={"enable_gpu_snapshot": True},  # Enable GPU snapshots for sub-second cold starts
+)
+def launch_llm_playroom():
+    """
+    Launches a dev environment specifically for the LLM Playroom with Ollama and DeepSeek R1.
+    """
+    import os
+    import shutil
+
+    # Inject your public key from the secret.
+    pubkey = os.environ["PUBKEY"]
+    with open("/root/.ssh/authorized_keys", "a") as f:
+        if pubkey not in open("/root/.ssh/authorized_keys").read():
+            f.write(pubkey + "\n")
+
+    # --- Set up persistent dotfiles using symbolic links ---
+    print("Linking persistent configuration files...", file=sys.stderr)
+
+    persistent_storage_dir = "/data/.config_persistence"
+    os.makedirs(persistent_storage_dir, exist_ok=True)
+
+    items_to_persist = [
+        ".bash_history",
+        ".bashrc",
+        ".profile",
+        ".viminfo",
+        ".vimrc",
+        ".gitconfig",
+        ".ssh/config",
+        ".ssh/known_hosts",
+    ]
+
+    for item in items_to_persist:
+        home_path = f"/root/{item}"
+        volume_path = f"{persistent_storage_dir}/{item}"
+
+        os.makedirs(os.path.dirname(home_path), exist_ok=True)
+        os.makedirs(os.path.dirname(volume_path), exist_ok=True)
+
+        if os.path.lexists(home_path):
+            if os.path.isdir(home_path) and not os.path.islink(home_path):
+                shutil.rmtree(home_path)
+            else:
+                os.remove(home_path)
+
+        os.symlink(volume_path, home_path)
+        print(f"  - Linked {home_path} -> {volume_path}", file=sys.stderr)
+
+    print("...done linking files.", file=sys.stderr)
+
+    # Start the SSH daemon.
+    subprocess.run(["/usr/sbin/sshd"])
+
+    # Forward the SSH port and print the connection command.
+    with modal.forward(22, unencrypted=True) as tunnel:
+        ssh_command = f"ssh root@{tunnel.host} -p {tunnel.unencrypted_port}"
+        print("\n🧠 Your LLM Playroom is ready!", file=sys.stderr)
+        print("🚀 GPU: NVIDIA L40S detected - ready for AI workloads", file=sys.stderr)
+        print("📝 To get started:", file=sys.stderr)
+        print("   1. Connect via SSH below", file=sys.stderr)
+        print("   2. Run: ollama pull deepseek-r1:8b (first time only)", file=sys.stderr)
+        print("   3. Run: ollama run deepseek-r1:8b", file=sys.stderr)
+        print("⏰ Auto-shutdown: 2min idle, 10min max session", file=sys.stderr)
+        print("\n" + "="*50, file=sys.stderr)
+        print("SSH Command:", file=sys.stderr)
+        print(ssh_command, file=sys.stderr)
+        print("="*50, file=sys.stderr)
+
+        # Start Ollama server after printing SSH command
+        subprocess.run(["ollama", "serve"], check=True)
+
+        idle_time = 0
+        check_interval = 15
+        idle_timeout = 120  # 2 minutes for playroom
+
+        while idle_time < idle_timeout:
+            time.sleep(check_interval)
+            result = subprocess.run(
+                "ps -ef | grep 'sshd: root@' | grep -v grep",
+                shell=True,
+                capture_output=True,
+            )
+
+            if result.stdout:
+                idle_time = 0
+            else:
+                idle_time += check_interval
+                remaining = idle_timeout - idle_time
+                print(
+                    f"No active SSH connection. Shutting down in {remaining}s...",
+                    file=sys.stderr,
+                    end="\r",
+                )
+
+        print(
+            f"\n⏰ Session ended - idle timeout ({idle_timeout}s) reached.", file=sys.stderr
+        )
+        print("💰 Cost saved by auto-shutdown! Thanks for using LLM Playroom.", file=sys.stderr)
+        import os
+        import shutil
+
+        # Inject your public key from the secret.
+        pubkey = os.environ["PUBKEY"]
+        with open("/root/.ssh/authorized_keys", "a") as f:
+            if pubkey not in open("/root/.ssh/authorized_keys").read():
+                f.write(pubkey + "\n")
+
+        # --- Set up persistent dotfiles using symbolic links ---
+        print("Linking persistent configuration files...", file=sys.stderr)
+
+        persistent_storage_dir = "/data/.config_persistence"
+        os.makedirs(persistent_storage_dir, exist_ok=True)
+
+        items_to_persist = [
+            ".bash_history",
+            ".bashrc",
+            ".profile",
+            ".viminfo",
+            ".vimrc",
+            ".gitconfig",
+            ".ssh/config",
+            ".ssh/known_hosts",
+        ]
+
+        for item in items_to_persist:
+            home_path = f"/root/{item}"
+            volume_path = f"{persistent_storage_dir}/{item}"
+
+            os.makedirs(os.path.dirname(home_path), exist_ok=True)
+            os.makedirs(os.path.dirname(volume_path), exist_ok=True)
+
+            if os.path.lexists(home_path):
+                if os.path.isdir(home_path) and not os.path.islink(home_path):
+                    shutil.rmtree(home_path)
+                else:
+                    os.remove(home_path)
+
+            os.symlink(volume_path, home_path)
+            print(f"  - Linked {home_path} -> {volume_path}", file=sys.stderr)
+
+        print("...done linking files.", file=sys.stderr)
+
+        # Start the SSH daemon.
+        subprocess.run(["/usr/sbin/sshd"])
+
+        # Forward the SSH port and print the connection command.
+        with modal.forward(22, unencrypted=True) as tunnel:
+            ssh_command = f"ssh root@{tunnel.host} -p {tunnel.unencrypted_port}"
+            print("\n🧠 Your LLM Playroom is ready!", file=sys.stderr)
+            print("DeepSeek R1 (8B distilled) is loaded and ready.", file=sys.stderr)
+            print("Paste this command into your terminal:\n", file=sys.stderr)
+            print(ssh_command)
+
+            idle_time = 0
+            check_interval = 15
+            idle_timeout = 120  # 2 minutes for playroom
+
+            while idle_time < idle_timeout:
+                time.sleep(check_interval)
+                result = subprocess.run(
+                    "ps -ef | grep 'sshd: root@' | grep -v grep",
+                    shell=True,
+                    capture_output=True,
+                )
+
+                if result.stdout:
+                    idle_time = 0
+                else:
+                    idle_time += check_interval
+                    remaining = idle_timeout - idle_time
+                    print(
+                        f"No active SSH connection. Shutting down in {remaining}s...",
+                        file=sys.stderr,
+                        end="\r",
+                    )
+
+            print(
+                f"\nIdle timeout of {idle_timeout}s reached. Shutting down instance.",
+                file=sys.stderr,
+            )
+
+
 # 5. A single, menu-driven local entrypoint.
 @app.local_entrypoint()
 def main():
@@ -603,19 +811,22 @@ def main():
 🎯 Choose your DevBox:
 
 1. 🛠️  Standard DevBox
-   General purpose development environment
-   with optional extra packages
+    General purpose development environment
+    with optional extra packages
 
 2. 📄 Document Processing Box
-   Pandoc + Full TeX Live for document work
+    Pandoc + Full TeX Live for document work
 
 3. 🤖 AI Assistants Box
-   Includes OpenCode and Gemini CLI
+    Includes OpenCode and Gemini CLI
+
+4. 🧠 LLM Playroom
+    Ollama with DeepSeek R1 for AI experimentation
 """
     create_box(menu_box, "🚀 LAUNCH OPTIONS")
 
     try:
-        choice = input("Enter your choice (1-3): ").strip()
+        choice = input("Enter your choice (1-4): ").strip()
     except EOFError:
         print("\nNo input received. Exiting.")
         return
@@ -732,6 +943,17 @@ Examples: htop tmux git neovim curl wget
         show_spinner("Initializing AI assistants", 2)
         launch_gemini_cli_box.remote()
 
+    elif choice == "4":  # LLM Playroom
+        print()
+        llm_box = """
+🧠 Launching LLM Playroom...
+🤖 Ollama with DeepSeek R1 (8B distilled)
+🚀 Ready for AI experimentation!
+"""
+        create_box(llm_box, "🧠 LLM PLAYROOM")
+        show_spinner("Initializing LLM environment", 2)
+        launch_llm_playroom.remote()
+
     else:
         error_box = """
 ❌ Invalid choice selected.
@@ -740,5 +962,6 @@ Please run the launcher again and choose:
 • 1 for Standard DevBox
 • 2 for Document Processing
 • 3 for AI Assistants Box
+• 4 for LLM Playroom
 """
         create_box(error_box, "❌ ERROR")
