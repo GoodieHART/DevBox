@@ -710,16 +710,17 @@ def launch_llm_playroom():
         persistent_storage_dir = "/data/.config_persistence"
         os.makedirs(persistent_storage_dir, exist_ok=True)
 
-        items_to_persist = [
-            ".bash_history",
-            ".bashrc",
-            ".profile",
-            ".viminfo",
-            ".vimrc",
-            ".gitconfig",
-            ".ssh/config",
-            ".ssh/known_hosts",
-        ]
+    items_to_persist = [
+        ".bash_history",
+        ".bashrc",
+        ".profile",
+        ".viminfo",
+        ".vimrc",
+        ".gitconfig",
+        ".ssh/config",
+        ".ssh/known_hosts",
+        ".ollama",  # Persistent Ollama models and config
+    ]
 
         for item in items_to_persist:
             home_path = f"/root/{item}"
