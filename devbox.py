@@ -318,12 +318,26 @@ def run_devbox_shared(extra_packages: list[str] = None):
     print("Setting up comprehensive persistence system...", file=sys.stderr)
 
     # Check for and restore previous full backup if available
-    backup_file = "/data/root_backup.tar.gz"
+    backup_file = "/data/root_full_backup.tar.gz"
     if os.path.exists(backup_file):
         print("Restoring previous session data...", file=sys.stderr)
-        subprocess.run([
-            "tar", "-xzf", backup_file, "-C", "/", "--skip-old-files"
-        ], check=False)  # Don't fail if some files can't be restored
+        try:
+            # Clean current /root directory (preserve only essential system files)
+            subprocess.run([
+                "find", "/root", "-mindepth", "1", "-maxdepth", "1",
+                "!", "-name", "lost+found",
+                "-exec", "rm", "-rf", "{}", "+"
+            ], check=False)
+
+            # Extract the full backup
+            subprocess.run([
+                "tar", "-xzf", backup_file, "-C", "/"
+            ], check=True)
+
+            print("Session data restored successfully!", file=sys.stderr)
+
+        except Exception as e:
+            print(f"Warning: Restore failed - {e}, continuing with clean environment", file=sys.stderr)
 
     # We create a directory on the persistent volume to store the real files.
     persistent_storage_dir = "/data/.config_persistence"
@@ -417,19 +431,13 @@ def run_devbox_shared(extra_packages: list[str] = None):
         """Create comprehensive backup of /root directory on shutdown."""
         try:
             print("Creating comprehensive /root backup...", file=sys.stderr)
-            backup_file = "/data/root_backup.tar.gz"
+            backup_file = "/data/root_full_backup.tar.gz"
 
             # Create compressed backup of entire /root directory
-            # Exclude cache directories, temp files, and symlinks to avoid issues
+            # Minimal exclusions to preserve everything
             subprocess.run([
                 "tar", "-czf", backup_file,
-                "--exclude=.cache",
-                "--exclude=.local/share/Trash",
-                "--exclude=*~",
-                "--exclude=.bash_history",  # Handle separately due to append mode
-                "--exclude=*.tmp",
-                "--exclude=*.swp",
-                "--exclude=.gvfs",
+                "--exclude=lost+found",  # System directory
                 "-C", "/root", "."
             ], check=True, capture_output=True)
 
@@ -571,19 +579,13 @@ def run_rdp_devbox_shared(extra_packages: list[str] = None):
         """Create comprehensive backup of /root directory on shutdown."""
         try:
             print("Creating comprehensive /root backup...", file=sys.stderr)
-            backup_file = "/data/root_backup.tar.gz"
+            backup_file = "/data/root_full_backup.tar.gz"
 
             # Create compressed backup of entire /root directory
-            # Exclude cache directories, temp files, and symlinks to avoid issues
+            # Minimal exclusions to preserve everything
             subprocess.run([
                 "tar", "-czf", backup_file,
-                "--exclude=.cache",
-                "--exclude=.local/share/Trash",
-                "--exclude=*~",
-                "--exclude=.bash_history",  # Handle separately due to append mode
-                "--exclude=*.tmp",
-                "--exclude=*.swp",
-                "--exclude=.gvfs",
+                "--exclude=lost+found",  # System directory
                 "-C", "/root", "."
             ], check=True, capture_output=True)
 
