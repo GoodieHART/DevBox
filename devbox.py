@@ -236,6 +236,54 @@ llm_playroom_image = (
     ])
 )
 
+# NEW: Define a dedicated image for RDP Desktop access with XFCE.
+rdp_devbox_image = (
+    modal.Image.debian_slim(python_version="3.10")
+    .apt_install([
+        # RDP Server & Desktop Environment
+        "xrdp", "xfce4", "xfce4-goodies", "xorgxrdp",
+        # Desktop Dependencies
+        "dbus-x11", "xorg", "tightvncserver",
+        # Development Tools (following standard pattern)
+        "clang", "cmake", "htop", "nano", "git", "neovim",
+        "curl", "wget", "unzip", "procps", "zlib1g-dev",
+        "build-essential", "pkg-config", "python3-dev",
+    ])
+    .run_commands([
+        # SSH setup (for potential admin access)
+        "mkdir -p /root/.ssh",
+        "chmod 700 /root/.ssh",
+        "touch /root/.ssh/authorized_keys",
+        "chmod 600 /root/.ssh/authorized_keys",
+        # RDP setup
+        "mkdir -p /var/run/xrdp",
+        "chmod 755 /etc/xrdp",
+        # Create XFCE environment wrapper for proper XDG setup
+        "echo '#!/bin/bash' > /usr/local/bin/startxfce4-wrapper",
+        "echo '# XFCE RDP Wrapper with proper environment' >> /usr/local/bin/startxfce4-wrapper",
+        "echo '' >> /usr/local/bin/startxfce4-wrapper",
+        "echo 'export XDG_CONFIG_DIRS=/etc/xdg' >> /usr/local/bin/startxfce4-wrapper",
+        "echo 'export XDG_DATA_DIRS=/usr/local/share:/usr/share' >> /usr/local/bin/startxfce4-wrapper",
+        "echo 'export XDG_RUNTIME_DIR=/tmp/xdg-runtime' >> /usr/local/bin/startxfce4-wrapper",
+        "echo '' >> /usr/local/bin/startxfce4-wrapper",
+        "echo '# Ensure runtime directory exists' >> /usr/local/bin/startxfce4-wrapper",
+        "echo 'mkdir -p /tmp/xdg-runtime' >> /usr/local/bin/startxfce4-wrapper",
+        "echo 'chmod 700 /tmp/xdg-runtime' >> /usr/local/bin/startxfce4-wrapper",
+        "echo '' >> /usr/local/bin/startxfce4-wrapper",
+        "echo '# Start XFCE with proper environment' >> /usr/local/bin/startxfce4-wrapper",
+        "echo 'exec startxfce4' >> /usr/local/bin/startxfce4-wrapper",
+        "chmod +x /usr/local/bin/startxfce4-wrapper",
+        # Configure XFCE session using wrapper
+        "printf '#!/bin/sh\\n/usr/local/bin/startxfce4-wrapper\\n' > /etc/skel/.xsession",
+        "chmod +x /etc/skel/.xsession",
+        # Create basic XFCE config directory structure
+        "mkdir -p /etc/skel/.config/xfce4",
+        "mkdir -p /etc/skel/.cache/sessions",
+        # Set RDP password for root user (simple password for container use)
+        "echo 'root:rdpaccess' | chpasswd",
+    ])
+)
+
 
 app = modal.App(
     name="personal-devbox-launcher",
@@ -365,6 +413,169 @@ def run_devbox_shared(extra_packages: list[str] = None):
         )
 
 
+def run_rdp_devbox_shared(extra_packages: list[str] = None):
+    """
+    Shared logic for launching an RDP desktop development environment.
+    Sets up public key, persistent dotfiles, installs packages, and runs RDP server.
+    """
+    import os
+    import shutil
+    import subprocess
+    import sys
+    import time
+
+    # Inject your public key from the secret (for potential SSH fallback).
+    pubkey = os.environ["PUBKEY"]
+    with open("/root/.ssh/authorized_keys", "a") as f:
+        if pubkey not in open("/root/.ssh/authorized_keys").read():
+            f.write(pubkey + "\n")
+
+    # --- Set up persistent dotfiles and desktop configs using symbolic links ---
+    print("Linking persistent configuration files...", file=sys.stderr)
+
+    persistent_storage_dir = "/data/.config_persistence"
+    os.makedirs(persistent_storage_dir, exist_ok=True)
+
+    items_to_persist = [
+        # Terminal configs (same as SSH boxes)
+        ".bash_history",
+        ".bashrc",
+        ".profile",
+        ".viminfo",
+        ".vimrc",
+        ".gitconfig",
+        ".ssh/config",
+        ".ssh/known_hosts",
+        # Desktop-specific configs
+        ".config/xfce4",
+        ".local/share/xfce4",
+        ".cache/sessions",
+        "Desktop",
+        ".xsession",
+    ]
+
+    for item in items_to_persist:
+        home_path = f"/root/{item}"
+        volume_path = f"{persistent_storage_dir}/{item}"
+
+        # Ensure parent directory of the link exists in the home directory
+        os.makedirs(os.path.dirname(home_path), exist_ok=True)
+
+        # Ensure parent directory for the target file exists on the volume
+        os.makedirs(os.path.dirname(volume_path), exist_ok=True)
+
+        # If a default file/dir exists at the destination, remove it to allow the symlink
+        if os.path.lexists(home_path):
+            if os.path.isdir(home_path) and not os.path.islink(home_path):
+                shutil.rmtree(home_path)
+            else:
+                os.remove(home_path)
+
+        # Create the symbolic link from the home directory to the persistent volume
+        os.symlink(volume_path, home_path)
+        print(f"  - Linked {home_path} -> {volume_path}", file=sys.stderr)
+
+    print("...done linking files.", file=sys.stderr)
+    # --- End of persistence setup ---
+
+    # Dynamically install requested tools
+    if extra_packages:
+        print(
+            f"Installing extra packages: {', '.join(extra_packages)}...",
+            file=sys.stderr,
+        )
+        update_cmd = ["apt-get", "update"]
+        install_cmd = ["apt-get", "install", "-y"] + extra_packages
+
+        subprocess.run(update_cmd, check=True)
+        subprocess.run(install_cmd, check=True)
+        print("Extra packages installed.", file=sys.stderr)
+
+    # Start D-Bus daemon for xfconfd (critical for XFCE)
+    subprocess.Popen(["dbus-daemon", "--system", "--fork"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    # Clean potentially corrupted XFCE config directories
+    subprocess.run(["rm", "-rf", "/root/.config/xfce4"], check=False)
+    subprocess.run(["rm", "-rf", "/root/.cache/sessions"], check=False)
+    subprocess.run(["mkdir", "-p", "/root/.config/xfce4"], check=True)
+    subprocess.run(["mkdir", "-p", "/root/.cache/sessions"], check=True)
+
+    # Set proper permissions
+    subprocess.run(["chown", "-R", "root:root", "/root/.config"], check=False)
+    subprocess.run(["chown", "-R", "root:root", "/root/.cache"], check=False)
+
+    # Set up XDG environment variables for XFCE
+    os.environ.setdefault('XDG_CONFIG_DIRS', '/etc/xdg')
+    os.environ.setdefault('XDG_DATA_DIRS', '/usr/local/share:/usr/share')
+    os.environ.setdefault('XDG_RUNTIME_DIR', '/tmp/xdg-runtime')
+
+    # Ensure runtime directory exists
+    os.makedirs('/tmp/xdg-runtime', exist_ok=True)
+    os.chmod('/tmp/xdg-runtime', 0o700)
+
+    # Start the RDP service (direct daemon startup for containers)
+    # Start both xrdp daemon and session manager in background
+    subprocess.Popen(["/usr/sbin/xrdp"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.Popen(["/usr/sbin/xrdp-sesman"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    # Forward the RDP port and print the connection command
+    with modal.forward(3389, unencrypted=True) as tunnel:
+        rdp_address = f"{tunnel.host}:{tunnel.unencrypted_port}"
+        print("\n🖥️ Your RDP Desktop is ready!", file=sys.stderr)
+        print("Connect using any RDP client (Windows Remote Desktop, Remmina, etc.):", file=sys.stderr)
+        print(f"Address: {rdp_address}", file=sys.stderr)
+        print("Username: root", file=sys.stderr)
+        print("Password: rdpaccess", file=sys.stderr)
+
+        idle_time = 0
+        check_interval = 15
+        print(
+            f"\nContainer will shut down after {IDLE_TIMEOUT_SECONDS // 60} minutes of inactivity.",
+            file=sys.stderr,
+        )
+
+        # Loop to check for active RDP connections
+        while idle_time < IDLE_TIMEOUT_SECONDS:
+            time.sleep(check_interval)
+
+            # Check for active RDP sessions by looking for xrdp processes with connections
+            # This is a simplified check - could be enhanced with more sophisticated session detection
+            result = subprocess.run(
+                "ps aux | grep -c 'xrdp-sesman.*:' | grep -v grep",
+                shell=True,
+                capture_output=True,
+                text=True
+            )
+
+            try:
+                active_sessions = int(result.stdout.strip())
+                if active_sessions > 0:  # If there are active RDP sessions
+                    idle_time = 0  # Reset the idle timer
+                else:
+                    idle_time += check_interval
+                    remaining = IDLE_TIMEOUT_SECONDS - idle_time
+                    print(
+                        f"No active RDP connection. Shutting down in {remaining}s...",
+                        file=sys.stderr,
+                        end="\r",
+                    )
+            except (ValueError, AttributeError):
+                # If we can't parse the output, assume no active sessions
+                idle_time += check_interval
+                remaining = IDLE_TIMEOUT_SECONDS - idle_time
+                print(
+                    f"No active RDP connection. Shutting down in {remaining}s...",
+                    file=sys.stderr,
+                    end="\r",
+                )
+
+        print(
+            f"\nIdle timeout of {IDLE_TIMEOUT_SECONDS}s reached. Shutting down RDP Desktop.",
+            file=sys.stderr,
+        )
+
+
 # Common arguments for the devbox functions
 cpu_devbox_args = dict(
     secrets=[modal.Secret.from_name("ssh-public-key")],
@@ -379,6 +590,23 @@ gpu_devbox_args = dict(
     volumes={"/data": dev_volume},
     cpu=1.0,
     memory=2048,
+    timeout=28800,
+)
+
+# RDP-specific resource arguments (higher resources for desktop environment)
+cpu_devbox_args_rdp = dict(
+    secrets=[modal.Secret.from_name("ssh-public-key")],
+    volumes={"/data": dev_volume},
+    cpu=1.0,  # Higher CPU for desktop environment
+    memory=2048,  # Double memory for XFCE + RDP
+    timeout=3600,
+)
+
+gpu_devbox_args_rdp = dict(
+    secrets=[modal.Secret.from_name("ssh-public-key")],
+    volumes={"/data": dev_volume},
+    cpu=1.5,  # Higher CPU for GPU + desktop
+    memory=4096,  # Higher memory for GPU + desktop
     timeout=28800,
 )
 
@@ -774,10 +1002,35 @@ def launch_llm_playroom():
                         end="\r",
                     )
 
-            print(
-                f"\nIdle timeout of {idle_timeout}s reached. Shutting down instance.",
-                file=sys.stderr,
-            )
+        print(
+            f"\nIdle timeout of {idle_timeout}s reached. Shutting down instance.",
+            file=sys.stderr,
+        )
+
+
+# NEW: RDP Desktop launch functions
+@app.function(image=rdp_devbox_image, **cpu_devbox_args_rdp)
+def launch_rdp_devbox(extra_packages: list[str] = None):
+    """Launches an RDP desktop development environment."""
+    run_rdp_devbox_shared(extra_packages)
+
+
+@app.function(image=rdp_devbox_image, gpu="t4", **gpu_devbox_args_rdp)
+def launch_rdp_devbox_t4(extra_packages: list[str] = None):
+    """Launches an RDP desktop with T4 GPU."""
+    run_rdp_devbox_shared(extra_packages)
+
+
+@app.function(image=rdp_devbox_image, gpu="l4", **gpu_devbox_args_rdp)
+def launch_rdp_devbox_l4(extra_packages: list[str] = None):
+    """Launches an RDP desktop with L4 GPU."""
+    run_rdp_devbox_shared(extra_packages)
+
+
+@app.function(image=rdp_devbox_image, gpu="a10g", **gpu_devbox_args_rdp)
+def launch_rdp_devbox_a10g(extra_packages: list[str] = None):
+    """Launches an RDP desktop with A10G GPU."""
+    run_rdp_devbox_shared(extra_packages)
 
 
 # 5. A single, menu-driven local entrypoint.
@@ -823,11 +1076,14 @@ def main():
 
 4. 🧠 LLM Playroom
     Ollama with DeepSeek R1 for AI experimentation
+
+5. 🖥️  RDP Desktop Box
+    Full graphical desktop with XFCE and RDP access
 """
     create_box(menu_box, "🚀 LAUNCH OPTIONS")
 
     try:
-        choice = input("Enter your choice (1-4): ").strip()
+        choice = input("Enter your choice (1-5): ").strip()
     except EOFError:
         print("\nNo input received. Exiting.")
         return
@@ -955,6 +1211,97 @@ Examples: htop tmux git neovim curl wget
         show_spinner("Initializing LLM environment", 2)
         launch_llm_playroom.remote()
 
+    elif choice == "5":  # RDP Desktop Box
+        print()
+        rdp_box = """
+🖥️  Launching RDP Desktop Box...
+🖼️  XFCE Desktop Environment + RDP Access
+✨ Perfect for graphical development work!
+"""
+        create_box(rdp_box, "🖥️  RDP DESKTOP")
+        show_spinner("Setting up desktop environment", 2)
+
+        # Package installation for RDP (following existing pattern)
+        package_box = """
+📦 Want to install additional desktop tools?
+
+Examples: firefox gedit vscode libreoffice
+(leave empty for default XFCE setup)
+"""
+        create_box(package_box, "🖥️  EXTRA DESKTOP PACKAGES")
+
+        try:
+            tools_input = input("Enter desktop tools (space-separated): ").strip()
+        except EOFError:
+            tools_input = ""
+
+        package_list = tools_input.split() if tools_input else []
+
+        if package_list:
+            print(f"✅ Requesting with additional tools: {', '.join(package_list)}")
+        else:
+            print("✅ No extra desktop tools requested.")
+
+        # GPU selection for RDP (following existing pattern)
+        gpu_box = """
+🎮 Add GPU acceleration for desktop?
+
+• T4: Cost-effective, good for graphics
+• L4: Newer, more performant than T4
+• A10G: Higher performance, more VRAM
+
+(Enter 'y' for GPU options, anything else for CPU-only)
+"""
+        create_box(gpu_box, "⚡ GPU ACCELERATION")
+
+        try:
+            gpu_choice = input("Attach GPU? (y/n): ").lower().strip()
+        except EOFError:
+            gpu_choice = "n"
+
+        if gpu_choice == "y":
+            gpu_menu = """
+1. 🎯 T4 GPU (Cost-effective, good for graphics)
+2. 🚀 L4 GPU (Newer, more performant than T4)
+3. 💪 A10G GPU (Higher performance, more VRAM)
+"""
+            create_box(gpu_menu, "🎮 SELECT GPU TYPE")
+
+            try:
+                gpu_type_choice = input("Choose GPU (1-3): ").strip()
+            except EOFError:
+                print("\nNo input received. Exiting.")
+                return
+
+            gpu_types = {
+                "1": ("T4", launch_rdp_devbox_t4),
+                "2": ("L4", launch_rdp_devbox_l4),
+                "3": ("A10G", launch_rdp_devbox_a10g),
+            }
+
+            if gpu_type_choice in gpu_types:
+                gpu_name, launch_func = gpu_types[gpu_type_choice]
+                print()
+                gpu_launch_box = f"""
+🎯 Launching RDP Desktop with {gpu_name} GPU...
+⚡ Get ready for accelerated graphics!
+"""
+                create_box(gpu_launch_box, f"🚀 {gpu_name} POWERED RDP")
+                show_spinner("Initializing GPU RDP environment", 2)
+                launch_func.remote(extra_packages=package_list)
+            else:
+                print("❌ Invalid GPU choice. Please run again.")
+                return
+        else:
+            print()
+            cpu_box = """
+🖥️  Launching RDP Desktop (CPU-only)...
+💻 Ready for graphical development work!
+"""
+            create_box(cpu_box, "🚀 RDP DESKTOP")
+            show_spinner("Preparing your RDP Desktop", 2)
+            launch_rdp_devbox.remote(extra_packages=package_list)
+
     else:
         error_box = """
 ❌ Invalid choice selected.
@@ -964,5 +1311,6 @@ Please run the launcher again and choose:
 • 2 for Document Processing
 • 3 for AI Assistants Box
 • 4 for LLM Playroom
+• 5 for RDP Desktop Box
 """
         create_box(error_box, "❌ ERROR")
