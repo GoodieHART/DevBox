@@ -300,9 +300,12 @@ def run_devbox_shared(extra_packages: list[str] = None):
     """
     Shared logic for launching a personal development environment.
     Sets up public key, persistent dotfiles, installs packages, and runs sshd.
+    Includes comprehensive backup of /root directory.
     """
     import os
     import shutil
+    import subprocess
+    import atexit
 
     # Inject your public key from the secret.
     pubkey = os.environ["PUBKEY"]
@@ -311,14 +314,23 @@ def run_devbox_shared(extra_packages: list[str] = None):
         if pubkey not in open("/root/.ssh/authorized_keys").read():
             f.write(pubkey + "\n")
 
-    # --- Set up persistent dotfiles using symbolic links ---
-    print("Linking persistent configuration files...", file=sys.stderr)
+    # --- Set up comprehensive persistent storage ---
+    print("Setting up comprehensive persistence system...", file=sys.stderr)
+
+    # Check for and restore previous full backup if available
+    backup_file = "/data/root_backup.tar.gz"
+    if os.path.exists(backup_file):
+        print("Restoring previous session data...", file=sys.stderr)
+        subprocess.run([
+            "tar", "-xzf", backup_file, "-C", "/", "--skip-old-files"
+        ], check=False)  # Don't fail if some files can't be restored
 
     # We create a directory on the persistent volume to store the real files.
     persistent_storage_dir = "/data/.config_persistence"
     os.makedirs(persistent_storage_dir, exist_ok=True)
 
     items_to_persist = [
+        # Critical configs (immediate symlinks for performance)
         ".bash_history",
         ".bashrc",
         ".profile",
@@ -327,6 +339,51 @@ def run_devbox_shared(extra_packages: list[str] = None):
         ".gitconfig",
         ".ssh/config",
         ".ssh/known_hosts",
+
+        # Application data directories
+        ".local",
+        ".config",
+        ".vscode",
+        ".vscode-insiders",
+        ".npm",
+        ".gemini",
+        ".ollama",
+        ".docker",
+        ".kube",
+        ".aws",
+        ".azure",
+
+        # User content directories
+        "Desktop",
+        "Documents",
+        "Downloads",
+        "Pictures",
+        "Videos",
+        "Music",
+
+        # Development workspaces
+        "workspace",
+        "projects",
+        "code",
+        "repos",
+        "work",
+
+        # Browser data
+        ".mozilla",
+        ".google-chrome",
+        ".chromium",
+
+        # IDE and editor configs
+        ".jetbrains",
+        ".eclipse",
+        ".atom",
+        ".sublime-text",
+
+        # Package manager caches and configs
+        ".yarn",
+        ".pip",
+        ".cargo",
+        ".rustup",
     ]
 
     for item in items_to_persist:
@@ -354,6 +411,35 @@ def run_devbox_shared(extra_packages: list[str] = None):
 
     print("...done linking files.", file=sys.stderr)
     # --- End of persistence setup ---
+
+    # Register comprehensive backup on shutdown
+    def create_root_backup():
+        """Create comprehensive backup of /root directory on shutdown."""
+        try:
+            print("Creating comprehensive /root backup...", file=sys.stderr)
+            backup_file = "/data/root_backup.tar.gz"
+
+            # Create compressed backup of entire /root directory
+            # Exclude cache directories, temp files, and symlinks to avoid issues
+            subprocess.run([
+                "tar", "-czf", backup_file,
+                "--exclude=.cache",
+                "--exclude=.local/share/Trash",
+                "--exclude=*~",
+                "--exclude=.bash_history",  # Handle separately due to append mode
+                "--exclude=*.tmp",
+                "--exclude=*.swp",
+                "--exclude=.gvfs",
+                "-C", "/root", "."
+            ], check=True, capture_output=True)
+
+            print(f"Backup saved to {backup_file}", file=sys.stderr)
+
+        except Exception as e:
+            print(f"Warning: Backup failed - {e}", file=sys.stderr)
+
+    # Register the backup function to run on exit
+    atexit.register(create_root_backup)
 
     # 4. Dynamically install requested tools.
     if extra_packages:
@@ -417,12 +503,14 @@ def run_rdp_devbox_shared(extra_packages: list[str] = None):
     """
     Shared logic for launching an RDP desktop development environment.
     Sets up public key, persistent dotfiles, installs packages, and runs RDP server.
+    Includes comprehensive backup of /root directory.
     """
     import os
     import shutil
     import subprocess
     import sys
     import time
+    import atexit
 
     # Inject your public key from the secret (for potential SSH fallback).
     pubkey = os.environ["PUBKEY"]
@@ -477,6 +565,35 @@ def run_rdp_devbox_shared(extra_packages: list[str] = None):
 
     print("...done linking files.", file=sys.stderr)
     # --- End of persistence setup ---
+
+    # Register comprehensive backup on shutdown
+    def create_root_backup():
+        """Create comprehensive backup of /root directory on shutdown."""
+        try:
+            print("Creating comprehensive /root backup...", file=sys.stderr)
+            backup_file = "/data/root_backup.tar.gz"
+
+            # Create compressed backup of entire /root directory
+            # Exclude cache directories, temp files, and symlinks to avoid issues
+            subprocess.run([
+                "tar", "-czf", backup_file,
+                "--exclude=.cache",
+                "--exclude=.local/share/Trash",
+                "--exclude=*~",
+                "--exclude=.bash_history",  # Handle separately due to append mode
+                "--exclude=*.tmp",
+                "--exclude=*.swp",
+                "--exclude=.gvfs",
+                "-C", "/root", "."
+            ], check=True, capture_output=True)
+
+            print(f"Backup saved to {backup_file}", file=sys.stderr)
+
+        except Exception as e:
+            print(f"Warning: Backup failed - {e}", file=sys.stderr)
+
+    # Register the backup function to run on exit
+    atexit.register(create_root_backup)
 
     # Dynamically install requested tools
     if extra_packages:
