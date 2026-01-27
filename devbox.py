@@ -6,82 +6,57 @@ import random
 import platform
 import os
 
+try:
+    from ui_utils import create_box, show_spinner
+except ImportError:
+    sys.stderr.write("Warning: ui_utils module not found. Using fallback functions.\n")
+    
+    def create_box(content, title="", width=60):
+        lines = content.split("\n")
+        max_len = max(len(line) for line in lines) if lines else 0
+        box_width = max(max_len + 4, width)
+        if title:
+            title_len = len(title) + 2
+            left_padding = (box_width - title_len) // 2
+            right_padding = box_width - title_len - left_padding
+            top_border = "╔" + "═" * left_padding + f" {title} " + "═" * right_padding + "╗"
+        else:
+            top_border = "╔" + "═" * box_width + "╗"
+        print(top_border)
+        for line in lines:
+            padded_line = line.ljust(max_len)
+            print(f"║ {padded_line} ║")
+        bottom_border = "╚" + "═" * box_width + "╝"
+        print(bottom_border)
+    
+    def show_spinner(message="Loading", duration=2):
+        spinner_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        start_time = time.time()
+        i = 0
+        while time.time() - start_time < duration:
+            char = spinner_chars[i % len(spinner_chars)]
+            spinner_text = f"{char} {message}..."
+            print(f"\r{spinner_text}", end="", flush=True)
+            time.sleep(0.1)
+            i += 1
+        clear_length = len(message) + 10
+        print(f"\r{' ' * clear_length}\r", end="", flush=True)
 
-# Simplified UI utilities - clean and reliable
-def create_box(content, title="", width=60):
-    """Create a bordered box around content."""
-    lines = content.split("\n")
-    max_len = max(len(line) for line in lines) if lines else 0
-    box_width = max(max_len + 4, width)
-
-    if title:
-        title_len = len(title) + 2
-        left_padding = (box_width - title_len) // 2
-        right_padding = box_width - title_len - left_padding
-        top_border = "╔" + "═" * left_padding + f" {title} " + "═" * right_padding + "╗"
-    else:
-        top_border = "╔" + "═" * box_width + "╗"
-
-    print(top_border)
-
-    for line in lines:
-        padded_line = line.ljust(max_len)
-        print(f"║ {padded_line} ║")
-
-    bottom_border = "╚" + "═" * box_width + "╝"
-    print(bottom_border)
-
-
-def show_spinner(message="Loading", duration=2):
-    """Simple spinner with visual feedback."""
-    spinner_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-    start_time = time.time()
-    i = 0
-
-    while time.time() - start_time < duration:
-        char = spinner_chars[i % len(spinner_chars)]
-        spinner_text = f"{char} {message}..."
-        print(f"\r{spinner_text}", end="", flush=True)
-        time.sleep(0.1)
-        i += 1
-
-    # Clear the spinner line
-    clear_length = len(message) + 10
-    print(f"\r{' ' * clear_length}\r", end="", flush=True)
-
-
-# Programming quotes embedded
-PROGRAMMING_QUOTES = [
-    {
-        "text": "First, solve the problem. Then, write the code.",
-        "author": "John Johnson",
-    },
-    {
-        "text": "The best error message is the one that never shows up.",
-        "author": "Thomas Fuchs",
-    },
-    {
-        "text": "Programs must be written for people to read, and only incidentally for machines to execute.",
-        "author": "Harold Abelson",
-    },
-    {
-        "text": "The only way to learn a new programming language is by writing programs in it.",
-        "author": "Dennis Ritchie",
-    },
-    {
-        "text": "Code is like humor. When you have to explain it, it's bad.",
-        "author": "Cory House",
-    },
-    {"text": "Make it work, make it right, make it fast.", "author": "Kent Beck"},
-    {
-        "text": "The most disastrous thing that you can ever learn is your first programming language.",
-        "author": "Alan Kay",
-    },
-]
-
-
-def get_random_quote():
-    return random.choice(PROGRAMMING_QUOTES)
+try:
+    from quotes_loader import get_random_quote, format_quote
+except ImportError:
+    sys.stderr.write("Warning: quotes_loader module not found. Using fallback quotes.\n")
+    
+    def get_random_quote():
+        fallback_quotes = [
+            {"text": "Code is like humor. When you have to explain it, it's bad.", "author": "Cory House"},
+            {"text": "First, solve the problem. Then, write the code.", "author": "John Johnson"},
+            {"text": "Make it work, make it right, make it fast.", "author": "Kent Beck"}
+        ]
+        return random.choice(fallback_quotes)
+    
+    def format_quote(quote):
+        return f'"{quote["text"]}"\n\n— {quote["author"]}'
 
 
 # System info functions
@@ -296,7 +271,7 @@ dev_volume = modal.Volume.from_name("my-dev-volume", create_if_missing=True)
 
 
 # 3. The remote function now accepts a list of packages to install.
-def run_devbox_shared(extra_packages: list[str] = None):
+def run_devbox_shared(extra_packages: list[str] | None = None):
     """
     Shared logic for launching a personal development environment.
     Sets up public key, persistent dotfiles, installs packages, and runs sshd.
@@ -730,26 +705,33 @@ gpu_devbox_args_rdp = dict(
 )
 
 
-@app.function(image=standard_devbox_image, **cpu_devbox_args)
-def launch_devbox(extra_packages: list[str] = None):
+@app.function(
+    image=standard_devbox_image,
+    secrets=[modal.Secret.from_name("ssh-public-key")],
+    volumes={"/data": dev_volume},
+    cpu=0.5,
+    memory=1024,
+    timeout=3600,
+)
+def launch_devbox(extra_packages: list[str] | None = None):
     """Launches a non-GPU personal development environment."""
     run_devbox_shared(extra_packages)
 
 
 @app.function(image=cuda_devbox_image, gpu="t4", **gpu_devbox_args)
-def launch_devbox_t4(extra_packages: list[str] = None):
+def launch_devbox_t4(extra_packages: list[str] | None = None):
     """Launches a T4 GPU-powered personal development environment."""
     run_devbox_shared(extra_packages)
 
 
 @app.function(image=cuda_devbox_image, gpu="l4", **gpu_devbox_args)
-def launch_devbox_l4(extra_packages: list[str] = None):
+def launch_devbox_l4(extra_packages: list[str] | None = None):
     """Launches an L4 GPU-powered personal development environment."""
     run_devbox_shared(extra_packages)
 
 
 @app.function(image=cuda_devbox_image, gpu="a10g", **gpu_devbox_args)
-def launch_devbox_a10g(extra_packages: list[str] = None):
+def launch_devbox_a10g(extra_packages: list[str] | None = None):
     """Launches an A10G GPU-powered personal development environment."""
     run_devbox_shared(extra_packages)
 
@@ -1173,7 +1155,7 @@ def main():
 
     # Show a random quote
     quote = get_random_quote()
-    quote_box = f'"{quote["text"]}"\n\n— {quote["author"]}'
+    quote_box = format_quote(quote)
     create_box(quote_box, "💭 Programming Wisdom")
 
     # Display system info
