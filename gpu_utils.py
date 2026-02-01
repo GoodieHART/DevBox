@@ -8,7 +8,8 @@ Provides parameterized GPU launcher functions to eliminate code duplication.
 GPU_CONFIGS = {
     "t4": {"gpu": "t4", "description": "NVIDIA T4"},
     "l4": {"gpu": "l4", "description": "NVIDIA L4"},
-    "a10g": {"gpu": "a10g", "description": "NVIDIA A10G"}
+    "a10g": {"gpu": "a10g", "description": "NVIDIA A10G"},
+    "l40s": {"gpu": "L40S", "description": "NVIDIA L40S - High-end AI workload"}
 }
 
 # Base arguments for GPU-powered DevBoxes
@@ -18,18 +19,20 @@ BASE_GPU_ARGS = {
     "timeout": 3600
 }
 
-# GPU-specific arguments
+# GPU-specific arguments (matched to devbox.py resource allocations)
 GPU_ARGS = {
-    "t4": {"cpu": 0.5, "memory": 1024},
-    "l4": {"cpu": 0.5, "memory": 1024}, 
-    "a10g": {"cpu": 0.5, "memory": 1024}
+    "t4": {"cpu": 1.0, "memory": 2048},  # Match devbox.py gpu_devbox_args
+    "l4": {"cpu": 1.0, "memory": 2048}, 
+    "a10g": {"cpu": 1.0, "memory": 2048},
+    "l40s": {"cpu": 1.0, "memory": 4096}  # Higher memory for LLM workloads
 }
 
 # RDP-specific arguments (higher resources)
 RDP_GPU_ARGS = {
     "t4": {"cpu": 1.5, "memory": 4096},
     "l4": {"cpu": 1.5, "memory": 4096},
-    "a10g": {"cpu": 1.5, "memory": 4096}
+    "a10g": {"cpu": 1.5, "memory": 4096},
+    "l40s": {"cpu": 2.0, "memory": 8192}  # Highest resources for L40S + RDP
 }
 
 
