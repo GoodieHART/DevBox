@@ -6,6 +6,7 @@ Provides configurable persistent storage setup to eliminate code duplication.
 
 import os
 import shutil
+import sys
 
 
 def setup_persistence(items_to_persist, persistent_storage_dir="/data/.config_persistence"):
