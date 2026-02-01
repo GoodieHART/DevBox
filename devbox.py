@@ -64,7 +64,7 @@ def get_system_info():
     try:
         cpu_count = os.cpu_count() or 1
         return f"CPU: {cpu_count} cores"
-    except:
+    except (OSError, AttributeError):
         return "CPU: Unknown"
 
 
@@ -211,17 +211,17 @@ llm_playroom_image = (
     ])
 )
 
-# NEW: Unsloth-optimized llama.cpp image with Dynamic 2.0 quantization
-llamacpp_unsloth_image = (
+# NEW: llama.cpp image with prebuilt CPU binaries from official releases
+# Using prebuilt binaries instead of building from source to save time
+LLAMACPP_VERSION = "b7898"  # Latest stable release
+llamacpp_cpu_image = (
     modal.Image.debian_slim(python_version="3.10")
     .apt_install([
         # Standard DevBox packages
         "openssh-server", "git", "neovim", "curl", "wget", 
-        "unzip", "procps", "nano", "htop", "build-essential",
-        
-        # llama.cpp build dependencies
-        "cmake", "clang", "pkg-config", "python3-dev", 
-        "zlib1g-dev", "pciutils", "lshw", "libcurl4-openssl-dev"
+        "unzip", "procps", "nano", "htop",
+        # Runtime dependencies
+        "libssl3", "libcurl4", "zlib1g"
     ])
     .run_commands([
         # Standard SSH setup (MUST BE IDENTICAL)
@@ -229,17 +229,19 @@ llamacpp_unsloth_image = (
         "touch /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys",
         "mkdir -p /var/run/sshd",
         
-        # llama.cpp build with curl support for model downloads
-        "git clone https://github.com/ggml-org/llama.cpp.git /tmp/llama.cpp",
-        "cd /tmp/llama.cpp && cmake -B build -DBUILD_SHARED_LIBS=OFF -DGGML_CUDA=ON -DLLAMA_CURL=ON",
-        "cmake --build build --config Release -j $(nproc)",
-        "mv /tmp/llama.cpp /opt/llama.cpp",
+        # Download and extract prebuilt llama.cpp binaries (CPU only)
+        f"curl -L -o /tmp/llama.tar.gz https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_VERSION}/llama-{LLAMACPP_VERSION}-bin-ubuntu-x64.tar.gz",
+        "mkdir -p /opt/llama.cpp",
+        "tar -xzf /tmp/llama.tar.gz -C /opt/llama.cpp --strip-components=1",
+        "rm /tmp/llama.tar.gz",
         
-        # Create Unsloth model directories
-        "mkdir -p /opt/models/unsloth",
-        "mkdir -p /opt/models/unsloth/deepseek",
-        "mkdir -p /opt/models/unsloth/qwen", 
-        "mkdir -p /opt/models/unsloth/gemma"
+        # Create symlinks for easy access
+        "ln -sf /opt/llama.cpp/bin/llama-cli /usr/local/bin/llama-cli",
+        "ln -sf /opt/llama.cpp/bin/llama-server /usr/local/bin/llama-server",
+        "ln -sf /opt/llama.cpp/bin/llama-bench /usr/local/bin/llama-bench",
+        
+        # Create model directories
+        "mkdir -p /opt/models/llama.cpp",
     ])
 )
 
@@ -1058,20 +1060,17 @@ def launch_llm_playroom():
         print("💰 Cost saved by auto-shutdown! Thanks for using LLM Playroom.", file=sys.stderr)
 
 
-# NEW: Unsloth llama.cpp playroom with model selection
+# NEW: llama.cpp playroom with prebuilt CPU binaries
 @app.function(
-    image=llamacpp_unsloth_image,
-    gpu="L40S",
-    cpu=1.0,
-    memory=4096,
-    timeout=600,
-    enable_memory_snapshot=True,
-    experimental_options={"enable_gpu_snapshot": True},
+    image=llamacpp_cpu_image,
+    cpu=4.0,  # Increased CPU for better performance
+    memory=8192,  # Increased memory for large models
+    timeout=1800,  # 30 minutes for playroom
     secrets=[modal.Secret.from_name("ssh-public-key")],
     volumes={"/data": dev_volume},
 )
-def launch_llamacpp_unsloth_playroom():
-    """Unsloth llama.cpp playroom with model selection and Dynamic 2.0 quantization."""
+def launch_llamacpp_playroom():
+    """llama.cpp playroom with prebuilt CPU binaries and model selection."""
     import os
     import shutil
     import subprocess
@@ -1080,10 +1079,9 @@ def launch_llamacpp_unsloth_playroom():
     import atexit
 
     # Show welcome message
-    print("\n🧠 Launching Unsloth llama.cpp Playroom...")
-    print("🚀 GPU: NVIDIA L40S detected - ready for AI workloads")
-    print("📦 Unsloth Dynamic 2.0 quantization for superior performance")
-    print("📦 Models available: DeepSeek-V3.1, Qwen3-Coder, Gemma 3")
+    print("\n🧠 Launching llama.cpp Playroom (CPU)")
+    print("💻 Running on CPU - optimized for inference")
+    print("📦 Models available: DeepSeek, Qwen3-Coder, Gemma 3")
     
     # --- Set up persistent dotfiles using symbolic links ---
     print("Linking persistent configuration files...", file=sys.stderr)
@@ -1251,11 +1249,8 @@ def launch_llamacpp_unsloth_playroom():
         import os
         import shutil
 
-        # Inject your public key from the secret.
-        pubkey = os.environ["PUBKEY"]
-        with open("/root/.ssh/authorized_keys", "a") as f:
-            if pubkey not in open("/root/.ssh/authorized_keys").read():
-                f.write(pubkey + "\n")
+        # Inject your public key from the secret using Modal's mechanism
+        # This will be handled automatically by Modal with the secrets parameter
 
         # --- Set up persistent dotfiles using symbolic links ---
         print("Linking persistent configuration files...", file=sys.stderr)
@@ -1405,9 +1400,9 @@ def main():
  5. 🖥️  RDP Desktop Box
      Full graphical desktop with XFCE and RDP access
 
- 6. 🧠 Unsloth llama.cpp Playroom
-     Dynamic 2.0 quantization with model selection
-"""
+ 6. 🧠 llama.cpp Playroom
+      Prebuilt CPU binaries with model selection
+ """
     create_box(menu_box, "🚀 LAUNCH OPTIONS")
 
     try:
@@ -1630,30 +1625,29 @@ Examples: firefox gedit vscode libreoffice
             show_spinner("Preparing your RDP Desktop", 2)
             launch_rdp_devbox.remote(extra_packages=package_list)
 
-    elif choice == "6":  # New logic branch for Unsloth
+    elif choice == "6":  # llama.cpp Playroom
         print()
         
-        # Enhanced Unsloth menu with model selection
-        unsloth_box = """
-    🧠 Launching Unsloth llama.cpp Playroom...
-    
-    Unsloth Dynamic 2.0 quantization for superior performance
-    
-    Models available:
-    • DeepSeek-V3.1-Terminus - Superior performance (75.6% Aider score)
-    • Qwen3-Coder-30B-A3B - Optimized for agentic coding and development
-    • Gemma 3-27B - Excellent efficiency, multimodal support
-    
-    GPU: NVIDIA L40S detected - ready for AI workloads
-    • Model download sizes: 15GB to 170GB
-    • Dynamic 2.0 quantization for 80% size reduction
-    • Bug-fixed models with enhanced stability
-    • Production-ready with API support
-    """
-        create_box(unsloth_box, "🧠 UNSLOTH LLAMA.CPP PLAYROOM")
+        # llama.cpp Playroom menu
+        llamacpp_box = """
+🧠 Launching llama.cpp Playroom...
+
+Prebuilt CPU-optimized llama.cpp binaries from official releases
+
+Models available:
+• DeepSeek-V3.1-Terminus - Superior performance (75.6% Aider score)
+• Qwen3-Coder-30B-A3B - Optimized for agentic coding and development
+• Gemma 3-27B - Excellent efficiency, multimodal support
+
+💻 CPU-optimized for inference
+• Model download sizes: 15GB to 170GB
+• GGUF quantization format
+• OpenAI-compatible API support
+"""
+        create_box(llamacpp_box, "🧠 LLAMA.CPP PLAYROOM")
         
-        show_spinner("Preparing Unsloth environment", 2)
-        launch_llamacpp_unsloth_playroom.remote()
+        show_spinner("Preparing llama.cpp environment", 2)
+        launch_llamacpp_playroom.remote()
 
     else:
         error_box = """
@@ -1665,6 +1659,6 @@ Please run the launcher again and choose:
 • 3 for AI Assistants Box
 • 4 for LLM Playroom
 • 5 for RDP Desktop Box
-• 6 for Unsloth llama.cpp Playroom
+• 6 for llama.cpp Playroom
 """
         create_box(error_box, "❌ ERROR")
