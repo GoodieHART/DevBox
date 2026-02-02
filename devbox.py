@@ -58,9 +58,27 @@ except ImportError:
     def format_quote(quote):
         return f'"{quote["text"]}"\n\n— {quote["author"]}'
 
+# Import refactored modules for shared functionality
+try:
+    from config import IDLE_TIMEOUT_SECONDS, get_resource_config, GPU_TYPES
+    from images import (
+        standard_devbox_image, cuda_devbox_image, doc_processing_image,
+        gemini_cli_image, llm_playroom_image, llamacpp_cpu_image, rdp_devbox_image
+    )
+    from utils import inject_ssh_key, get_system_info as utils_get_system_info
+    from gpu_utils import get_gpu_config, get_available_gpus
+    from shared_runtime import handle_devbox_startup
+    SHARED_MODULES_AVAILABLE = True
+except ImportError as e:
+    sys.stderr.write(f"Warning: Could not import shared modules: {e}\n")
+    SHARED_MODULES_AVAILABLE = False
+
 
 # System info functions
 def get_system_info():
+    if SHARED_MODULES_AVAILABLE:
+        return utils_get_system_info()
+    # Fallback implementation
     try:
         cpu_count = os.cpu_count() or 1
         return f"CPU: {cpu_count} cores"
@@ -81,7 +99,9 @@ def display_system_info():
 
 # 1. Configuration for the auto-shutdown mechanism.
 # Container will shut down if no one is connected via SSH for this many seconds.
-IDLE_TIMEOUT_SECONDS = 300  # 5 minutes
+# IDLE_TIMEOUT_SECONDS imported from config.py if available, otherwise use default
+if not SHARED_MODULES_AVAILABLE:
+    IDLE_TIMEOUT_SECONDS = 300  # 5 minutes fallback
 
 # 2. Define base images.
 # Standard image for CPU-only tasks.
