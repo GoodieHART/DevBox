@@ -70,3 +70,33 @@ def register_custom_backup(source_dir, backup_file=None, exclude_patterns=None):
     """
     backup_func = lambda: create_backup(source_dir, backup_file, exclude_patterns)
     atexit.register(backup_func)
+
+
+def restore_backup(backup_file="/data/root_full_backup.tar.gz", restore_dir="/"):
+    """
+    Restore previous session backup if available.
+    
+    Args:
+        backup_file: Path to backup file
+        restore_dir: Directory to restore to (default: /)
+    """
+    import os
+    import subprocess
+    
+    if os.path.exists(backup_file):
+        print("Restoring previous session data...", file=sys.stderr)
+        try:
+            # Clean restore directory (preserve only essential system files)
+            subprocess.run([
+                "find", "/root", "-mindepth", "1", "-maxdepth", "1",
+                "!", "-name", "lost+found",
+                "-exec", "rm", "-rf", "{}", "+"
+            ], check=False)
+            
+            # Extract backup
+            subprocess.run(["tar", "-xzf", backup_file, "-C", restore_dir], check=True)
+            print("Session data restored successfully!", file=sys.stderr)
+            
+        except Exception as e:
+            print(f"Warning: Restore failed - {e}, continuing with clean environment", file=sys.stderr)
+            
