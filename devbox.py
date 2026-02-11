@@ -6,78 +6,15 @@ import random
 import platform
 import os
 
-from ui_utils import create_box, show_spinner
-from quotes_loader import get_random_quote, format_quote
-from utils import inject_ssh_key, display_system_info
-from config import IDLE_TIMEOUT_SECONDS, get_resource_config, GPU_TYPES
 from images import (
     standard_devbox_image, cuda_devbox_image, doc_processing_image,
     gemini_cli_image, llm_playroom_image, llamacpp_cpu_image, rdp_devbox_image
 )
-from gpu_utils import get_gpu_config, get_available_gpus
-from shared_runtime import handle_devbox_startup
-
-
-# NEW: Define a dedicated image for RDP Desktop access with XFCE.
-rdp_devbox_image = (
-    modal.Image.debian_slim(python_version="3.10")
-    .apt_install([
-        # RDP Server & Desktop Environment
-        "xrdp", "xfce4", "xfce4-goodies", "xorgxrdp",
-        # Desktop Dependencies
-        "dbus-x11", "xorg", "tightvncserver",
-        # Development Tools (following standard pattern)
-        "clang", "cmake", "htop", "nano", "git", "neovim",
-        "curl", "wget", "unzip", "procps", "zlib1g-dev",
-        "build-essential", "pkg-config", "python3-dev",
-    ])
-    .run_commands([
-        # SSH setup (for potential admin access)
-        "mkdir -p /root/.ssh",
-        "chmod 700 /root/.ssh",
-        "touch /root/.ssh/authorized_keys",
-        "chmod 600 /root/.ssh/authorized_keys",
-        # Configure SSH to allow key-based auth and disable password auth
-        "echo 'PubkeyAuthentication yes' >> /etc/ssh/sshd_config",
-        "echo 'PasswordAuthentication no' >> /etc/ssh/sshd_config",
-        "echo 'PermitRootLogin prohibit-password' >> /etc/ssh/sshd_config",
-        "echo 'AuthorizedKeysFile .ssh/authorized_keys' >> /etc/ssh/sshd_config",
-        # RDP setup
-        "mkdir -p /var/run/xrdp",
-        "chmod 755 /etc/xrdp",
-        # Create XFCE environment wrapper for proper XDG setup
-        "echo '#!/bin/bash' > /usr/local/bin/startxfce4-wrapper",
-        "echo '# XFCE RDP Wrapper with proper environment' >> /usr/local/bin/startxfce4-wrapper",
-        "echo '' >> /usr/local/bin/startxfce4-wrapper",
-        "echo 'export XDG_CONFIG_DIRS=/etc/xdg' >> /usr/local/bin/startxfce4-wrapper",
-        "echo 'export XDG_DATA_DIRS=/usr/local/share:/usr/share' >> /usr/local/bin/startxfce4-wrapper",
-        "echo 'export XDG_RUNTIME_DIR=/tmp/xdg-runtime' >> /usr/local/bin/startxfce4-wrapper",
-        "echo '' >> /usr/local/bin/startxfce4-wrapper",
-        "echo '# Ensure runtime directory exists' >> /usr/local/bin/startxfce4-wrapper",
-        "echo 'mkdir -p /tmp/xdg-runtime' >> /usr/local/bin/startxfce4-wrapper",
-        "echo 'chmod 700 /tmp/xdg-runtime' >> /usr/local/bin/startxfce4-wrapper",
-        "echo '' >> /usr/local/bin/startxfce4-wrapper",
-        "echo '# Start XFCE with proper environment' >> /usr/local/bin/startxfce4-wrapper",
-        "echo 'exec startxfce4' >> /usr/local/bin/startxfce4-wrapper",
-        "chmod +x /usr/local/bin/startxfce4-wrapper",
-        # Configure XFCE session using wrapper
-        "printf '#!/bin/sh\\n/usr/local/bin/startxfce4-wrapper\\n' > /etc/skel/.xsession",
-        "chmod +x /etc/skel/.xsession",
-        # Create basic XFCE config directory structure
-        "mkdir -p /etc/skel/.config/xfce4",
-        "mkdir -p /etc/skel/.cache/sessions",
-        # Set RDP password for root user (simple password for container use)
-        "echo 'root:rdpaccess' | chpasswd",
-    ])
-)
-
 
 app = modal.App(
     name="personal-devbox-launcher",
-    # The base image is no longer attached to the app directly
 )
 
-# 2. Define the persistent Volume.
 # This will be mounted in the container for persistent storage.
 dev_volume = modal.Volume.from_name("my-dev-volume", create_if_missing=True)
 
@@ -1255,6 +1192,13 @@ def main():
     """
     Enhanced interactive menu for launching DevBox templates with fun UI elements.
     """
+    from ui_utils import create_box, show_spinner
+    from quotes_loader import get_random_quote, format_quote
+    from utils import inject_ssh_key, display_system_info
+    from config import IDLE_TIMEOUT_SECONDS, get_resource_config, GPU_TYPES
+    from gpu_utils import get_gpu_config, get_available_gpus
+    from shared_runtime import handle_devbox_startup
+
     logo = """
 ╔══════════════════════════════════════════════════════════╗
 ║                                                          ║

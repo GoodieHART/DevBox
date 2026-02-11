@@ -71,13 +71,17 @@ def create_base_minimal_image(python_version="3.10"):
 standard_devbox_image = create_base_devbox_image()
 
 cuda_devbox_image = (
-    create_base_minimal_image(python_version="3.11")
-    .from_registry("nvidia/cuda:12.1.1-devel-ubuntu22.04")
+    modal.Image.from_registry(
+        "nvidia/cuda:12.1.1-devel-ubuntu22.04",
+        add_python="3.11"
+    )
     .apt_install(
+        *CORE_DEV_PACKAGES,  # SSH and core tools
         "nano",
         "libcudnn9-cuda-12", 
         "libcudnn9-dev-cuda-12",
     )
+    .run_commands(*get_ssh_setup_commands())
 )
 
 doc_processing_image = (
@@ -148,16 +152,30 @@ rdp_devbox_image = (
         "tightvncserver",
     )
     .run_commands(
-        # RDP/XFCE setup
+        # RDP setup
+        "mkdir -p /var/run/xrdp",
+        "chmod 755 /etc/xrdp",
+        # Create XFCE environment wrapper for proper XDG setup
+        "echo '#!/bin/bash' > /usr/local/bin/startxfce4-wrapper",
+        "echo '# XFCE RDP Wrapper with proper environment' >> /usr/local/bin/startxfce4-wrapper",
+        "echo '' >> /usr/local/bin/startxfce4-wrapper",
+        "echo 'export XDG_CONFIG_DIRS=/etc/xdg' >> /usr/local/bin/startxfce4-wrapper",
+        "echo 'export XDG_DATA_DIRS=/usr/local/share:/usr/share' >> /usr/local/bin/startxfce4-wrapper",
+        "echo 'export XDG_RUNTIME_DIR=/tmp/xdg-runtime' >> /usr/local/bin/startxfce4-wrapper",
+        "echo '' >> /usr/local/bin/startxfce4-wrapper",
+        "echo '# Ensure runtime directory exists' >> /usr/local/bin/startxfce4-wrapper",
+        "echo 'mkdir -p /tmp/xdg-runtime' >> /usr/local/bin/startxfce4-wrapper",
+        "echo 'chmod 700 /tmp/xdg-runtime' >> /usr/local/bin/startxfce4-wrapper",
+        "echo '' >> /usr/local/bin/startxfce4-wrapper",
+        "echo '# Start XFCE with proper environment' >> /usr/local/bin/startxfce4-wrapper",
+        "echo 'exec startxfce4' >> /usr/local/bin/startxfce4-wrapper",
+        "chmod +x /usr/local/bin/startxfce4-wrapper",
+        # Configure XFCE session using wrapper
+        "printf '#!/bin/sh\\n/usr/local/bin/startxfce4-wrapper\\n' > /etc/skel/.xsession",
+        "chmod +x /etc/skel/.xsession",
+        # Create basic XFCE config directory structure
         "mkdir -p /etc/skel/.config/xfce4",
-        "echo 'xfce4-session &' > /root/.xsession",
-        # XFCE wrapper for RDP
-        'echo "#!/bin/bash" > /usr/local/bin/xfce-wrapper',
-        'echo "export DISPLAY=:1" >> /usr/local/bin/xfce-wrapper',
-        'echo "xfce4-session &" >> /usr/local/bin/xfce-wrapper', 
-        'echo "sleep 2" >> /usr/local/bin/xfce-wrapper',
-        'echo "xrdp-sesman --version --cleanup || true" >> /usr/local/bin/xfce-wrapper',
-        'chmod +x /usr/local/bin/xfce-wrapper',
+        "mkdir -p /etc/skel/.cache/sessions",
         # Set root password for RDP (needed for desktop)
         'echo "root:devbox123" | chpasswd',
         *get_ssh_setup_commands()
