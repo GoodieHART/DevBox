@@ -4,12 +4,11 @@ Utility functions for DevBox Launcher.
 This module provides system information, SSH key injection, and other
 common utility functions used across the DevBox application.
 
-Author: DevBox Launcher
+Author: GoodieHART
 """
 
 import os
 import platform
-import pwd
 import subprocess
 import sys
 

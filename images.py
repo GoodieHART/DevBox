@@ -4,12 +4,13 @@ Docker image definitions for DevBox Launcher.
 This module provides centralized image definitions with inheritance patterns
 to eliminate code duplication and standardize base configurations.
 
-Author: DevBox Launcher
+Author: GoodieHART
 """
 
 import modal
 from config import CORE_DEV_PACKAGES, EXTENDED_DEV_PACKAGES
 
+LLAMACPP_VERSION = "b7898"
 
 def get_ssh_setup_commands():
     """
@@ -92,7 +93,7 @@ gemini_cli_image = (
         "apt-get install -y nodejs",
         # Install OpenCode and Gemini CLI
         "npm install -g @google/gemini-cli",
-        "npm install -g opencode@latest",
+        "curl -fsSL https://opencode.ai/install | bash",
         *get_ssh_setup_commands()
     )
 )
@@ -119,13 +120,17 @@ llamacpp_cpu_image = (
         "zlib1g",
     )
     .run_commands(
-        # Download llama.cpp prebuilt binaries
-        "wget -q https://github.com/ggerganov/llama.cpp/releases/download/b7898/llama-b7898-bin-linux-x64.zip",
-        "unzip llama-b7898-bin-linux-x64.zip",
-        "chmod +x llama-b7898-bin-linux-x64/*",
-        # Create symlinks for easier access
-        "ln -sf /llama-b7898-bin-linux-x64/main /usr/local/bin/llama",
-        "ln -sf /llama-b7898-bin-linux-x64/quantize /usr/local/bin/quantize",
+        # Download and extract prebuilt llama.cpp binaries (CPU only)
+        f"curl -L -o /tmp/llama.tar.gz https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_VERSION}/llama-{LLAMACPP_VERSION}-bin-ubuntu-x64.tar.gz",
+        "mkdir -p /opt/llama.cpp",
+        "tar -xzf /tmp/llama.tar.gz -C /opt/llama.cpp --strip-components=1",
+        "rm /tmp/llama.tar.gz",
+        
+        # Create symlinks for easy access
+        "ln -sf /opt/llama.cpp/bin/llama-cli /usr/local/bin/llama-cli",
+        "ln -sf /opt/llama.cpp/bin/llama-server /usr/local/bin/llama-server",
+        "ln -sf /opt/llama.cpp/bin/llama-bench /usr/local/bin/llama-bench",
+        "mkdir -p /opt/models/llama.cpp",
         *get_ssh_setup_commands()
     )
 )
