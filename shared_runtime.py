@@ -8,136 +8,151 @@ Author: GoodieHART
 """
 
 import os
+import modal
 import sys
 import time
 import subprocess
 import atexit
 from persistence_utils import setup_persistence, get_persistence_items
-from backup_utils import create_backup, register_custom_backup
+from backup_utils import *
+from utils import *
 from config import IDLE_TIMEOUT_SECONDS
 
 
-def setup_persistence_and_backup(persistence_items, backup_source="/root", backup_file=None):
-    """
-    Set up persistent storage and register backup for DevBox.
+def run_devbox_shared(extra_packages=None, devbox_type="ssh"):
+    """Single consolidated function for all SSH DevBoxes."""
+    import os
+    import subprocess
     
-    Args:
-        persistence_items: List of files/directories to persist
-        backup_source: Directory to backup (default: "/root")
-        backup_file: Output backup file path (auto-generated if None)
-    """
-    # Set up comprehensive persistent storage
-    print("Setting up comprehensive persistence system...", file=sys.stderr)
-    setup_persistence(persistence_items)
+    # 1. Restore backup
+    restore_backup()
     
-    # Register backup on exit
-    register_custom_backup(backup_source, backup_file)
+    # 2. Setup persistence
+    setup_persistence(get_persistence_items(devbox_type))
     
-    print("✓ Persistence and backup systems configured", file=sys.stderr)
-
-
-def setup_ssh_environment():
-    """
-    Set up SSH environment with key injection and configuration.
+    # 3. Register backup on exit
+    register_custom_backup("/root", "/data/root_full_backup.tar.gz")
     
-    Returns:
-        bool: True if SSH setup successful, False otherwise
-    """
-    # Import here to avoid circular dependency
-    from utils import inject_ssh_key
+    # 4. Inject SSH key
+    inject_ssh_key()
     
-    print("🔐 Setting up SSH environment...", file=sys.stderr)
-    
-    # Inject SSH key with comprehensive diagnostics
-    if not inject_ssh_key():
-        print("❌ SSH setup failed - DevBox will not be accessible", file=sys.stderr)
-        return False
-    
-    print("✓ SSH environment configured successfully", file=sys.stderr)
-    return True
-
-
-def install_extra_packages(extra_packages):
-    """
-    Install extra apt packages if specified.
-    
-    Args:
-        extra_packages: List of packages to install (None or empty = no extra packages)
-    """
+    # 5. Install extra packages
     if extra_packages:
-        print(f"📦 Installing extra packages: {', '.join(extra_packages)}", file=sys.stderr)
-        try:
-            subprocess.run(["apt-get", "update"], check=True)
-            subprocess.run(["apt-get", "install", "-y"] + extra_packages, check=True)
-            print("✓ Extra packages installed successfully", file=sys.stderr)
-        except subprocess.CalledProcessError as e:
-            print(f"❌ Package installation failed: {e}", file=sys.stderr)
-            return False
-    return True
-
-
-def start_ssh_daemon():
-    """
-    Start SSH daemon with proper configuration.
-    """
-    print("🚀 Starting SSH daemon...", file=sys.stderr)
+        print(f"Installing extra packages: {', '.join(extra_packages)}...", file=sys.stderr)
+        subprocess.run(["apt-get", "update"], check=True)
+        subprocess.run(["apt-get", "install", "-y"] + extra_packages, check=True)
     
-    # Start SSH daemon in background
-    subprocess.Popen(["/usr/sbin/sshd", "-D"])
+    # 6. Start SSH and monitor
+    subprocess.run(["/usr/sbin/sshd"])
     
-    print("✓ SSH daemon started", file=sys.stderr)
-    print(f"📍 DevBox ready! SSH will auto-shutdown after {IDLE_TIMEOUT_SECONDS}s of inactivity", file=sys.stderr)
-
-
-def monitor_idle_timeout(last_activity_time):
-    """
-    Monitor for idle timeout and shutdown when inactive.
-    
-    Args:
-        last_activity_time: Timestamp of last SSH activity
-    """
-    current_time = time.time()
-    idle_time = current_time - last_activity_time
-    
-    if idle_time > IDLE_TIMEOUT_SECONDS:
-        print(f"⏰ Idle timeout reached ({idle_time:.0f}s). Shutting down...", file=sys.stderr)
-        return True
-    
-    return False
-
-
-def handle_devbox_startup(extra_packages, persistence_type="ssh", backup_source="/root"):
-    """
-    Common DevBox startup workflow.
-    
-    Args:
-        extra_packages: Extra packages to install
-        persistence_type: Type of persistence setup ("ssh", "rdp", "llm", etc.)
-        backup_source: Source directory for backup
+    with modal.forward(22, unencrypted=True) as tunnel:
+        print(f"\n🚀 Your DevBox is ready!\nssh root@{tunnel.host} -p {tunnel.unencrypted_port}")
         
-    Returns:
-        bool: True if startup successful, False otherwise
+        idle_time = 0
+        while idle_time < IDLE_TIMEOUT_SECONDS:
+            time.sleep(15)
+            result = subprocess.run("ps -ef | grep 'sshd: root@' | grep -v grep", 
+                                  shell=True, capture_output=True)
+            if result.stdout:
+                idle_time = 0
+            else:
+                idle_time += 15
+
+
+def run_rdp_devbox_shared(extra_packages: list[str] = None):
     """
-    print("🚀 Initializing DevBox environment...", file=sys.stderr)
+    Shared logic for launching an RDP desktop development environment.
+    Sets up public key, persistent dotfiles, installs packages, and runs RDP server.
+    """
+    import os
+    import subprocess
+    import time
     
-    # Step 1: Set up SSH environment
-    if not setup_ssh_environment():
-        return False
+    # Import utilities
+    from backup_utils import restore_backup, register_custom_backup
+    from persistence_utils import setup_persistence
+    from utils import inject_ssh_key
+    from config import IDLE_TIMEOUT_SECONDS
     
-    # Step 2: Install extra packages
-    if not install_extra_packages(extra_packages):
-        return False
+    # 1. Restore backup
+    restore_backup()
     
-    # Step 3: Set up persistence and backup
-    persistence_items = get_persistence_items(persistence_type)
-    setup_persistence_and_backup(persistence_items, backup_source)
+    # 2. Inject SSH key (for fallback access)
+    inject_ssh_key()
     
-    # Step 4: Start SSH daemon
-    start_ssh_daemon()
+    # 3. Setup persistence with RDP-specific items
+    rdp_items = [
+        ".bash_history", ".bashrc", ".profile", ".viminfo", ".vimrc",
+        ".gitconfig", ".ssh/config", ".ssh/known_hosts",
+        ".config/xfce4", ".local/share/xfce4", ".cache/sessions",
+        "Desktop", ".xsession",
+    ]
+    setup_persistence(rdp_items)
     
-    print("✓ DevBox initialization complete!", file=sys.stderr)
-    return True
-
-
-# Idle timeout monitoring for SSH connections
-IDLE_TIMEOUT_SECONDS = IDLE_TIMEOUT_SECONDS
+    # 4. Register backup
+    register_custom_backup("/root", "/data/root_full_backup.tar.gz")
+    
+    # 5. Install extra packages
+    if extra_packages:
+        print(f"Installing extra packages: {', '.join(extra_packages)}...", file=sys.stderr)
+        subprocess.run(["apt-get", "update"], check=True)
+        subprocess.run(["apt-get", "install", "-y"] + extra_packages, check=True)
+    
+    # 6. Setup XFCE environment
+    # Start D-Bus daemon for xfconfd
+    subprocess.Popen(["dbus-daemon", "--system", "--fork"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    
+    # Clean and recreate XFCE config directories
+    subprocess.run(["rm", "-rf", "/root/.config/xfce4"], check=False)
+    subprocess.run(["rm", "-rf", "/root/.cache/sessions"], check=False)
+    subprocess.run(["mkdir", "-p", "/root/.config/xfce4"], check=True)
+    subprocess.run(["mkdir", "-p", "/root/.cache/sessions"], check=True)
+    
+    # Set permissions
+    subprocess.run(["chown", "-R", "root:root", "/root/.config"], check=False)
+    subprocess.run(["chown", "-R", "root:root", "/root/.cache"], check=False)
+    
+    # XDG environment variables
+    os.environ.setdefault('XDG_CONFIG_DIRS', '/etc/xdg')
+    os.environ.setdefault('XDG_DATA_DIRS', '/usr/local/share:/usr/share')
+    os.environ.setdefault('XDG_RUNTIME_DIR', '/tmp/xdg-runtime')
+    os.makedirs('/tmp/xdg-runtime', exist_ok=True)
+    os.chmod('/tmp/xdg-runtime', 0o700)
+    
+    # 7. Start RDP services
+    subprocess.Popen(["/usr/sbin/xrdp"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.Popen(["/usr/sbin/xrdp-sesman"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    
+    # 8. Port forward and idle monitoring
+    with modal.forward(3389, unencrypted=True) as tunnel:
+        print(f"\n🖥️ Your RDP Desktop is ready!", file=sys.stderr)
+        print(f"Address: {tunnel.host}:{tunnel.unencrypted_port}", file=sys.stderr)
+        print(f"Username: root", file=sys.stderr)
+        print(f"Password: rdpaccess", file=sys.stderr)
+        
+        idle_time = 0
+        check_interval = 15
+        
+        while idle_time < IDLE_TIMEOUT_SECONDS:
+            time.sleep(check_interval)
+            
+            # Check for active RDP sessions
+            result = subprocess.run(
+                "ps aux | grep -c 'xrdp-sesman.*:' | grep -v grep",
+                shell=True, capture_output=True, text=True
+            )
+            
+            try:
+                active_sessions = int(result.stdout.strip())
+                if active_sessions > 0:
+                    idle_time = 0
+                else:
+                    idle_time += check_interval
+                    remaining = IDLE_TIMEOUT_SECONDS - idle_time
+                    print(f"No active RDP connection. Shutting down in {remaining}s...",
+                          file=sys.stderr, end="\r")
+            except (ValueError, AttributeError):
+                idle_time += check_interval
+        
+        print(f"\nIdle timeout reached. Shutting down RDP Desktop.", file=sys.stderr)

@@ -47,20 +47,23 @@ def inject_ssh_key():
     """
     Inject SSH public key from Modal Secret into authorized_keys.
     Includes debugging output and ensures proper permissions.
-    
-    Returns:
-        bool: True if successful, False otherwise
     """
+    import os
+    import sys
+    import subprocess
+    import pwd
+
+    print("="*60, file=sys.stderr)
+    print("🔐 SSH KEY INJECTION DIAGNOSTICS", file=sys.stderr)
+    print("="*60, file=sys.stderr)
+
     # Ensure .ssh directory exists with proper permissions
     ssh_dir = "/root/.ssh"
     auth_keys_file = f"{ssh_dir}/authorized_keys"
-    
+
     try:
         # CRITICAL: Check who we are running as
         current_user = pwd.getpwuid(os.getuid()).pw_name
-        print("="*60, file=sys.stderr)
-        print("🔐 SSH KEY INJECTION DIAGNOSTICS", file=sys.stderr)
-        print("="*60, file=sys.stderr)
         print(f"👤 Running as user: {current_user} (UID: {os.getuid()})", file=sys.stderr)
 
         # Check environment variables
@@ -75,7 +78,7 @@ def inject_ssh_key():
                     print(f"  {key}: {value[:30] if value else 'EMPTY OR NOT SET'} ⚠️", file=sys.stderr)
             else:
                 print(f"  {key}: {value}", file=sys.stderr)
-        
+
         # Get pubkey from environment - THIS IS THE CRITICAL PART
         pubkey = os.environ.get("PUBKEY", "").strip()
         
@@ -88,31 +91,84 @@ def inject_ssh_key():
             return False
 
         print(f"\n✓ Found PUBKEY (length: {len(pubkey)} chars)", file=sys.stderr)
+
+        # Ensure .ssh directory exists
+        os.makedirs(ssh_dir, mode=0o700, exist_ok=True)
         
-        # Ensure .ssh directory exists with proper permissions
-        os.makedirs(ssh_dir, exist_ok=True)
-        os.chmod(ssh_dir, 0o700)
-        print(f"✓ Created/verified .ssh directory: {ssh_dir}", file=sys.stderr)
+        # Get current .ssh directory info
+        ssh_stat = os.stat(ssh_dir)
+        ssh_owner = pwd.getpwuid(ssh_stat.st_uid).pw_name
+        ssh_perms = oct(ssh_stat.st_mode)[-3:]
+        print(f"📁 {ssh_dir} owner={ssh_owner}, perms={ssh_perms}", file=sys.stderr)
         
-        # Write the key to authorized_keys with proper permissions
-        with open(auth_keys_file, 'w') as f:
-            f.write(pubkey + '\n')
-        os.chmod(auth_keys_file, 0o600)
-        print(f"✓ Key written to {auth_keys_file}", file=sys.stderr)
-        
-        # Verify the key was written correctly
-        with open(auth_keys_file, 'r') as f:
-            written_key = f.read().strip()
-        
-        if written_key == pubkey:
-            print("✓ SSH key injection VERIFIED successfully!", file=sys.stderr)
-            print("="*60, file=sys.stderr)
-            return True
-        else:
-            print("❌ VERIFICATION FAILED: Written key doesn't match original!", file=sys.stderr)
-            return False
+        if ssh_perms != "700":
+            print(f"  ⚠️ Fixing permissions to 700", file=sys.stderr)
+            os.chmod(ssh_dir, 0o700)
+
+        # Check if authorized_keys exists and get its current state
+        if os.path.exists(auth_keys_file):
+            auth_stat = os.stat(auth_keys_file)
+            auth_owner = pwd.getpwuid(auth_stat.st_uid).pw_name
+            auth_perms = oct(auth_stat.st_mode)[-3:]
+            with open(auth_keys_file, "r") as f:
+                existing_content = f.read().strip()
+            print(f"📄 {auth_keys_file} exists, owner={auth_owner}, perms={auth_perms}, size={len(existing_content)} bytes", file=sys.stderr)
             
+            # Check if our key is already there
+            if pubkey in existing_content:
+                print(f"  ✓ Key already present in authorized_keys", file=sys.stderr)
+            else:
+                print(f"  ⚠️ Key NOT in authorized_keys, will append", file=sys.stderr)
+        else:
+            print(f"📄 {auth_keys_file} does not exist, will create", file=sys.stderr)
+            existing_content = ""
+
+        # Write the key
+        if pubkey not in existing_content:
+            with open(auth_keys_file, "a") as f:
+                f.write(pubkey + "\n")
+            print(f"  ✓ Appended key to authorized_keys", file=sys.stderr)
+
+        # Set permissions (CRITICAL for SSH to work!)
+        os.chmod(auth_keys_file, 0o600)
+        
+        # Final verification
+        final_stat = os.stat(auth_keys_file)
+        final_perms = oct(final_stat.st_mode)[-3:]
+        final_owner = pwd.getpwuid(final_stat.st_uid).pw_name
+        
+        with open(auth_keys_file, "r") as f:
+            final_content = f.read()
+        
+        print(f"\n📊 FINAL STATE:", file=sys.stderr)
+        print(f"  File: {auth_keys_file}", file=sys.stderr)
+        print(f"  Owner: {final_owner}", file=sys.stderr)
+        print(f"  Permissions: {final_perms} (should be 600)", file=sys.stderr)
+        print(f"  Size: {len(final_content)} bytes", file=sys.stderr)
+        print(f"  Contains key: {pubkey in final_content}", file=sys.stderr)
+        
+        if final_perms != "600":
+            print(f"  ❌ WARNING: Permissions are {final_perms}, not 600!", file=sys.stderr)
+        
+        # Also check SSHD config
+        print(f"\n🔍 SSHD Configuration:", file=sys.stderr)
+        try:
+            result = subprocess.run(['grep', '-E', '^(PubkeyAuthentication|PasswordAuthentication|PermitRootLogin)', '/etc/ssh/sshd_config'], 
+                                  capture_output=True, text=True)
+            if result.stdout:
+                for line in result.stdout.strip().split('\n'):
+                    print(f"  {line}", file=sys.stderr)
+            else:
+                print("  ⚠️ No SSH auth settings found in sshd_config!", file=sys.stderr)
+        except Exception as e:
+            print(f"  ⚠️ Could not read sshd_config: {e}", file=sys.stderr)
+
+        print("="*60, file=sys.stderr)
+        return True
+
     except Exception as e:
-        print(f"❌ CRITICAL ERROR during SSH key injection: {e}", file=sys.stderr)
+        print(f"\n❌ EXCEPTION during SSH key injection: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
         print("="*60, file=sys.stderr)
         return False
