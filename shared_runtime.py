@@ -4,7 +4,7 @@ Shared runtime logic for DevBox Launcher.
 This module provides common runtime functionality used across different
 DevBox types, including persistence setup, backup handling, and idle monitoring.
 
-Author: DevBox Launcher
+Author: GoodieHART
 """
 
 import os

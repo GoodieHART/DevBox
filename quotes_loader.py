@@ -4,7 +4,7 @@ Quotes Management Module for DevBox Launcher
 This module handles loading and managing programming quotes from JSON data file.
 Provides error handling and fallback quotes for robust operation.
 
-Author: DevBox Launcher
+Author: GoodieHART
 """
 
 import json
