@@ -49,14 +49,20 @@ def run_devbox_shared(extra_packages=None, devbox_type="ssh"):
         print(f"\n🚀 Your DevBox is ready!\nssh root@{tunnel.host} -p {tunnel.unencrypted_port}")
         
         idle_time = 0
+        check_interval = 15
         while idle_time < IDLE_TIMEOUT_SECONDS:
-            time.sleep(15)
+            time.sleep(check_interval)
             result = subprocess.run("ps -ef | grep 'sshd: root@' | grep -v grep", 
                                   shell=True, capture_output=True)
+            print(f"[DEBUG] SSH session check: {result.stdout!r}", file=sys.stderr)
+            print(f"[DEBUG] Current idle time: {idle_time}s", file=sys.stderr)
             if result.stdout:
                 idle_time = 0
+                print(f"[DEBUG] User Connected. Resetting idle timer.", file=sys.stderr)
             else:
-                idle_time += 15
+                idle_time += check_interval
+                remaining = IDLE_TIMEOUT_SECONDS - idle_time
+                print(f"No active SSH connection. Shutting down in {remaining}s...", file=sys.stderr,)
 
 
 def run_rdp_devbox_shared(extra_packages: list[str] = None):
@@ -142,7 +148,7 @@ def run_rdp_devbox_shared(extra_packages: list[str] = None):
                 "ps aux | grep -c 'xrdp-sesman.*:' | grep -v grep",
                 shell=True, capture_output=True, text=True
             )
-            
+            # remeber to add debug logs to check the output of the command
             try:
                 active_sessions = int(result.stdout.strip())
                 if active_sessions > 0:
