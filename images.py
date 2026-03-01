@@ -68,8 +68,13 @@ def create_base_minimal_image(python_version="3.10"):
 
 
 # Standard DevBox images using inheritance
-standard_devbox_image = create_base_devbox_image()
-
+standard_devbox_image = (
+    create_base_devbox_image()
+    .add_local_python_source(
+        "images", "shared_runtime", "utils", "config",
+        "persistence_utils", "backup_utils"
+    )
+)
 cuda_devbox_image = (
     modal.Image.from_registry(
         "nvidia/cuda:12.1.1-devel-ubuntu22.04",
@@ -82,11 +87,19 @@ cuda_devbox_image = (
         "libcudnn9-dev-cuda-12",
     )
     .run_commands(*get_ssh_setup_commands())
+    .add_local_python_source(
+        "images", "shared_runtime", "utils", "config",
+        "persistence_utils", "backup_utils"
+    )
 )
 
 doc_processing_image = (
     create_base_minimal_image()
     .apt_install("pandoc", "texlive-full")
+    .add_local_python_source(
+        "images", "shared_runtime", "utils", "config",
+        "persistence_utils", "backup_utils"
+    )
 )
 
 gemini_cli_image = (
@@ -99,6 +112,10 @@ gemini_cli_image = (
         "npm install -g @google/gemini-cli",
         "curl -fsSL https://opencode.ai/install | bash",
         *get_ssh_setup_commands()
+    )
+    .add_local_python_source(
+        "images", "shared_runtime", "utils", "config",
+        "persistence_utils", "backup_utils"
     )
 )
 
@@ -113,6 +130,10 @@ llm_playroom_image = (
         # Install Ollama
         "curl -fsSL https://ollama.com/install.sh | bash",
         *get_ssh_setup_commands()
+    )
+    .add_local_python_source(
+        "images", "shared_runtime", "utils", "config",
+        "persistence_utils", "backup_utils"
     )
 )
 
@@ -136,6 +157,10 @@ llamacpp_cpu_image = (
         "ln -sf /opt/llama.cpp/bin/llama-bench /usr/local/bin/llama-bench",
         "mkdir -p /opt/models/llama.cpp",
         *get_ssh_setup_commands()
+    )
+    .add_local_python_source(
+        "images", "shared_runtime", "utils", "config",
+        "persistence_utils", "backup_utils"
     )
 )
 
@@ -179,5 +204,9 @@ rdp_devbox_image = (
         # Set root password for RDP (needed for desktop)
         'echo "root:devbox123" | chpasswd',
         *get_ssh_setup_commands()
+    )
+    .add_local_python_source(
+        "images", "shared_runtime", "utils", "config",
+        "persistence_utils", "backup_utils"
     )
 )
