@@ -52,8 +52,7 @@ def run_devbox_shared(extra_packages=None, devbox_type="ssh"):
         check_interval = 15
         while idle_time < IDLE_TIMEOUT_SECONDS:
             time.sleep(check_interval)
-            result = subprocess.run("ps -ef | grep 'sshd: root@' | grep -v grep", 
-                                  shell=True, capture_output=True)
+            result = subprocess.run("ps -ef | grep 'sshd: root@' | grep -v grep", shell=True, capture_output=True)
             print(f"[DEBUG] SSH session check: {result.stdout!r}", file=sys.stderr)
             print(f"[DEBUG] Current idle time: {idle_time}s", file=sys.stderr)
             if result.stdout:
@@ -145,19 +144,18 @@ def run_rdp_devbox_shared(extra_packages: list[str] = None):
             
             # Check for active RDP sessions
             result = subprocess.run(
-                "ps aux | grep -c 'xrdp-sesman.*:' | grep -v grep",
-                shell=True, capture_output=True, text=True
+                "ps aux | grep -c 'xrdp-sesman.*:' | grep -v grep", shell=True, capture_output=True, text=True
             )
             # remeber to add debug logs to check the output of the command
             try:
                 active_sessions = int(result.stdout.strip())
                 if active_sessions > 0:
                     idle_time = 0
+                    print(f"[DEBUG] RDP session check: {active_sessions} {result.stdout!r}", file=sys.stderr)
                 else:
                     idle_time += check_interval
                     remaining = IDLE_TIMEOUT_SECONDS - idle_time
-                    print(f"No active RDP connection. Shutting down in {remaining}s...",
-                          file=sys.stderr, end="\r")
+                    print(f"[DEBUG] No active RDP connection. Shutting down in {remaining}s...", file=sys.stderr, end="\r")
             except (ValueError, AttributeError):
                 idle_time += check_interval
         
