@@ -148,6 +148,7 @@ def launch_llamacpp_playroom():
     import sys
     import time
     import atexit
+    from utils import inject_ssh_key
 
     # Show welcome message
     print("\n🧠 Launching llama.cpp Playroom (CPU)")
