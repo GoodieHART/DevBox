@@ -10,7 +10,7 @@ Author: GoodieHART
 import modal
 from config import CORE_DEV_PACKAGES, EXTENDED_DEV_PACKAGES
 
-LLAMACPP_VERSION = "b7898"
+LLAMACPP_VERSION = "b8272"
 
 def get_ssh_setup_commands():
     """
@@ -145,6 +145,7 @@ llamacpp_cpu_image = (
         "zlib1g",
     )
     .run_commands(
+        "pip install hf",
         # Download and extract prebuilt llama.cpp binaries (CPU only)
         f"curl -L -o /tmp/llama.tar.gz https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_VERSION}/llama-{LLAMACPP_VERSION}-bin-ubuntu-x64.tar.gz",
         "mkdir -p /opt/llama.cpp",
@@ -152,9 +153,9 @@ llamacpp_cpu_image = (
         "rm /tmp/llama.tar.gz",
         
         # Create symlinks for easy access
-        "ln -sf /opt/llama.cpp/bin/llama-cli /usr/local/bin/llama-cli",
-        "ln -sf /opt/llama.cpp/bin/llama-server /usr/local/bin/llama-server",
-        "ln -sf /opt/llama.cpp/bin/llama-bench /usr/local/bin/llama-bench",
+        "ln -sf /opt/llama.cpp/llama-cli /usr/local/bin/llama-cli",
+        "ln -sf /opt/llama.cpp/llama-server /usr/local/bin/llama-server",
+        "ln -sf /opt/llama.cpp/llama-bench /usr/local/bin/llama-bench",
         "mkdir -p /opt/models/llama.cpp",
         *get_ssh_setup_commands()
     )

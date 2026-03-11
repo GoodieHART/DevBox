@@ -4,7 +4,7 @@ Configuration constants for DevBox Launcher.
 This module centralizes all configuration constants, resource allocations,
 and global settings used across the DevBox application.
 
-Author: DevBox Launcher
+Author: GoodieHART
 """
 
 # Auto-shutdown configuration
@@ -12,7 +12,7 @@ Author: DevBox Launcher
 IDLE_TIMEOUT_SECONDS = 300  # 5 minutes
 
 # Version constants
-LLAMACPP_VERSION = "b7898"  # Latest stable release
+LLAMACPP_VERSION = "b8272"
 
 # Resource configurations for different DevBox types
 # These will be filled with actual Modal objects during runtime
@@ -23,16 +23,16 @@ CPU_DEVBOX_ARGS = {
     "volumes": None,  # Will be filled with dev_volume
     "cpu": 0.5,
     "memory": 1024,
-    "timeout": 3600,
+    "timeout": 3600, # 1 hour
 }
 
 # Standard GPU DevBox resource arguments
-GPU_DEVBOX_ARGS = {
+GPU_DEVBOX_ARGS = 
     "secrets": None,  # Will be filled with modal.Secret.from_name("ssh-public-key")
     "volumes": None,  # Will be filled with dev_volume
     "cpu": 1.0,
     "memory": 2048,
-    "timeout": 28800,  # 8 hours
+    "timeout": 18000,  # 5 hours
 }
 
 # RDP-specific resource arguments (higher resources for desktop environment)
@@ -41,7 +41,7 @@ CPU_DEVBOX_ARGS_RDP = {
     "volumes": None,  # Will be filled with dev_volume
     "cpu": 1.0,  # Higher CPU for desktop environment
     "memory": 2048,  # Double memory for XFCE + RDP
-    "timeout": 3600,  # 1 hour
+    "timeout": 10800,  # 3 hour
 }
 
 # RDP GPU resource arguments (highest resources)
@@ -50,7 +50,7 @@ GPU_DEVBOX_ARGS_RDP = {
     "volumes": None,  # Will be filled with dev_volume
     "cpu": 1.5,  # Higher CPU for GPU + desktop
     "memory": 4096,  # Higher memory for GPU + desktop
-    "timeout": 28800,  # 8 hours
+    "timeout": 18000,  # 5 hours
 }
 
 # GPU type mappings
@@ -59,7 +59,7 @@ GPU_TYPES = {
     "l4": "NVIDIA L4 - Newer, more performant than T4",
     "a10g": "NVIDIA A10G - Higher performance, more VRAM",
     "l40s": "NVIDIA L40S - High-end AI workload GPU"
-}
+} # Although there are more, these 4 should be fine 
 
 # Package groups for reusable configurations
 CORE_DEV_PACKAGES = [

@@ -146,14 +146,17 @@ def launch_llamacpp_playroom():
     import shutil
     import subprocess
     import sys
+    import modal
     import time
     import atexit
     from utils import inject_ssh_key
 
+    modal.interact()
+    
     # Show welcome message
     print("\n🧠 Launching llama.cpp Playroom (CPU)")
-    print("💻 Running on CPU - optimized for inference")
-    print("📦 Models available: DeepSeek, Qwen3-Coder, Gemma 3")
+    print("💻 Running on CPU")
+    print("📦 Default Models List: DeepSeek, Qwen3-Coder, Gemma 3")
     
     # --- Set up persistent dotfiles using symbolic links ---
     print("Linking persistent configuration files...", file=sys.stderr)
@@ -164,10 +167,6 @@ def launch_llamacpp_playroom():
     items_to_persist = [
         ".bash_history", ".bashrc", ".profile", ".viminfo", ".vimrc",
         ".gitconfig", ".ssh/config", ".ssh/known_hosts",
-        # Add Unsloth-specific persistence
-        ".gemini", ".opencode", ".ollama", ".llama.cpp",
-        ".config/xfce4", ".local/share/xfce4", ".cache/sessions",
-        "Desktop", ".xsession",
     ]
 
     for item in items_to_persist:
@@ -191,58 +190,72 @@ def launch_llamacpp_playroom():
 
     # --- Model selection logic ---
     print("\n📦 Model Selection:")
-    print("1. DeepSeek-V3.1-Terminus - Superior performance (75.6% Aider score)")
-    print("2. Qwen3-Coder-30B-A3B - Optimized for coding and development")
-    print("3. Gemma 3-27B - Excellent efficiency, multimodal support")
+    print("1. DeepSeek-R1 - 87.5% on AIME 2025 Benchmark")
+    print("2. Llama3.2 - Finetuned Llama3.2")
+    print("3. Gemma 3-9B - Excellent efficiency, multimodal support")
+    print("4. Custom Model - Select a custom model to download from HuggingFace: repo_id + filename")
     
     try:
-        model_choice = input("Enter model number (1-3): ").strip()
+        model_choice = input("Enter model number (1-4): ").strip()
     except EOFError:
         model_choice = "1"
 
-    model_info = {
-        "1": {
-            "name": "DeepSeek-V3.1-Terminus",
-            "url": "https://huggingface.co/unsloth/DeepSeek-V3.1-Terminus-GGUF/resolve/main/DeepSeek-V3.1-Terminus-IQ2_XS.gguf",
-            "size": "170GB (IQ2_XS)",
-            "description": "Superior performance, 75.6% Aider score"
-        },
-        "2": {
-            "name": "Qwen3-Coder-30B-A3B", 
-            "url": "https://huggingface.co/unsloth/Qwen3-Coder-30B-A3B-GGUF/resolve/main/Qwen3-Coder-30B-A3B-Q4_K_M.gguf",
-            "size": "15GB (Q4_K_M)",
-            "description": "Optimized for agentic coding and development"
-        },
-        "3": {
-            "name": "Gemma 3-27B",
-            "url": "https://huggingface.co/unsloth/gemma-3-27b-it-GGUF/resolve/main/gemma-3-27b-it-Q4_K_XL.gguf", 
-            "size": "16GB (Q4_K_XL)",
-            "description": "Excellent efficiency, multimodal support"
-        }
+    model_info = {                                                                    "1": {
+        "name": "DeepSeek-R1",
+        "repo_id": "unsloth/DeepSeek-R1-0528-Qwen3-8B-GGUF",
+        "filename": "DeepSeek-R1-0528-Qwen3-8B-Q4_K_S.gguf",
+        "size": "4.2GB (Q4_K_S)",
+        "description": "87.5 AIME 2025 Score"
+    },
+    "2": {
+        "name": "Llama3.2", 
+        "repo_id": "unsloth/Llama-3.2-3B-Instruct-GGUF",
+        "filename": "Llama-3.2-3B-Instruct-Q4_K_S.gguf",
+        "size": "2GB (Q4_K_S)",
+        "description": "Finetuned Llama3.2"
+    },
+    "3": {
+        "name": "Gemma 3-4B",
+        "repo_id": "unsloth/gemma-3-4b-it-GGUF",
+        "filename": "ggemma-3-4b-it-Q4_K_S.gguf",
+        "size": "2.4GB (Q4_K_S)",                                                     "description": "Excellent efficiency, multimodal support"                 },                                                                            "4": {                                                                            "name": "Custom",
+        "repo_id": None,
+        "filename": None
     }
+}
 
     if model_choice not in model_info:
         print("❌ Invalid choice. Defaulting to DeepSeek-V3.1-Terminus.")
         model_choice = "1"
 
-    selected_model = model_info[model_choice]
-    
-    # Download model if not already present
-    model_filename = selected_model["name"] + ".gguf"
-    model_path = f"/opt/models/unsloth/{selected_model['name'].lower().replace(' ', '_')}/{model_filename}"
-    
-    if not os.path.exists(model_path):
-        print(f"📦 Downloading {selected_model['name']} ({selected_model['size']})...")
-        os.makedirs(os.path.dirname(model_path), exist_ok=True)
-        
-        # Download with curl
-        subprocess.run([
-            "curl", "-L", "-o", model_path, "--create-dirs",
-            selected_model["url"]
-        ], check=True)
-        print(f"✅ Model downloaded to {model_path}")
+    if model_choice == "4":
+        print("\n📝 Custom Model Details:")
+        repo_id = input("Repo ID (e.g., unsloth/DeepSeek-V3.1-Terminus-GGUF): ").strip()
+        filename = input("Filename (e.g., model-Q4_K_M.gguf): ").strip()
+        selected_model = {
+            "name": filename.replace(".gguf", ""),
+            "repo_id": repo_id,
+            "filename": filename,
+            "size": "Unknown",                                                            "description": "User-provided custom model"
+    }
     else:
-        print(f"✅ Model already downloaded: {model_path}")
+        selected_model = model_info[model_choice]
+    
+    # Download model if not already prese
+    model_dir = "/data/models" 
+
+    os.makedirs(model_dir, exist_ok=True)
+    
+    model_path = f"{model_dir}/{selected_model['filename']}"
+
+    if not os.path.exists(model_path):
+        print(f"📦 Downloading {selected_model['repo_id']}/{selected_model['filename']}...")
+        subprocess.run([
+            "hf", "download",                                                             selected_model["repo_id"],
+            selected_model["filename"],                                                   "--local-dir", model_dir
+            ], check=True)
+        print(f"✅ Model downloaded to {model_path}") 
+    else:                                                                             print(f"✅ Model already exists: {model_path}")
 
     # --- Set up comprehensive persistence for llama.cpp ---
     print("Setting up llama.cpp persistence system...", file=sys.stderr)
@@ -278,7 +291,7 @@ def launch_llamacpp_playroom():
     print(f"📦 Description: {selected_model['description']}")
     print("📝 To get started:")
     print("   1. Connect via SSH below")
-    print("   2. Run: ./opt/llama.cpp/build/bin/llama-cli -m /opt/models/unsloth/.../model.gguf")
+    print("   2. Run: llama-cli -m /data/models/{model_name}.gguf")
     
     # Inject SSH key and start SSH daemon
     inject_ssh_key()
