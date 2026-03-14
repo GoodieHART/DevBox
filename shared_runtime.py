@@ -125,11 +125,10 @@ def run_rdp_devbox_shared(extra_packages: list[str] = None):
     os.makedirs('/tmp/xdg-runtime', exist_ok=True)
     os.chmod('/tmp/xdg-runtime', 0o700)
     
-    # 7. Start RDP services
+    # Start RDP services
     subprocess.Popen(["/usr/sbin/xrdp"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.Popen(["/usr/sbin/xrdp-sesman"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     
-    # 8. Port forward and idle monitoring
     with modal.forward(3389, unencrypted=True) as tunnel:
         print(f"\n🖥️ Your RDP Desktop is ready!", file=sys.stderr)
         print(f"Address: {tunnel.host}:{tunnel.unencrypted_port}", file=sys.stderr)
