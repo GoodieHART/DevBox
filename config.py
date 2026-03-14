@@ -2,17 +2,17 @@
 Configuration constants for DevBox Launcher.
 
 This module centralizes all configuration constants, resource allocations,
-and global settings used across the DevBox application.
+and global settings used across DevBox
 
 Author: GoodieHART
 """
 
-# Auto-shutdown configuration
 # Container will shut down if no one is connected via SSH for this many seconds.
+# All Time Values are in seconds
 IDLE_TIMEOUT_SECONDS = 300  # 5 minutes
 
 # Version constants
-LLAMACPP_VERSION = "b8272"
+LLAMACPP_VERSION = "b8272" #this will be made dynamic in future
 
 # Resource configurations for different DevBox types
 # These will be filled with actual Modal objects during runtime
@@ -23,34 +23,34 @@ CPU_DEVBOX_ARGS = {
     "volumes": None,  # Will be filled with dev_volume
     "cpu": 0.5,
     "memory": 1024,
-    "timeout": 3600, # 1 hour
+    "timeout": 3600,
 }
 
 # Standard GPU DevBox resource arguments
-GPU_DEVBOX_ARGS = 
-    "secrets": None,  # Will be filled with modal.Secret.from_name("ssh-public-key")
-    "volumes": None,  # Will be filled with dev_volume
+GPU_DEVBOX_ARGS = {
+    "secrets": None,
+    "volumes": None,
     "cpu": 1.0,
     "memory": 2048,
-    "timeout": 18000,  # 5 hours
+    "timeout": 18000,
 }
 
 # RDP-specific resource arguments (higher resources for desktop environment)
 CPU_DEVBOX_ARGS_RDP = {
-    "secrets": None,  # Will be filled with modal.Secret.from_name("ssh-public-key")
-    "volumes": None,  # Will be filled with dev_volume
-    "cpu": 1.0,  # Higher CPU for desktop environment
-    "memory": 2048,  # Double memory for XFCE + RDP
-    "timeout": 10800,  # 3 hour
+    "secrets": None, 
+    "volumes": None,
+    "cpu": 1.0,
+    "memory": 2048,
+    "timeout": 10800,
 }
 
 # RDP GPU resource arguments (highest resources)
 GPU_DEVBOX_ARGS_RDP = {
-    "secrets": None,  # Will be filled with modal.Secret.from_name("ssh-public-key")
-    "volumes": None,  # Will be filled with dev_volume
-    "cpu": 1.5,  # Higher CPU for GPU + desktop
-    "memory": 4096,  # Higher memory for GPU + desktop
-    "timeout": 18000,  # 5 hours
+    "secrets": None,
+    "volumes": None,
+    "cpu": 1.5,
+    "memory": 4096,
+    "timeout": 18000,
 }
 
 # GPU type mappings
@@ -64,7 +64,8 @@ GPU_TYPES = {
 # Package groups for reusable configurations
 CORE_DEV_PACKAGES = [
     "openssh-server",
-    "git", 
+    "git",
+    "nano",
     "neovim",
     "curl",
     "wget",
@@ -76,7 +77,6 @@ EXTENDED_DEV_PACKAGES = [
     "clang",
     "cmake",
     "htop",
-    "nano",
     "zlib1g-dev",
     "build-essential",
     "pkg-config",

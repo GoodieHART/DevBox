@@ -81,7 +81,7 @@ cuda_devbox_image = (
         add_python="3.11"
     )
     .apt_install(
-        *CORE_DEV_PACKAGES,  # SSH and core tools
+        *CORE_DEV_PACKAGES,
         "nano",
         "libcudnn9-cuda-12", 
         "libcudnn9-dev-cuda-12",
@@ -102,7 +102,7 @@ doc_processing_image = (
     )
 )
 
-gemini_cli_image = (
+assisted_coding_image = (
     create_base_minimal_image()
     .run_commands(
         # Install Node.js 20.x
@@ -146,7 +146,7 @@ llamacpp_cpu_image = (
     )
     .run_commands(
         "pip install hf",
-        # Download and extract prebuilt llama.cpp binaries (CPU only)
+        # Download and extract prebuilt llama.cpp binaries
         f"curl -L -o /tmp/llama.tar.gz https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_VERSION}/llama-{LLAMACPP_VERSION}-bin-ubuntu-x64.tar.gz",
         "mkdir -p /opt/llama.cpp",
         "tar -xzf /tmp/llama.tar.gz -C /opt/llama.cpp --strip-components=1",
@@ -168,7 +168,6 @@ llamacpp_cpu_image = (
 rdp_devbox_image = (
     create_base_devbox_image()
     .apt_install(
-        # RDP/Desktop packages
         "xrdp",
         "xfce4", 
         "xfce4-goodies",
@@ -178,7 +177,6 @@ rdp_devbox_image = (
         "tightvncserver",
     )
     .run_commands(
-        # RDP setup
         "mkdir -p /var/run/xrdp",
         "chmod 755 /etc/xrdp",
         # Create XFCE environment wrapper for proper XDG setup
@@ -205,6 +203,27 @@ rdp_devbox_image = (
         # Set root password for RDP (needed for desktop)
         'echo "root:devbox123" | chpasswd',
         *get_ssh_setup_commands()
+    )
+    .add_local_python_source(
+        "images", "shared_runtime", "utils", "config",
+        "persistence_utils", "backup_utils"
+    )
+)
+
+forensic_analysis_image =  ( create_base_minimal_image()
+  .pip_install("volatility3")
+  .run_commands(
+    "mkdir -p /opt/forensic_analysis",
+    "mkdir -p /opt/forensic_analysis/volatility3/symbols",
+    
+    "curl https://downloads.volatilityfoundation.org/volatility3/symbols/windows.zip -o /tmp/windows.zip",
+    "curl https://downloads.volatilityfoundation.org/volatility3/symbols/linux.zip -o /tmp/linux.zip",
+    "curl https://downloads.volatilityfoundation.org/volatility3/symbols/mac.zip -o /tmp/mac.zip",
+    
+    "unzip /tmp/windows.zip -d /opt/forensic_analysis/volatility3/symbols",
+    "unzip /tmp/linux.zip -d /opt/forensic_analysis/volatility3/symbols",
+    "unzip /tmp/mac.zip -d /opt/forensic_analysis/volatility3/symbols",
+    *get_ssh_setup_commands()
     )
     .add_local_python_source(
         "images", "shared_runtime", "utils", "config",
