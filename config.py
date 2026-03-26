@@ -12,7 +12,7 @@ Author: GoodieHART
 IDLE_TIMEOUT_SECONDS = 300  # 5 minutes
 
 # Version constants
-LLAMACPP_VERSION = "b8272" #this will be made dynamic in future
+LLAMACPP_VERSION = "b8272" # this will be made dynamic in future
 
 # Resource configurations for different DevBox types
 # These will be filled with actual Modal objects during runtime
@@ -53,14 +53,6 @@ GPU_DEVBOX_ARGS_RDP = {
     "timeout": 18000,
 }
 
-# GPU type mappings
-GPU_TYPES = {
-    "t4": "NVIDIA T4 - Cost-effective, good for inference",
-    "l4": "NVIDIA L4 - Newer, more performant than T4",
-    "a10g": "NVIDIA A10G - Higher performance, more VRAM",
-    "l40s": "NVIDIA L40S - High-end AI workload GPU"
-} # Although there are more, these 4 should be fine 
-
 # Package groups for reusable configurations
 CORE_DEV_PACKAGES = [
     "openssh-server",
@@ -84,8 +76,8 @@ EXTENDED_DEV_PACKAGES = [
 ]
 
 # Function to fill in runtime modal objects
-def get_resource_config(config_type="cpu", gpu_type=None, is_rdp=False):
-    """
+def get_resource_config(config_type="cpu", is_rdp=False, secrets=None, volume=None):
+  """
     Get complete resource configuration for DevBox type.
     
     Args:
@@ -96,18 +88,14 @@ def get_resource_config(config_type="cpu", gpu_type=None, is_rdp=False):
     Returns:
         dict: Complete configuration with Modal objects
     """
-    if config_type == "cpu":
-        base_config = CPU_DEVBOX_ARGS_RDP if is_rdp else CPU_DEVBOX_ARGS
-    elif config_type == "gpu":
-        base_config = GPU_DEVBOX_ARGS_RDP if is_rdp else GPU_DEVBOX_ARGS
-    else:
-        raise ValueError(f"Unknown config_type: {config_type}")
-    
-    # Add Modal objects (these need to be imported from the main module)
-    config = base_config.copy()
-    if config["secrets"] is None:
-        config["secrets"] = ["modal.Secret.from_name('ssh-public-key')"]
-    if config["volumes"] is None:
-        config["volumes"] = {"/data": None}  # Will be filled with actual volume
-    
-    return config
+  if config_type == "cpu":
+    base_config = CPU_DEVBOX_ARGS_RDP if is_rdp else CPU_DEVBOX_ARGS
+  elif config_type == "gpu":
+    base_config = GPU_DEVBOX_ARGS_RDP if is_rdp else GPU_DEVBOX_ARGS
+  else:
+    raise ValueError(f"Unknown config_type: {config_type}")
+
+  config = base_config.copy()
+  config["secrets"] = secrets
+  config["volumes"] = {"/data": volume}
+  return config

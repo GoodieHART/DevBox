@@ -7,15 +7,13 @@ DevBox types, including persistence setup, backup handling, and idle monitoring.
 Author: GoodieHART
 """
 
-import os
 import modal
 import sys
 import time
-import subprocess
 import atexit
 from persistence_utils import setup_persistence, get_persistence_items
-from backup_utils import *
-from utils import *
+from backup_utils import restore_backup, register_custom_backup
+from utils import inject_ssh_key
 from config import IDLE_TIMEOUT_SECONDS
 
 
@@ -23,26 +21,23 @@ def run_devbox_shared(extra_packages=None, devbox_type="ssh"):
     """Single consolidated function for all SSH DevBoxes."""
     import os
     import subprocess
-    
-    # 1. Restore backup
+
     restore_backup()
     
-    # 2. Setup persistence
     setup_persistence(get_persistence_items(devbox_type))
     
-    # 3. Register backup on exit
+    # Register backup on exit
     register_custom_backup("/root", "/data/root_full_backup.tar.gz")
     
-    # 4. Inject SSH key
     inject_ssh_key()
     
-    # 5. Install extra packages
+
     if extra_packages:
         print(f"Installing extra packages: {', '.join(extra_packages)}...", file=sys.stderr)
         subprocess.run(["apt-get", "update"], check=True)
         subprocess.run(["apt-get", "install", "-y"] + extra_packages, check=True)
     
-    # 6. Start SSH and monitor
+    # Start SSH and monitor
     subprocess.run(["/usr/sbin/sshd"])
     
     with modal.forward(22, unencrypted=True) as tunnel:
@@ -57,7 +52,7 @@ def run_devbox_shared(extra_packages=None, devbox_type="ssh"):
             print(f"[DEBUG] Current idle time: {idle_time}s", file=sys.stderr)
             if result.stdout:
                 idle_time = 0
-                print(f"[DEBUG] User Connected. Resetting idle timer.", file=sys.stderr)
+                print("[DEBUG] User Connected. Resetting idle timer.", file=sys.stderr)
             else:
                 idle_time += check_interval
                 remaining = IDLE_TIMEOUT_SECONDS - idle_time
@@ -73,19 +68,15 @@ def run_rdp_devbox_shared(extra_packages: list[str] = None):
     import subprocess
     import time
     
-    # Import utilities
     from backup_utils import restore_backup, register_custom_backup
     from persistence_utils import setup_persistence
     from utils import inject_ssh_key
     from config import IDLE_TIMEOUT_SECONDS
     
-    # 1. Restore backup
     restore_backup()
     
-    # 2. Inject SSH key (for fallback access)
     inject_ssh_key()
     
-    # 3. Setup persistence with RDP-specific items
     rdp_items = [
         ".bash_history", ".bashrc", ".profile", ".viminfo", ".vimrc",
         ".gitconfig", ".ssh/config", ".ssh/known_hosts",
@@ -94,16 +85,14 @@ def run_rdp_devbox_shared(extra_packages: list[str] = None):
     ]
     setup_persistence(rdp_items)
     
-    # 4. Register backup
     register_custom_backup("/root", "/data/root_full_backup.tar.gz")
     
-    # 5. Install extra packages
     if extra_packages:
         print(f"Installing extra packages: {', '.join(extra_packages)}...", file=sys.stderr)
         subprocess.run(["apt-get", "update"], check=True)
         subprocess.run(["apt-get", "install", "-y"] + extra_packages, check=True)
     
-    # 6. Setup XFCE environment
+    # Setup XFCE environment
     # Start D-Bus daemon for xfconfd
     subprocess.Popen(["dbus-daemon", "--system", "--fork"],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -130,10 +119,10 @@ def run_rdp_devbox_shared(extra_packages: list[str] = None):
     subprocess.Popen(["/usr/sbin/xrdp-sesman"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     
     with modal.forward(3389, unencrypted=True) as tunnel:
-        print(f"\n🖥️ Your RDP Desktop is ready!", file=sys.stderr)
+        print("\n🖥️ Your RDP Desktop is ready!", file=sys.stderr)
         print(f"Address: {tunnel.host}:{tunnel.unencrypted_port}", file=sys.stderr)
-        print(f"Username: root", file=sys.stderr)
-        print(f"Password: rdpaccess", file=sys.stderr)
+        print("Username: root", file=sys.stderr)
+        print("Password: rdpaccess", file=sys.stderr)
         
         idle_time = 0
         check_interval = 15
@@ -158,4 +147,4 @@ def run_rdp_devbox_shared(extra_packages: list[str] = None):
             except (ValueError, AttributeError):
                 idle_time += check_interval
         
-        print(f"\nIdle timeout reached. Shutting down RDP Desktop.", file=sys.stderr)
+        print("\nIdle timeout reached. Shutting down RDP Desktop.", file=sys.stderr)
