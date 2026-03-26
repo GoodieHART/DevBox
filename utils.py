@@ -9,8 +9,6 @@ Author: GoodieHART
 
 import os
 import platform
-import subprocess
-import sys
 
 
 def get_system_info():
@@ -29,7 +27,7 @@ def get_system_info():
 
 def display_system_info():
     """
-    Display system capabilities in a formatted box.
+    Display system specs in a formatted box.
     """
     info = get_system_info()
     system_box = f"""
@@ -40,7 +38,7 @@ def display_system_info():
 """
     # Import here to avoid circular dependency
     from ui_utils import create_box
-    create_box(system_box, "🖥️  SYSTEM CAPABILITIES")
+    create_box(system_box, "🖥️  SYSTEM SPECS")
 
 
 def inject_ssh_key():
@@ -62,12 +60,12 @@ def inject_ssh_key():
     auth_keys_file = f"{ssh_dir}/authorized_keys"
 
     try:
-        # CRITICAL: Check who we are running as
+        # Check who we are running as
         current_user = pwd.getpwuid(os.getuid()).pw_name
         print(f"👤 Running as user: {current_user} (UID: {os.getuid()})", file=sys.stderr)
 
         # Check environment variables
-        print(f"🔍 Environment variables:", file=sys.stderr)
+        print("🔍 Environment variables:", file=sys.stderr)
         for key in ['PUBKEY', 'HOME', 'USER']:
             value = os.environ.get(key, 'NOT SET')
             if key == 'PUBKEY':
@@ -102,7 +100,7 @@ def inject_ssh_key():
         print(f"📁 {ssh_dir} owner={ssh_owner}, perms={ssh_perms}", file=sys.stderr)
         
         if ssh_perms != "700":
-            print(f"  ⚠️ Fixing permissions to 700", file=sys.stderr)
+            print("  ⚠️ Fixing permissions to 700", file=sys.stderr)
             os.chmod(ssh_dir, 0o700)
 
         # Check if authorized_keys exists and get its current state
@@ -116,9 +114,9 @@ def inject_ssh_key():
             
             # Check if our key is already there
             if pubkey in existing_content:
-                print(f"  ✓ Key already present in authorized_keys", file=sys.stderr)
+                print("  ✓ Key already present in authorized_keys", file=sys.stderr)
             else:
-                print(f"  ⚠️ Key NOT in authorized_keys, will append", file=sys.stderr)
+                print("  ⚠️ Key NOT in authorized_keys, will append", file=sys.stderr)
         else:
             print(f"📄 {auth_keys_file} does not exist, will create", file=sys.stderr)
             existing_content = ""
@@ -127,7 +125,7 @@ def inject_ssh_key():
         if pubkey not in existing_content:
             with open(auth_keys_file, "a") as f:
                 f.write(pubkey + "\n")
-            print(f"  ✓ Appended key to authorized_keys", file=sys.stderr)
+            print("✓ Appended key to authorized_keys", file=sys.stderr)
 
         # Set permissions (CRITICAL for SSH to work!)
         os.chmod(auth_keys_file, 0o600)
@@ -140,7 +138,7 @@ def inject_ssh_key():
         with open(auth_keys_file, "r") as f:
             final_content = f.read()
         
-        print(f"\n📊 FINAL STATE:", file=sys.stderr)
+        print("\n📊 FINAL STATE:", file=sys.stderr)
         print(f"  File: {auth_keys_file}", file=sys.stderr)
         print(f"  Owner: {final_owner}", file=sys.stderr)
         print(f"  Permissions: {final_perms} (should be 600)", file=sys.stderr)
@@ -151,7 +149,7 @@ def inject_ssh_key():
             print(f"  ❌ WARNING: Permissions are {final_perms}, not 600!", file=sys.stderr)
         
         # Also check SSHD config
-        print(f"\n🔍 SSHD Configuration:", file=sys.stderr)
+        print("\n🔍 SSHD Configuration:", file=sys.stderr)
         try:
             result = subprocess.run(['grep', '-E', '^(PubkeyAuthentication|PasswordAuthentication|PermitRootLogin)', '/etc/ssh/sshd_config'], 
                                   capture_output=True, text=True)
