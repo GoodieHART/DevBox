@@ -1,16 +1,13 @@
 import modal
-import subprocess
-import sys
-import time
 import random
 import platform
-import os
 
 from images import (
     standard_devbox_image, cuda_devbox_image, doc_processing_image,
     assisted_coding_image, llm_playroom_image, llamacpp_cpu_image, rdp_devbox_image, forensic_analysis_image
 )
 from shared_runtime import run_devbox_shared, run_rdp_devbox_shared
+from config import get_resource_config
 
 
 app = modal.App(
@@ -20,49 +17,19 @@ app = modal.App(
 # This will be mounted in the container for persistent storage.
 dev_volume = modal.Volume.from_name("my-dev-volume", create_if_missing=True)
 
-# Common arguments for the devbox functions
-cpu_devbox_args = dict(
-    secrets=[modal.Secret.from_name("ssh-public-key")],
-    volumes={"/data": dev_volume},
-    cpu=0.5,
-    memory=1024,
-    timeout=3600,
-)
+juicy_secrets = [modal.Secret.from_name("ssh-public-key"), modal.Secret.from_name("gemini-api-key")] # Right now, all boxes will be filled with these secrets even if it may not directly be intented.
 
-gpu_devbox_args = dict(
-    secrets=[modal.Secret.from_name("ssh-public-key")],
-    volumes={"/data": dev_volume},
-    cpu=1.0,
-    memory=2048,
-    timeout=28800,
-)
+# Common arguments for the devbox functions loaded from config.py and None values such as secret and volume are filled with values defined above
+cpu_devbox_args = get_resource_config("cpu", secrets= juicy_secrets, volume = dev_volume)
 
-# RDP-specific resource arguments (higher resources for desktop environment)
-cpu_devbox_args_rdp = dict(
-    secrets=[modal.Secret.from_name("ssh-public-key")],
-    volumes={"/data": dev_volume},
-    cpu=1.0,  # Higher CPU for desktop environment
-    memory=2048,  # Double memory for XFCE + RDP
-    timeout=3600,
-)
+cpu_devbox_args_rdp = get_resource_config("cpu", secrets = juicy_secrets, volume = dev_volume, is_rdp = True)
 
-gpu_devbox_args_rdp = dict(
-    secrets=[modal.Secret.from_name("ssh-public-key")],
-    volumes={"/data": dev_volume},
-    cpu=1.5,  # Higher CPU for GPU + desktop
-    memory=4096,  # Higher memory for GPU + desktop
-    timeout=28800,
-)
+gpu_devbox_args = get_resource_config("gpu", secrets = juicy_secrets, volume = dev_volume, is_rdp = True)
+
+gpu_devbox_args_rdp = get_resource_config("gpu", secrets = juicy_secrets, volume = dev_volume, is_rdp = True)
 
 
-@app.function(
-    image=standard_devbox_image,
-    secrets=[modal.Secret.from_name("ssh-public-key")],
-    volumes={"/data": dev_volume},
-    cpu=0.5,
-    memory=1024,
-    timeout=3600,
-)
+@app.function(image=standard_devbox_image, **cpu_devbox_args)
 def launch_devbox(extra_packages: list[str] | None = None):
     """Launches a non-GPU personal development environment."""
     run_devbox_shared(extra_packages)
@@ -85,67 +52,47 @@ def launch_devbox_a10g(extra_packages: list[str] | None = None):
     """Launches an A10G GPU-powered personal development environment."""
     run_devbox_shared(extra_packages)
 
-@app.function(
-    image=doc_processing_image,
-    secrets=[modal.Secret.from_name("ssh-public-key")],
-    volumes={"/data": dev_volume},
-    cpu=1,
-    memory=4096,
-    timeout=28000,
-)
+@app.function(image=rdp_devbox_image, **cpu_devbox_args_rdp)
+def launch_rdp_devbox(extra_packages: list[str] = None):
+    """Launches an RDP desktop development environment."""
+    run_rdp_devbox_shared(extra_packages)
+
+@app.function(image=rdp_devbox_image, gpu="t4", **gpu_devbox_args_rdp)
+def launch_rdp_devbox_t4(extra_packages: list[str] = None):
+    """Launches an RDP desktop with T4 GPU."""
+    run_rdp_devbox_shared(extra_packages)
+
+@app.function(image=rdp_devbox_image, gpu="l4", **gpu_devbox_args_rdp)
+def launch_rdp_devbox_l4(extra_packages: list[str] = None):
+    """Launches an RDP desktop with L4 GPU."""
+    run_rdp_devbox_shared(extra_packages)
+
+@app.function(image=rdp_devbox_image, gpu="a10g", **gpu_devbox_args_rdp)
+def launch_rdp_devbox_a10g(extra_packages: list[str] = None):
+    """Launches an RDP desktop with A10G GPU."""
+    run_rdp_devbox_shared(extra_packages)
+
+@app.function(image=doc_processing_image, **gpu_devbox_args)
 def launch_doc_processor():
     """Launches a document processing environment with Pandoc and TeX Live."""
     run_devbox_shared(extra_packages=None)
 
-@app.function(
-    image=assisted_coding_image,
-    secrets=[modal.Secret.from_name("ssh-public-key"), modal.Secret.from_name("gemini-api-key"), # make sure to create this if you haven't already
-    ],
-    volumes={"/data": dev_volume},
-    cpu=0.5,
-    memory=1024,
-    timeout=28800,
-)
+@app.function(image=assisted_coding_image, **cpu_devbox_args)
 def launch_assisted_coding():
     """Launches a development environment with Gemini CLI & OpenCode pre-installed."""
     run_devbox_shared(extra_packages=None)
 
-@app.function(
-    image=llm_playroom_image,
-    secrets=[modal.Secret.from_name("ssh-public-key")],
-    volumes={"/data": dev_volume},
-    gpu="L40S",
-    cpu=1.0,
-    memory=4096,
-    timeout=600,
-)
+@app.function(image=llm_playroom_image, **gpu_devbox_args_rdp) # Needs review
 def launch_llm_playroom():
     """Launches an LLM Playroom environment with Ollama and preloaded models."""
-    run_devbox_shared(extra_packages=None)
-# add model selection here too!
+    run_devbox_shared(extra_packages=None) # add model selection here too!
 
-@app.function(
-  image=forensic_analysis_image,
-  secrets=[modal.Secret.from_name("ssh-public-key")],
-  volumes={"/data": dev_volume},
-  cpu=1,
-  memory=3096,
-  timeout=18000,
-)
-
+@app.function(image=forensic_analysis_image, **cpu_devbox_args)
 def launch_forensics_image():
   """ Launches A Forensic Analysis Machine With Volatilty3 pre-installed. """
   run_devbox_shared(extra_packages=None)
 
-@app.function(
-    image=llamacpp_cpu_image,
-    cpu=4.0,
-    memory=8192,
-    timeout=1800,
-    secrets=[modal.Secret.from_name("ssh-public-key")],
-    volumes={"/data": dev_volume},
-)
-
+@app.function(image=llamacpp_cpu_image, **cpu_devbox_args_rdp) # Needs review
 def launch_llamacpp_playroom():
     """llama.cpp playroom with prebuilt CPU binaries and model selection."""
     import os
@@ -261,14 +208,10 @@ def launch_llamacpp_playroom():
         selected_model["filename"],
         "--local-dir", model_dir ], check=True)
       print(f"✅ Model downloaded to {model_path}") 
-    else:                                       print(f"✅ Model already exists: {model_path}")
+    else:
+      print(f"✅ Model already exists: {model_path}")
 
-    print("Setting up llama.cpp persistence system...", file=sys.stderr)
-
-    # Create model storage directory
-    os.makedirs("/opt/models/unsloth", exist_ok=True)
-
-    # --- Start llama.cpp server ---
+    # --- Start llama.cpp server with this command---
     print(f"📦 Selected Model: {selected_model['name']} ({selected_model['size']})")
     print(f"📦 Model Description: {selected_model['description']}")
     print("📝 To get started:")
@@ -314,31 +257,6 @@ def launch_llamacpp_playroom():
 
         print(f"\nIdle timeout of {idle_timeout}s reached. Shutting down instance.")
 
-# RDP Desktop launch functions
-@app.function(image=rdp_devbox_image, **cpu_devbox_args_rdp)
-def launch_rdp_devbox(extra_packages: list[str] = None):
-    """Launches an RDP desktop development environment."""
-    run_rdp_devbox_shared(extra_packages)
-
-
-@app.function(image=rdp_devbox_image, gpu="t4", **gpu_devbox_args_rdp)
-def launch_rdp_devbox_t4(extra_packages: list[str] = None):
-    """Launches an RDP desktop with T4 GPU."""
-    run_rdp_devbox_shared(extra_packages)
-
-
-@app.function(image=rdp_devbox_image, gpu="l4", **gpu_devbox_args_rdp)
-def launch_rdp_devbox_l4(extra_packages: list[str] = None):
-    """Launches an RDP desktop with L4 GPU."""
-    run_rdp_devbox_shared(extra_packages)
-
-
-@app.function(image=rdp_devbox_image, gpu="a10g", **gpu_devbox_args_rdp)
-def launch_rdp_devbox_a10g(extra_packages: list[str] = None):
-    """Launches an RDP desktop with A10G GPU."""
-    run_rdp_devbox_shared(extra_packages)
-
-
 # Menu-driven local entrypoint.
 @app.local_entrypoint()
 def main():
@@ -346,7 +264,7 @@ def main():
     from ui_utils import create_box, show_spinner
     from quotes_loader import get_random_quote, format_quote
     from utils import inject_ssh_key, display_system_info
-    from config import IDLE_TIMEOUT_SECONDS, get_resource_config, GPU_TYPES
+    from config import IDLE_TIMEOUT_SECONDS, GPU_TYPES
     from gpu_utils import get_gpu_config, get_available_gpus
 
     banner = """
@@ -382,6 +300,7 @@ def main():
     
     6. 🧠 llama.cpp Playroom
     Raw C++ Inference Power, With Custom Model Selection
+    
     7. 🔍 Forensics Analysis
     Analysis Machine using Volatilty3 and other tools
     """
@@ -395,83 +314,74 @@ def main():
       
     print(choice)
     if choice == "1": #remember to adjust subsequent indents at package_selction
-        package_box = """
-        📦 Want to install additional tools?
-        Examples: htop tmux git neovim curl wget
-        (leave empty for default setup)
+      package_box = """
+      📦 Want to install additional tools?
+      Examples: htop tmux git neovim curl wget
+      (leave empty for default setup)
+      """
+      create_box(package_box, "🛠️  EXTRA PACKAGES")
+      try:
+        tools_input = input("Enter tools (space-separated): ").strip()
+      except EOFError:
+        tools_input = ""
+
+      package_list = tools_input.split() if tools_input else []
+   
+      if package_list:
+        print(f"✅ Requesting with additional tools: {', '.join(package_list)}")
+      else:
+        print("✅ No extra tools requested.")
+
+      gpu_box = """
+      🎮 Add GPU acceleration?
+      • T4: Cost-effective, good for inference
+      • L4: More Performant than T4
+      • A10G: Higher performance, more VRAM
+      (Enter 'y' To Attach a GPU, anything else for CPU-only)
+      """
+      create_box(gpu_box, "⚡ GPU ACCELERATION")
+      
+      try:
+        gpu_choice = input("Attach GPU? (y/n): ").lower().strip()
+      except EOFError:
+        gpu_choice = "n"
+
+      if gpu_choice == "y":
+        gpu_menu = """
+        1. 🎯 T4 GPU (Cost-effective, good for inference)
+        2. 🚀 L4 GPU (More Performant than T4)
+        3. 💪 A10G GPU (Higher performance, more VRAM)
         """
-        create_box(package_box, "🛠️  EXTRA PACKAGES")
+        create_box(gpu_menu, "🎮 SELECT GPU TYPE")
         try:
-          tools_input = input("Enter tools (space-separated): ").strip()
+          gpu_type_choice = input("Choose GPU (1-3): ").strip()
         except EOFError:
-          tools_input = ""
+          print("\nNo input received. Exiting.")
+          return
 
-          package_list = tools_input.split() if tools_input else []
-        
-        # Replace 'python' with 'python-is-python3' for Debian compatibility.
-        if "python" in package_list:
-          package_list[package_list.index("python")]= "python-is-python3"
-          print("🔄 Replaced 'python' with 'python-is-python3' for Debian compatibility.")
-
-        if package_list:
-          print(f"✅ Requesting with additional tools: {', '.join(package_list)}")
-        else:
-          print("✅ No extra tools requested.")
-
-        gpu_box = """
-        🎮 Add GPU acceleration?
-        • T4: Cost-effective, good for inference
-        • L4: More Performant than T4
-        • A10G: Higher performance, more VRAM
-        (Enter 'y' To Attach a GPU, anything else for CPU-only)
-        """
-        create_box(gpu_box, "⚡ GPU ACCELERATION")
-        
-        try:
-          gpu_choice = input("Attach GPU? (y/n): ").lower().strip()
-        except EOFError:
-          gpu_choice = "n"
-
-          if gpu_choice == "y":
-            gpu_menu = """
-            1. 🎯 T4 GPU (Cost-effective, good for inference)
-            2. 🚀 L4 GPU (More Performant than T4)
-            3. 💪 A10G GPU (Higher performance, more VRAM)
-            """
-            create_box(gpu_menu, "🎮 SELECT GPU TYPE")
-          try:
-            gpu_type_choice = input("Choose GPU (1-3): ").strip()
-          except EOFError:
-            print("\nNo input received. Exiting.")
-            return
-
-            gpu_types = {
-                "1": ("T4", launch_devbox_t4),
-                "2": ("L4", launch_devbox_l4),
-                "3": ("A10G", launch_devbox_a10g),
+          gpu_types = {
+            "1": ("T4", launch_devbox_t4),
+            "2": ("L4", launch_devbox_l4),
+            "3": ("A10G", launch_devbox_a10g),
             }
 
-            if gpu_type_choice in gpu_types:
-                gpu_name, launch_func = gpu_types[gpu_type_choice]
-                print()
-                gpu_launch_box = f"""
-🎯 Launching with {gpu_name} GPU... Silicon Dust 🔥
-"""
-                create_box(gpu_launch_box, f"🚀 {gpu_name} POWERED")
-                show_spinner("Initializing GPU environment", 2)
-                launch_func.remote(extra_packages=package_list)
-            else:
-                print("❌ Invalid GPU choice. Please run again.")
-                return
-        else:
-            print()
-            cpu_box = """
-🖥️  Launching CPU-only environment...
- Potatoes Have High Carbohydrates Content 😉
-"""
-            create_box(cpu_box, "🚀 STANDARD DEVBOX")
-            show_spinner("Preparing your DevBox", 2)
-            launch_devbox.remote(extra_packages=package_list)
+          if gpu_type_choice in gpu_types:
+            gpu_name, launch_func = gpu_types[gpu_type_choice]
+            
+            gpu_launch_box = f"🎯 Launching with {gpu_name} GPU... Silicon Dust 🔥"
+            create_box(gpu_launch_box, f"🚀 {gpu_name} POWERED")
+            show_spinner("Initializing GPU environment", 2)
+            launch_func.remote(extra_packages=package_list)
+          else:
+            print("❌ Invalid GPU choice. Please run again.")
+            return
+      else:
+        cpu_box = """🖥️  Launching CPU-only environment...
+        Potatoes Have High Carbohydrates Content 😉
+        """
+        create_box(cpu_box, "🚀 STANDARD DEVBOX")
+        show_spinner("Preparing your DevBox", 2)
+        launch_devbox.remote(extra_packages=package_list)
 
     elif choice == "2":
         doc_box = """
