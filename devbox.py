@@ -7,17 +7,17 @@ from images import (
     assisted_coding_image, llm_playroom_image, llamacpp_cpu_image, rdp_devbox_image, forensic_analysis_image
 )
 from shared_runtime import run_devbox_shared, run_rdp_devbox_shared
-from config import get_resource_config
+from config import get_resource_config, LLAMACPP_DEVBOX_ARGS, LLAMACPP_IDLE_TIMEOUT
 
 
 app = modal.App(
     name="personal-devbox-launcher",
 )
 
-# This will be mounted in the container for persistent storage.
+
 dev_volume = modal.Volume.from_name("my-dev-volume", create_if_missing=True)
 
-juicy_secrets = [modal.Secret.from_name("ssh-public-key"), modal.Secret.from_name("gemini-api-key")] # Right now, all boxes will be filled with these secrets even if it may not directly be intented.
+juicy_secrets = [modal.Secret.from_name("ssh-public-key"), modal.Secret.from_name("gemini-api-key"), modal.Secret.from_name("exa-api-key")] # Right now, all boxes will be filled with these secrets even if it may not directly be intented.
 
 # Common arguments for the devbox functions loaded from config.py and None values such as secret and volume are filled with values defined above
 cpu_devbox_args = get_resource_config("cpu", secrets= juicy_secrets, volume = dev_volume)
@@ -28,6 +28,10 @@ gpu_devbox_args = get_resource_config("gpu", secrets = juicy_secrets, volume = d
 
 gpu_devbox_args_rdp = get_resource_config("gpu", secrets = juicy_secrets, volume = dev_volume, is_rdp = True)
 
+# llama.cpp Research Center config - fill in secrets and volume
+llamacpp_devbox_args = LLAMACPP_DEVBOX_ARGS.copy()
+llamacpp_devbox_args["secrets"] = juicy_secrets
+llamacpp_devbox_args["volumes"] = {"/data": dev_volume}
 
 @app.function(image=standard_devbox_image, **cpu_devbox_args)
 def launch_devbox(extra_packages: list[str] | None = None):
@@ -92,171 +96,283 @@ def launch_forensics_image():
   """ Launches A Forensic Analysis Machine With Volatilty3 pre-installed. """
   run_devbox_shared(extra_packages=None)
 
-@app.function(image=llamacpp_cpu_image, **cpu_devbox_args_rdp) # Needs review
+# llama.cpp Research Center - Curated Model Catalog
+LLAMACPP_MODELS = {
+    "1": {
+        "name": "Qwen3.5-9B-Instruct",
+        "repo_id": "unsloth/Qwen3.5-9B-GGUF",
+        "filename": "Qwen3.5-9B-Q4_K_M.gguf",
+        "size": "5.68GB",
+        "type": "text",
+        "description": "Best overall - thinking mode, 256K context",
+        "function_calling": True,
+        "settings": {"temp": 0.7, "top_p": 0.8, "top_k": 20}
+    },
+    "2": {
+        "name": "Dolphin3.0-Llama3.2-3B",
+        "repo_id": "QuantFactory/Dolphin3.0-Llama3.2-3B-GGUF",
+        "filename": "Dolphin3.0-Llama3.2-3B.Q4_K_M.gguf",
+        "size": "~2.5GB",
+        "type": "text",
+        "description": "Fast, abliterated, general use",
+        "function_calling": True,
+        "settings": {"temp": 0.7, "top_p": 0.9, "top_k": 40}
+    },
+    "3": {
+        "name": "DeepSeek-R1-Distill-Qwen-7B-Uncensored",
+        "repo_id": "mradermacher/DeepSeek-R1-Distill-Qwen-7B-Uncensored",
+        "filename": "DeepSeek-R1-Distill-Qwen-7B-Uncensored.Q4_K_M.gguf",
+        "size": "~5GB",
+        "type": "text",
+        "description": "Reasoning specialist - science, math, analysis",
+        "function_calling": True,
+        "settings": {"temp": 0.6, "top_p": 0.95, "top_k": 20}
+    },
+    "4": {
+        "name": "Qwen2.5-Coder-7B",
+        "repo_id": "unsloth/Qwen2.5-Coder-7B-Instruct-GGUF",
+        "filename": "Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf",
+        "size": "~5GB",
+        "type": "text",
+        "description": "Coding specialist - 92.7% HumanEval",
+        "function_calling": True,
+        "settings": {"temp": 0.6, "top_p": 0.95, "top_k": 20}
+    },
+    "5": {
+        "name": "SmolVLM-500M",
+        "repo_id": "ggml-org/SmolVLM-500M-Instruct-GGUF",
+        "filename": "ggml-model-mmproj-f16.gguf",
+        "size": "~1.5GB",
+        "type": "vision",
+        "description": "Fast image captioning",
+        "function_calling": False,
+        "settings": {"temp": 0.7, "top_p": 0.9, "top_k": 40}
+    },
+    "6": {
+        "name": "Gemma3-4B",
+        "repo_id": "unsloth/gemma-3-4b-it-GGUF",
+        "filename": "gemma-3-4b-it-Q4_K_M.gguf",
+        "size": "~2.4GB",
+        "type": "vision",
+        "description": "Good multimodal - images + text",
+        "function_calling": True,
+        "settings": {"temp": 0.7, "top_p": 0.8, "top_k": 20}
+    },
+    "7": {
+        "name": "Custom Model",
+        "repo_id": None,
+        "filename": None,
+        "size": "User-defined",
+        "type": "text",
+        "description": "Any GGUF model from HuggingFace",
+        "function_calling": True,
+        "settings": {"temp": 0.7, "top_p": 0.9, "top_k": 40}
+    },
+}
+#The models list will be moved to a better /dedicated file
+@app.function(image=llamacpp_cpu_image, **llamacpp_devbox_args)
 def launch_llamacpp_playroom():
-    """llama.cpp playroom with prebuilt CPU binaries and model selection."""
+    """llama.cpp Research Center with curated models, WebUI, and EXA Search."""
     import os
     import shutil
     import subprocess
     import sys
     import modal
     import time
-    import atexit
+    import json
+    import httpx
     from utils import inject_ssh_key
-
-    modal.interact() # This modal function allows to pass input to the running container
+    from exa_helper import get_exa_api_key, get_tools_for_model
     
-    print("\n🧠 Launching llama.cpp Playroom (CPU)")
-    print("💻 Running on CPU")
-    print("📦 Default Models List: DeepSeek, Qwen3-Coder, Gemma 3")
+    modal.interact()  # Enable user input
     
-    # --- Set up persistent dotfiles using symbolic links ---
-    print("Linking persistent configuration files...", file=sys.stderr)
+    print("\n🧠 Launching llama.cpp Research Center")
+    print("💻 CPU-Optimized Inference")
+    print("🔍 EXA Search Integration")
+    print("🌐 Built-in WebUI")
     
+    # --- Persistence Setup ---
     persistent_storage_dir = "/data/.config_persistence"
     os.makedirs(persistent_storage_dir, exist_ok=True)
-
+    
     items_to_persist = [
         ".bash_history", ".bashrc", ".profile", ".viminfo", ".vimrc",
         ".gitconfig", ".ssh/config", ".ssh/known_hosts",
     ]
-
+    
     for item in items_to_persist:
         home_path = f"/root/{item}"
         volume_path = f"{persistent_storage_dir}/{item}"
-
         os.makedirs(os.path.dirname(home_path), exist_ok=True)
         os.makedirs(os.path.dirname(volume_path), exist_ok=True)
-
+        
         if os.path.lexists(home_path):
             if os.path.isdir(home_path) and not os.path.islink(home_path):
                 shutil.rmtree(home_path)
             else:
                 os.remove(home_path)
-
+        
         os.symlink(volume_path, home_path)
-        print(f"  - Linked {home_path} -> {volume_path}", file=sys.stderr)
-
-    print("...done linking files.", file=sys.stderr)
-
+    
+    # --- Model Selection ---
     print("\n📦 Model Selection:")
-    print("1. DeepSeek-R1 - 87.5% on AIME 2025 Benchmark")
-    print("2. Llama3.2 - Finetuned Llama3.2")
-    print("3. Gemma 3-9B - Excellent efficiency, multimodal support")
-    print("4. Custom Model - Select a custom model to download from HuggingFace: repo_id + filename")
+    for key, model in LLAMACPP_MODELS.items():
+        print(f"{key}. {model['name']} - {model['description']}")
+        print(f"   Size: {model['size']} | Type: {model['type']}")
     
     try:
-        model_choice = input("Enter model number (1-4): ").strip()
+        model_choice = input("\nEnter model number (1-7): ").strip()
     except EOFError:
-        model_choice = "2"
-
-    model_info = {
-    "1": {
-        "name": "DeepSeek-R1",
-        "repo_id": "unsloth/DeepSeek-R1-0528-Qwen3-8B-GGUF",
-        "filename": "DeepSeek-R1-0528-Qwen3-8B-Q4_K_S.gguf",
-        "size": "4.2GB (Q4_K_S)",
-        "description": "87.5 AIME 2025 Score"
-    },
-    "2": {
-        "name": "Llama3.2", 
-        "repo_id": "unsloth/Llama-3.2-3B-Instruct-GGUF",
-        "filename": "Llama-3.2-3B-Instruct-Q4_K_S.gguf",
-        "size": "2GB (Q4_K_S)",
-        "description": "Finetuned Llama3.2"
-    },
-    "3": {
-        "name": "Gemma 3-4B",
-        "repo_id": "unsloth/gemma-3-4b-it-GGUF",
-        "filename": "ggemma-3-4b-it-Q4_K_S.gguf",
-        "size": "2.4GB (Q4_K_S)",             "description": "Excellent efficiency, multimodal support"
-    },
-    "4": {                                            "name": "Custom",
-        "repo_id": None,
-        "filename": None
-    }
-}
-
-    if model_choice not in model_info:
-        print("❌ Invalid choice. Defaulting to DeepSeek-R1")
         model_choice = "1"
-
-    if model_choice == "4":
+    
+    if model_choice not in LLAMACPP_MODELS:
+        print("❌ Invalid choice. Defaulting to Qwen3.5-9B")
+        model_choice = "1"
+    
+    selected_model = LLAMACPP_MODELS[model_choice].copy()
+    
+    # Handle custom model input
+    if model_choice == "7":
         print("\n📝 Custom Model Details:")
-        repo_id = input("Repo ID (e.g., unsloth/DeepSeek-V3.1-Terminus-GGUF): ").strip()
+        repo_id = input("Repo ID (e.g., unsloth/Qwen3.5-9B-GGUF): ").strip()
         filename = input("Filename (e.g., model-Q4_K_M.gguf): ").strip()
-        selected_model = {
-            "name": filename.replace(".gguf", ""),
-            "repo_id": repo_id,
-            "filename": filename,
-            "size": "Unknown",                                                            "description": "User-provided custom model"
-    }
-    else:
-        selected_model = model_info[model_choice]
+        selected_model["repo_id"] = repo_id
+        selected_model["filename"] = filename
+        selected_model["name"] = filename.replace(".gguf", "")
     
-    # Download model if not already prese
-    model_dir = "/data/models" 
-
+    # --- Download Model ---
+    model_dir = "/data/models"
     os.makedirs(model_dir, exist_ok=True)
-    
     model_path = f"{model_dir}/{selected_model['filename']}"
-
-    if not os.path.exists(model_path):
-      print(f"📦 Downloading {selected_model['repo_id']}/{selected_model['filename']}...")
-      
-      subprocess.run(["hf", "download",    selected_model["repo_id"],
-        selected_model["filename"],
-        "--local-dir", model_dir ], check=True)
-      print(f"✅ Model downloaded to {model_path}") 
-    else:
-      print(f"✅ Model already exists: {model_path}")
-
-    # --- Start llama.cpp server with this command---
-    print(f"📦 Selected Model: {selected_model['name']} ({selected_model['size']})")
-    print(f"📦 Model Description: {selected_model['description']}")
-    print("📝 To get started:")
-    print("   1. Connect via SSH below")
-    print("   2. Run: llama-cli -m /data/models/{model_name}.gguf")
     
+    if not os.path.exists(model_path):
+        print(f"\n📦 Downloading {selected_model['repo_id']}/{selected_model['filename']}...")
+        print("   This may take a few minutes on first run...")
+        
+        try:
+            subprocess.run([
+                "hf", "download",
+                selected_model["repo_id"],
+                selected_model["filename"],
+                "--local-dir", model_dir
+            ], check=True)
+            print(f"✅ Model downloaded to {model_path}")
+        except subprocess.CalledProcessError:
+            print(f"❌ Download failed. Check repo_id and filename.")
+            print(f"   Repo: {selected_model['repo_id']}")
+            print(f"   File: {selected_model['filename']}")
+            return
+    else:
+        print(f"✅ Model already cached: {model_path}")
+    
+    # --- EXA Search Check ---
+    exa_key = get_exa_api_key()
+    if exa_key:
+        print("✅ EXA Search API key found")
+        use_exa = True
+    else:
+        print("⚠️  EXA Search API key not found. Web search disabled.")
+        print("   Add 'exa-api-key' secret to Modal to enable.")
+        use_exa = False
+    
+    # --- Start llama-server ---
+    model_settings = selected_model.get('settings', {})
+    
+    server_cmd = [
+        "llama-server",
+        "-m", model_path,
+        "--host", "0.0.0.0",
+        "--port", "8080",
+        "--threads", "2",
+        "--ctx-size", "4096",
+        "--batch-size", "512",
+        "--mlock",
+        "--jinja",  # Enable function calling + WebUI
+        "--temp", str(model_settings.get('temp', 0.7)),
+        "--top-p", str(model_settings.get('top_p', 0.9)),
+        "--top-k", str(model_settings.get('top_k', 40)),
+    ]
+    
+    print(f"\n🚀 Starting llama-server for {selected_model['name']}...")
+    print(f"   Settings: temp={model_settings.get('temp', 0.7)}, top_p={model_settings.get('top_p', 0.9)}")
+    
+    # Start server in background
+    server_process = subprocess.Popen(
+        server_cmd,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE
+    )
+    
+    # Wait for server to be ready
+    time.sleep(3)
+    for i in range(30):
+        try:
+            resp = httpx.get("http://localhost:8080/health", timeout=1.0)
+            if resp.status_code == 200:
+                print("✅ llama-server ready!")
+                break
+        except:
+            pass
+        time.sleep(1)
+    else:
+        print("❌ llama-server failed to start. Check model file.")
+        server_process.terminate()
+        return
+    
+    # --- SSH Setup ---
     inject_ssh_key()
     subprocess.run(["/usr/sbin/sshd"])
-
-    # Forward the SSH port and print the connection command
-    with modal.forward(22, unencrypted=True) as tunnel:
-        ssh_command = f"ssh root@{tunnel.host} -p {tunnel.unencrypted_port}"
-        print("\n🚀 Your Unsloth llama.cpp Playroom is ready!")
-        print("Paste this command into your terminal:")
-        print(ssh_command)
-
-        idle_time = 0
-        check_interval = 15 # all these will be centralized
-        idle_timeout = 600  # 10 minutes for playroom
-
-        print(f"\nContainer will shut down after {idle_timeout // 60} minutes of inactivity.")
-
-        # Loop to check for active connections
-        while idle_time < idle_timeout:
-            time.sleep(check_interval)
+    
+    # --- Port Forwarding ---
+    with modal.forward(22, unencrypted=True) as ssh_tunnel:
+        ssh_command = f"ssh root@{ssh_tunnel.host} -p {ssh_tunnel.unencrypted_port}"
+        
+    with modal.forward(8080, unencrypted=True) as web_tunnel:
+            web_url = f"http://{web_tunnel.host}:{web_tunnel.unencrypted_port}"
             
-            # Check for active SSH user sessions.
-            result = subprocess.run(
-                "ps -ef | grep 'sshd: root@' | grep -v grep",
-                shell=True,
-                capture_output=True,
-            )
-
-            if result.stdout:  # If there is any output, a user is connected.
-                idle_time = 0  # Reset the idle timer.
-            else:
-                idle_time += check_interval
-                remaining = idle_timeout - idle_time
-                print(
-                    f"No active SSH connection. Shutting down in {remaining}s...",
-                    end="\r",
+            print("\n" + "="*60)
+            print("🚀 Your llama.cpp Research Center is ready!")
+            print("="*60)
+            print(f"\n🌐 WebUI: {web_url}")
+            print(f"   (Open in browser for chat interface)")
+            print(f"\n🔐 SSH: {ssh_command}")
+            print(f"\n🧠 Model: {selected_model['name']} ({selected_model['size']})")
+            if use_exa:
+                print(f"🔍 EXA Search: Enabled (function calling)")
+            print(f"\n⏰ Idle timeout: {LLAMACPP_IDLE_TIMEOUT // 60} minutes")
+            print("\n" + "="*60)
+            
+            # --- Idle Monitor ---
+            idle_time = 0
+            check_interval = 30
+            
+            while idle_time < LLAMACPP_IDLE_TIMEOUT:
+                time.sleep(check_interval)
+                
+                # Check for active SSH sessions
+                ssh_result = subprocess.run(
+                    "ps -ef | grep 'sshd: root@' | grep -v grep",
+                    shell=True,
+                    capture_output=True,
                 )
-
-        print(f"\nIdle timeout of {idle_timeout}s reached. Shutting down instance.")
-
+                
+                # Check for active WebUI connections
+                web_active = False
+                try:
+                    stats = httpx.get("http://localhost:8080/health", timeout=1.0)
+                    web_active = True  # Server is running
+                except:
+                    pass
+                
+                if ssh_result.stdout or web_active:
+                    idle_time = 0
+                else:
+                    idle_time += check_interval
+                    remaining = LLAMACPP_IDLE_TIMEOUT - idle_time
+                    print(f"\r💤 No activity. Shutting down in {remaining // 60}m {remaining % 60}s...", end="", flush=True)
+            
+            print(f"\n\n⏰ Idle timeout reached ({LLAMACPP_IDLE_TIMEOUT}s). Shutting down.")
+            server_process.terminate()
 # Menu-driven local entrypoint.
 @app.local_entrypoint()
 def main():
@@ -264,7 +380,7 @@ def main():
     from ui_utils import create_box, show_spinner
     from quotes_loader import get_random_quote, format_quote
     from utils import inject_ssh_key, display_system_info
-    from config import IDLE_TIMEOUT_SECONDS, GPU_TYPES
+    from config import IDLE_TIMEOUT_SECONDS
     from gpu_utils import get_gpu_config, get_available_gpus
 
     banner = """
@@ -298,8 +414,8 @@ def main():
     
     5. 🖥️  RDP Desktop Box Full graphical desktop with XFCE and RDP access
     
-    6. 🧠 llama.cpp Playroom
-    Raw C++ Inference Power, With Custom Model Selection
+    6. 🔬 llama.cpp Research Center
+    Curated models + WebUI + EXA Search + Multimodal
     
     7. 🔍 Forensics Analysis
     Analysis Machine using Volatilty3 and other tools
@@ -490,16 +606,25 @@ def main():
             launch_rdp_devbox.remote(extra_packages=package_list)
 
     elif choice == "6":
-        llamacpp_box = """
-        🧠 Launching llama.cpp Playroom...
-        Prebuilt CPU-optimized llama.cpp binaries from official releases
+        research_box = """
+        🔬 Launching llama.cpp Research Center...
+        
         Models available:
-        • DeepSeek-R1
-        • Qwen3-Coder
-        • Gemma 3-4B
+        • Qwen3.5-9B (General reasoning)
+        • Dolphin3.0-3B (Fast, abliterated)
+        • DeepSeek-R1-7B (Science specialist)
+        • Qwen2.5-Coder-7B (Coding specialist)
+        • SmolVLM-500M (Image captioning)
+        • Gemma3-4B (Multimodal)
+        • Custom (Any HuggingFace GGUF)
+        
+        Features:
+        • Built-in WebUI (browser chat)
+        • EXA Search integration
+        • Function calling support
         """
-        create_box(llamacpp_box, "🧠 LLAMA.CPP PLAYROOM")
-        show_spinner("Preparing llama.cpp environment", 2)
+        create_box(research_box, "🔬 LLAMA.CPP RESEARCH CENTER")
+        show_spinner("Preparing research environment", 3)
         launch_llamacpp_playroom.remote()
  
     elif choice == "7":
@@ -519,7 +644,7 @@ def main():
         • 3 for AI Assistants Box
         • 4 for LLM Playroom
         • 5 for RDP Desktop Box
-        • 6 for llama.cpp Playroom
-        . 7 for Forwnsics Machine
+        • 6 for llama.cpp Research Center
+        - 7 for Forensics Machine
         """
         create_box(error_box, "❌ ERROR")
