@@ -15,12 +15,12 @@ IDLE_TIMEOUT_SECONDS = 300  # 5 minutes
 LLAMACPP_VERSION = "b8272" # this will be made dynamic in future
 
 # Resource configurations for different DevBox types
-# These will be filled with actual Modal objects during runtime
+
 
 # CPU-only DevBox resource arguments
 CPU_DEVBOX_ARGS = {
-    "secrets": None,  # Will be filled with modal.Secret.from_name("ssh-public-key")
-    "volumes": None,  # Will be filled with dev_volume
+    "secrets": None,
+    "volumes": None,
     "cpu": 0.5,
     "memory": 1024,
     "timeout": 3600,
@@ -52,6 +52,18 @@ GPU_DEVBOX_ARGS_RDP = {
     "memory": 4096,
     "timeout": 18000,
 }
+
+# llama.cpp Research Center resource arguments
+LLAMACPP_DEVBOX_ARGS = {
+    "secrets": None,
+    "volumes": None,
+    "cpu": 2.0,
+    "memory": 8192,  # 8GB for 7B models
+    "timeout": 14400,  # 4 hours max runtime
+}
+
+# llama.cpp idle timeout (separate from container timeout)
+LLAMACPP_IDLE_TIMEOUT = 3600  # 1 hour idle
 
 # Package groups for reusable configurations
 CORE_DEV_PACKAGES = [

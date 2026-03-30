@@ -144,24 +144,32 @@ llamacpp_cpu_image = (
         "libcurl4", 
         "zlib1g",
     )
+    .pip_install(
+        "exa-py",       
+        "openai",
+        "httpx", 
+        "hf",
+        "huggingface_hub",
+        "hf_transfer"
+    )
     .run_commands(
-        "pip install hf",
         # Download and extract prebuilt llama.cpp binaries
         f"curl -L -o /tmp/llama.tar.gz https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_VERSION}/llama-{LLAMACPP_VERSION}-bin-ubuntu-x64.tar.gz",
         "mkdir -p /opt/llama.cpp",
         "tar -xzf /tmp/llama.tar.gz -C /opt/llama.cpp --strip-components=1",
         "rm /tmp/llama.tar.gz",
         
-        # Create symlinks for easy access
+        # symlinks for easy access
         "ln -sf /opt/llama.cpp/llama-cli /usr/local/bin/llama-cli",
         "ln -sf /opt/llama.cpp/llama-server /usr/local/bin/llama-server",
         "ln -sf /opt/llama.cpp/llama-bench /usr/local/bin/llama-bench",
-        "mkdir -p /opt/models/llama.cpp",
+        "ln -sf /opt/llama.cpp/llama-mtmd-cli /usr/local/bin/llama-mtmd-cli",
+        
         *get_ssh_setup_commands()
     )
     .add_local_python_source(
         "images", "shared_runtime", "utils", "config",
-        "persistence_utils", "backup_utils"
+        "persistence_utils", "backup_utils", "exa_helper"
     )
 )
 
@@ -210,7 +218,8 @@ rdp_devbox_image = (
     )
 )
 
-forensic_analysis_image =  ( create_base_minimal_image()
+forensic_analysis_image =  (
+   create_base_minimal_image()
   .pip_install("volatility3")
   .run_commands(
     "mkdir -p /opt/forensic_analysis",
@@ -223,6 +232,7 @@ forensic_analysis_image =  ( create_base_minimal_image()
     "unzip /tmp/windows.zip -d /opt/forensic_analysis/volatility3/symbols",
     "unzip /tmp/linux.zip -d /opt/forensic_analysis/volatility3/symbols",
     "unzip /tmp/mac.zip -d /opt/forensic_analysis/volatility3/symbols",
+    # symbols ought to be moved to volatility's execution directory
     *get_ssh_setup_commands()
     )
     .add_local_python_source(
