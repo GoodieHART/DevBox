@@ -119,10 +119,13 @@ def run_rdp_devbox_shared(extra_packages: list[str] = None):
     subprocess.Popen(["/usr/sbin/xrdp-sesman"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     
     with modal.forward(3389, unencrypted=True) as tunnel:
-        print("\n🖥️ Your RDP Desktop is ready!", file=sys.stderr)
-        print(f"Address: {tunnel.host}:{tunnel.unencrypted_port}", file=sys.stderr)
-        print("Username: root", file=sys.stderr)
-        print("Password: rdpaccess", file=sys.stderr)
+        print("\n" + "=" * 60)
+        print("🖥️ Your RDP Desktop is ready!")
+        print("=" * 60)
+        print(f"\n📡 RDP Address: {tunnel.host}:{tunnel.unencrypted_port}")
+        print("👤 Username: root")
+        print("🔑 Password: devbox123")
+        print("\n" + "=" * 60)
         
         idle_time = 0
         check_interval = 15
