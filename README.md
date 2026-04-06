@@ -14,6 +14,7 @@
 - [Important Notes](#important-notes)
 - [Troubleshooting](#troubleshooting)
 - [Architecture](#architecture)
+- [Roadmap](#roadmap)
 - [Contributing](#contributing)
 - [Thanks & Inspirations](#thanks--inspirations)
 
@@ -509,6 +510,10 @@ The codebase is currently flat — all files live in the root directory. A struc
 | `ui_utils.py` | UI helper functions — `create_box()`, `show_spinner()` |
 | `backup_utils.py` | Backup registration and data persistence helpers |
 | `persistence_utils.py` | Symlink management for dotfiles persistence across sessions |
+
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md) for planned improvements and future work.
 
 ## Contributing
 
