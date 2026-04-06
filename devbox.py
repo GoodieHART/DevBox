@@ -454,6 +454,9 @@ def main():
       • L4: More Performant than T4
       • A10G: Higher performance, more VRAM
       (Enter 'y' To Attach a GPU, anything else for CPU-only)
+
+      ⚠️  GPU usage incurs charges on your Modal account.
+         See modal.com/pricing for current rates.
       """
       create_box(gpu_box, "⚡ GPU ACCELERATION")
       
@@ -559,44 +562,47 @@ def main():
         • L4: Newer, more performant than T4
         • A10G: Higher performance, more VRAM
         (Enter 'y' for GPU options, anything else for CPU-only)
+
+        ⚠️  GPU usage incurs charges on your Modal account.
+           See modal.com/pricing for current rates.
         """
         create_box(gpu_box, "⚡ GPU ACCELERATION")
 
         try:
-          gpu_choice = input("Attach GPU? (y/n): ").lower().strip()
+            gpu_choice = input("Attach GPU? (y/n): ").lower().strip()
         except EOFError:
             gpu_choice = "n"
 
-            if gpu_choice == "y":
-              gpu_menu = """
+        if gpu_choice == "y":
+            gpu_menu = """
             1. 🎯 T4 GPU (Cost-effective, good for graphics)
             2. 🚀 L4 GPU (Newer, more performant than T4)
             3. 💪 A10G GPU (Higher performance, more VRAM)
             """
             create_box(gpu_menu, "🎮 SELECT GPU TYPE")
-        try:
-          gpu_type_choice = input("Choose GPU (1-3): ").strip()
-        except EOFError:
-          print("\nNo input received. Exiting.")
-          return
+            try:
+                gpu_type_choice = input("Choose GPU (1-3): ").strip()
+            except EOFError:
+                print("\nNo input received. Exiting.")
+                return
 
-          gpu_types = {
-            "1": ("T4", launch_rdp_devbox_t4),
-            "2": ("L4", launch_rdp_devbox_l4),
-            "3": ("A10G", launch_rdp_devbox_a10g),
-          }
+            gpu_types = {
+                "1": ("T4", launch_rdp_devbox_t4),
+                "2": ("L4", launch_rdp_devbox_l4),
+                "3": ("A10G", launch_rdp_devbox_a10g),
+            }
 
-          if gpu_type_choice in gpu_types:
-            gpu_name, launch_func = gpu_types[gpu_type_choice]
-            gpu_launch_box = f"""
-            🎯 Launching RDP Desktop with {gpu_name} GPU...
-            """
-            create_box(gpu_launch_box, f"🚀 {gpu_name} POWERED RDP")
-            show_spinner("Initializing GPU RDP environment", 2)
-            launch_func.remote(extra_packages=package_list)
-          else:
-            print("❌ Invalid GPU choice. Please run again.")
-            return
+            if gpu_type_choice in gpu_types:
+                gpu_name, launch_func = gpu_types[gpu_type_choice]
+                gpu_launch_box = f"""
+                🎯 Launching RDP Desktop with {gpu_name} GPU...
+                """
+                create_box(gpu_launch_box, f"🚀 {gpu_name} POWERED RDP")
+                show_spinner("Initializing GPU RDP environment", 2)
+                launch_func.remote(extra_packages=package_list)
+            else:
+                print("❌ Invalid GPU choice. Please run again.")
+                return
         else:
             cpu_box = """
             🖥️  Launching RDP Desktop (CPU-only)...
