@@ -7,7 +7,7 @@ from images import (
     assisted_coding_image, llm_playroom_image, llamacpp_cpu_image, rdp_devbox_image, forensic_analysis_image
 )
 from shared_runtime import run_devbox_shared, run_rdp_devbox_shared
-from config import get_resource_config, LLAMACPP_DEVBOX_ARGS, LLAMACPP_IDLE_TIMEOUT
+from config import get_resource_config, LLAMACPP_DEVBOX_ARGS, LLAMACPP_GPU_DEVBOX_ARGS, LLAMACPP_IDLE_TIMEOUT
 
 
 app = modal.App(
@@ -32,6 +32,11 @@ gpu_devbox_args_rdp = get_resource_config("gpu", secrets = juicy_secrets, volume
 llamacpp_devbox_args = LLAMACPP_DEVBOX_ARGS.copy()
 llamacpp_devbox_args["secrets"] = juicy_secrets
 llamacpp_devbox_args["volumes"] = {"/data": dev_volume}
+
+# GPU llama.cpp Research Center config - fill in secrets and volume
+llamacpp_gpu_devbox_args = LLAMACPP_GPU_DEVBOX_ARGS.copy()
+llamacpp_gpu_devbox_args["secrets"] = juicy_secrets
+llamacpp_gpu_devbox_args["volumes"] = {"/data": dev_volume}
 
 @app.function(image=standard_devbox_image, **cpu_devbox_args)
 def launch_devbox(extra_packages: list[str] | None = None):
@@ -109,36 +114,16 @@ LLAMACPP_MODELS = {
         "settings": {"temp": 0.7, "top_p": 0.8, "top_k": 20}
     },
     "2": {
-        "name": "Dolphin3.0-Llama3.2-3B",
-        "repo_id": "QuantFactory/Dolphin3.0-Llama3.2-3B-GGUF",
-        "filename": "Dolphin3.0-Llama3.2-3B.Q4_K_M.gguf",
-        "size": "~2.5GB",
+        "name": "Bonsai-8B",
+        "repo_id": "prism-ml/Bonsai-8B-gguf",
+        "filename": "Bonsai-8B-Q1_0.gguf",
+        "size": "1.15GB",
         "type": "text",
-        "description": "Fast, abliterated, general use",
+        "description": "1-bit ultra-lightweight - 14x smaller, 6x faster on GPU",
         "function_calling": True,
-        "settings": {"temp": 0.7, "top_p": 0.9, "top_k": 40}
+        "settings": {"temp": 0.5, "top_p": 0.85, "top_k": 20}
     },
     "3": {
-        "name": "DeepSeek-R1-Distill-Qwen-7B-Uncensored",
-        "repo_id": "mradermacher/DeepSeek-R1-Distill-Qwen-7B-Uncensored",
-        "filename": "DeepSeek-R1-Distill-Qwen-7B-Uncensored.Q4_K_M.gguf",
-        "size": "~5GB",
-        "type": "text",
-        "description": "Reasoning specialist - science, math, analysis",
-        "function_calling": True,
-        "settings": {"temp": 0.6, "top_p": 0.95, "top_k": 20}
-    },
-    "4": {
-        "name": "Qwen2.5-Coder-7B",
-        "repo_id": "unsloth/Qwen2.5-Coder-7B-Instruct-GGUF",
-        "filename": "Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf",
-        "size": "~5GB",
-        "type": "text",
-        "description": "Coding specialist - 92.7% HumanEval",
-        "function_calling": True,
-        "settings": {"temp": 0.6, "top_p": 0.95, "top_k": 20}
-    },
-    "5": {
         "name": "SmolVLM-500M",
         "repo_id": "ggml-org/SmolVLM-500M-Instruct-GGUF",
         "filename": "ggml-model-mmproj-f16.gguf",
@@ -148,17 +133,17 @@ LLAMACPP_MODELS = {
         "function_calling": False,
         "settings": {"temp": 0.7, "top_p": 0.9, "top_k": 40}
     },
-    "6": {
-        "name": "Gemma3-4B",
-        "repo_id": "unsloth/gemma-3-4b-it-GGUF",
-        "filename": "gemma-3-4b-it-Q4_K_M.gguf",
-        "size": "~2.4GB",
+    "4": {
+        "name": "Gemma4-26B-A4B",
+        "repo_id": "unsloth/gemma-4-26b-a4b-it-GGUF",
+        "filename": "gemma-4-26b-a4b-it-Q4_K_M.gguf",
+        "size": "~17GB",
         "type": "vision",
-        "description": "Good multimodal - images + text",
+        "description": "Google's latest - MoE (4B active), 256K context, multimodal",
         "function_calling": True,
         "settings": {"temp": 0.7, "top_p": 0.8, "top_k": 20}
     },
-    "7": {
+    "5": {
         "name": "Custom Model",
         "repo_id": None,
         "filename": None,
@@ -319,6 +304,15 @@ def launch_llamacpp_playroom():
         server_process.terminate()
         return
     
+    # --- Start EXA Proxy (if enabled) ---
+    if use_exa:
+        from exa_proxy import start_exa_proxy
+        print("  Starting EXA Search proxy...")
+        start_exa_proxy(port=8081, target_port=8080)
+        web_port = 8081
+    else:
+        web_port = 8080
+    
     # --- SSH Setup ---
     inject_ssh_key()
     subprocess.run(["/usr/sbin/sshd"])
@@ -327,7 +321,7 @@ def launch_llamacpp_playroom():
     with modal.forward(22, unencrypted=True) as ssh_tunnel:
         ssh_command = f"ssh root@{ssh_tunnel.host} -p {ssh_tunnel.unencrypted_port}"
         
-    with modal.forward(8080, unencrypted=True) as web_tunnel:
+    with modal.forward(web_port, unencrypted=True) as web_tunnel:
             web_url = f"http://{web_tunnel.host}:{web_tunnel.unencrypted_port}"
             
             print("\n" + "="*60)
@@ -361,6 +355,224 @@ def launch_llamacpp_playroom():
                 try:
                     stats = httpx.get("http://localhost:8080/health", timeout=1.0)
                     web_active = True  # Server is running
+                except:
+                    pass
+                
+                if ssh_result.stdout or web_active:
+                    idle_time = 0
+                else:
+                    idle_time += check_interval
+                    remaining = LLAMACPP_IDLE_TIMEOUT - idle_time
+                    print(f"\r💤 No activity. Shutting down in {remaining // 60}m {remaining % 60}s...", end="", flush=True)
+            
+            print(f"\n\n⏰ Idle timeout reached ({LLAMACPP_IDLE_TIMEOUT}s). Shutting down.")
+            server_process.terminate()
+
+@app.function(image=llamacpp_cpu_image, **llamacpp_gpu_devbox_args)
+def launch_llamacpp_playroom_gpu():
+    """GPU-accelerated llama.cpp Research Center with curated models, WebUI, and EXA Search."""
+    import os
+    import shutil
+    import subprocess
+    import sys
+    import modal
+    import time
+    import json
+    import httpx
+    from utils import inject_ssh_key
+    from exa_helper import get_exa_api_key, get_tools_for_model
+    
+    modal.interact()
+    
+    print("\n🧠 Launching llama.cpp Research Center")
+    print("🚀 GPU-Accelerated Inference (T4)")
+    print("🔍 EXA Search Integration")
+    print("🌐 Built-in WebUI")
+    
+    # --- Persistence Setup ---
+    persistent_storage_dir = "/data/.config_persistence"
+    os.makedirs(persistent_storage_dir, exist_ok=True)
+    
+    items_to_persist = [
+        ".bash_history", ".bashrc", ".profile", ".viminfo", ".vimrc",
+        ".gitconfig", ".ssh/config", ".ssh/known_hosts",
+    ]
+    
+    for item in items_to_persist:
+        home_path = f"/root/{item}"
+        volume_path = f"{persistent_storage_dir}/{item}"
+        os.makedirs(os.path.dirname(home_path), exist_ok=True)
+        os.makedirs(os.path.dirname(volume_path), exist_ok=True)
+        
+        if os.path.lexists(home_path):
+            if os.path.isdir(home_path) and not os.path.islink(home_path):
+                shutil.rmtree(home_path)
+            else:
+                os.remove(home_path)
+        
+        os.symlink(volume_path, home_path)
+    
+    # --- Model Selection ---
+    print("\n📦 Model Selection:")
+    for key, model in LLAMACPP_MODELS.items():
+        print(f"{key}. {model['name']} - {model['description']}")
+        print(f"   Size: {model['size']} | Type: {model['type']}")
+    
+    try:
+        model_choice = input("\nEnter model number (1-7): ").strip()
+    except EOFError:
+        model_choice = "1"
+    
+    if model_choice not in LLAMACPP_MODELS:
+        print("❌ Invalid choice. Defaulting to Qwen3.5-9B")
+        model_choice = "1"
+    
+    selected_model = LLAMACPP_MODELS[model_choice].copy()
+    
+    # Handle custom model input
+    if model_choice == "7":
+        print("\n📝 Custom Model Details:")
+        repo_id = input("Repo ID (e.g., unsloth/Qwen3.5-9B-GGUF): ").strip()
+        filename = input("Filename (e.g., model-Q4_K_M.gguf): ").strip()
+        selected_model["repo_id"] = repo_id
+        selected_model["filename"] = filename
+        selected_model["name"] = filename.replace(".gguf", "")
+    
+    # --- Download Model ---
+    model_dir = "/data/models"
+    os.makedirs(model_dir, exist_ok=True)
+    model_path = f"{model_dir}/{selected_model['filename']}"
+    
+    if not os.path.exists(model_path):
+        print(f"\n📦 Downloading {selected_model['repo_id']}/{selected_model['filename']}...")
+        print("   This may take a few minutes on first run...")
+        
+        try:
+            subprocess.run([
+                "hf", "download",
+                selected_model["repo_id"],
+                selected_model["filename"],
+                "--local-dir", model_dir
+            ], check=True)
+            print(f"✅ Model downloaded to {model_path}")
+        except subprocess.CalledProcessError:
+            print(f"❌ Download failed. Check repo_id and filename.")
+            print(f"   Repo: {selected_model['repo_id']}")
+            print(f"   File: {selected_model['filename']}")
+            return
+    else:
+        print(f"✅ Model already cached: {model_path}")
+    
+    # --- EXA Search Check ---
+    exa_key = get_exa_api_key()
+    if exa_key:
+        print("✅ EXA Search API key found")
+        use_exa = True
+    else:
+        print("⚠️  EXA Search API key not found. Web search disabled.")
+        print("   Add 'exa-api-key' secret to Modal to enable.")
+        use_exa = False
+    
+    # --- Start llama-server with GPU optimizations ---
+    model_settings = selected_model.get('settings', {})
+    
+    server_cmd = [
+        "llama-server",
+        "-m", model_path,
+        "--host", "0.0.0.0",
+        "--port", "8080",
+        "--ctx-size", "32768",
+        "--batch-size", "512",
+        "-ngl", "99",         # Offload all layers to GPU
+        "-fa", "on",          # Flash Attention
+        "-ctk", "q8_0",       # Key cache quantization
+        "-ctv", "q8_0",       # Value cache quantization
+        "--jinja",
+        "--temp", str(model_settings.get('temp', 0.7)),
+        "--top-p", str(model_settings.get('top_p', 0.9)),
+        "--top-k", str(model_settings.get('top_k', 40)),
+    ]
+    
+    print(f"\n🚀 Starting GPU-accelerated llama-server for {selected_model['name']}...")
+    print(f"   GPU: T4 (all layers offloaded)")
+    print(f"   Settings: temp={model_settings.get('temp', 0.7)}, top_p={model_settings.get('top_p', 0.9)}")
+    print(f"   Context: 32K with KV cache quantization")
+    
+    # Start server in background
+    server_process = subprocess.Popen(
+        server_cmd,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE
+    )
+    
+    # Wait for server to be ready
+    time.sleep(3)
+    for i in range(30):
+        try:
+            resp = httpx.get("http://localhost:8080/health", timeout=1.0)
+            if resp.status_code == 200:
+                print("✅ llama-server ready!")
+                break
+        except:
+            pass
+        time.sleep(1)
+    else:
+        print("❌ llama-server failed to start. Check model file.")
+        server_process.terminate()
+        return
+    
+    # --- Start EXA Proxy (if enabled) ---
+    if use_exa:
+        from exa_proxy import start_exa_proxy
+        print("  Starting EXA Search proxy...")
+        start_exa_proxy(port=8081, target_port=8080)
+        web_port = 8081
+    else:
+        web_port = 8080
+    
+    # --- SSH Setup ---
+    inject_ssh_key()
+    subprocess.run(["/usr/sbin/sshd"])
+    
+    # --- Port Forwarding ---
+    with modal.forward(22, unencrypted=True) as ssh_tunnel:
+        ssh_command = f"ssh root@{ssh_tunnel.host} -p {ssh_tunnel.unencrypted_port}"
+    
+    with modal.forward(web_port, unencrypted=True) as web_tunnel:
+            web_url = f"http://{web_tunnel.host}:{web_tunnel.unencrypted_port}"
+            
+            print("\n" + "="*60)
+            print("🚀 Your GPU llama.cpp Research Center is ready!")
+            print("="*60)
+            print(f"\n🌐 WebUI: {web_url}")
+            print(f"   (Open in browser for chat interface)")
+            print(f"\n🔐 SSH: {ssh_command}")
+            print(f"\n🧠 Model: {selected_model['name']} ({selected_model['size']})")
+            print(f"🎮 GPU: T4 (all layers offloaded)")
+            if use_exa:
+                print(f"🔍 EXA Search: Enabled (function calling)")
+            print(f"\n⏰ Idle timeout: {LLAMACPP_IDLE_TIMEOUT // 60} minutes")
+            print("\n" + "="*60)
+            
+            # --- Idle Monitor ---
+            idle_time = 0
+            check_interval = 30
+            
+            while idle_time < LLAMACPP_IDLE_TIMEOUT:
+                time.sleep(check_interval)
+                
+                # Check for active SSH sessions
+                ssh_result = subprocess.run(
+                    "ps -ef | grep 'sshd: root@' | grep -v grep",
+                    shell=True,
+                    capture_output=True,
+                )
+                
+                # Check for active WebUI connections
+                web_active = False
+                try:
+                    stats = httpx.get("http://localhost:8080/health", timeout=1.0)
+                    web_active = True
                 except:
                     pass
                 
@@ -414,16 +626,19 @@ def main():
     
     5. 🖥️  RDP Desktop Box Full graphical desktop with XFCE and RDP access
     
-    6. 🔬 llama.cpp Research Center
+    6. 🔬 llama.cpp Research Center (CPU)
     Curated models + WebUI + EXA Search + Multimodal
     
     7. 🔍 Forensics Analysis
     Analysis Machine using Volatilty3 and other tools
+
+    8. 🚀 llama.cpp Research Center (GPU)
+    GPU-accelerated inference + 32K context + T4 GPU
     """
     create_box(menu_box, "🚀 LAUNCH OPTIONS")
     
     try:
-      choice = input("Enter your choice (1-7): ").strip()
+      choice = input("Enter your choice (1-8): ").strip()
     except EOFError:
       print("\nNo input received. Exiting.")
       return
@@ -617,11 +832,9 @@ def main():
         
         Models available:
         • Qwen3.5-9B (General reasoning)
-        • Dolphin3.0-3B (Fast, abliterated)
-        • DeepSeek-R1-7B (Science specialist)
-        • Qwen2.5-Coder-7B (Coding specialist)
+        • Bonsai-8B (1-bit ultra-lightweight)
         • SmolVLM-500M (Image captioning)
-        • Gemma3-4B (Multimodal)
+        • Gemma4-26B-A4B (Multimodal)
         • Custom (Any HuggingFace GGUF)
         
         Features:
@@ -641,6 +854,28 @@ def main():
         show_spinner("Interleaving Bits... Hold On Tight!", 3)
         launch_forensics_image.remote()
 
+    elif choice == "8":
+        research_gpu_box = """
+        🚀 Launching GPU llama.cpp Research Center...
+        
+        Models available:
+        • Qwen3.5-9B (General reasoning)
+        • Bonsai-8B (1-bit ultra-lightweight)
+        • SmolVLM-500M (Image captioning)
+        • Gemma4-26B-A4B (Multimodal)
+        • Custom (Any HuggingFace GGUF)
+        
+        GPU Features:
+        • T4 GPU with all layers offloaded
+        • 32K context with KV cache quantization
+        • Flash Attention for faster inference
+        • Built-in WebUI (browser chat)
+        • EXA Search integration
+        """
+        create_box(research_gpu_box, "🚀 GPU LLAMA.CPP RESEARCH CENTER")
+        show_spinner("Preparing GPU-accelerated environment", 3)
+        launch_llamacpp_playroom_gpu.remote()
+
     else:
         error_box = """
         ❌ Invalid choice selected.
@@ -650,7 +885,8 @@ def main():
         • 3 for AI Assistants Box
         • 4 for LLM Playroom
         • 5 for RDP Desktop Box
-        • 6 for llama.cpp Research Center
-        - 7 for Forensics Machine
+        • 6 for llama.cpp Research Center (CPU)
+        • 7 for Forensics Machine
+        • 8 for llama.cpp Research Center (GPU)
         """
         create_box(error_box, "❌ ERROR")
