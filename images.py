@@ -8,9 +8,7 @@ Author: GoodieHART
 """
 
 import modal
-from config import CORE_DEV_PACKAGES, EXTENDED_DEV_PACKAGES
-
-LLAMACPP_VERSION = "b8272"
+from config import CORE_DEV_PACKAGES, EXTENDED_DEV_PACKAGES, LLAMACPP_VERSION
 
 def get_ssh_setup_commands():
     """
@@ -169,7 +167,7 @@ llamacpp_cpu_image = (
     )
     .add_local_python_source(
         "images", "shared_runtime", "utils", "config",
-        "persistence_utils", "backup_utils", "exa_helper"
+        "persistence_utils", "backup_utils", "exa_helper", "exa_proxy"
     )
 )
 

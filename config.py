@@ -12,7 +12,7 @@ Author: GoodieHART
 IDLE_TIMEOUT_SECONDS = 300  # 5 minutes
 
 # Version constants
-LLAMACPP_VERSION = "b8272" # this will be made dynamic in future
+LLAMACPP_VERSION = "b9058" # this will be made dynamic in future
 
 # Resource configurations for different DevBox types
 
@@ -60,6 +60,16 @@ LLAMACPP_DEVBOX_ARGS = {
     "cpu": 2.0,
     "memory": 8192,  # 8GB for 7B models
     "timeout": 14400,  # 4 hours max runtime
+}
+
+# GPU llama.cpp Research Center resource arguments
+LLAMACPP_GPU_DEVBOX_ARGS = {
+    "secrets": None,
+    "volumes": None,
+    "cpu": 2.0,
+    "memory": 16384,  # 16GB for Gemma4-26B-A4B
+    "timeout": 14400,  # 4 hours max runtime
+    "gpu": "t4",
 }
 
 # llama.cpp idle timeout (separate from container timeout)
