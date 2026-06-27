@@ -23,11 +23,11 @@ Planned improvements and future work for DevBox.
 - [ ] Add Ollama models
 - [ ] Make significant changes to the backup_utils structure
 - [ ] Migrate to Modal Sandbox system
-- [ ] Add `gdown` to environment settings
+- [x] Add `gdown` to environment settings
 - [ ] Predownload symbol files for Volatility
 - [ ] Add `croc` for file sharing capabilities
-- [ ] Add megatools for downloading Mega.nz files
+- [x] Add megatools for downloading Mega.nz files
 - [ ] Use tldr for welcome messages from installed packages
-- [ ] Install `p7zip-full` for 7z files
+- [x] Install `p7zip-full` for 7z files
 - [ ] Add notes of file verification tools present
 - [ ] Rearrange file structures
