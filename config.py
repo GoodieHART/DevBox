@@ -97,6 +97,18 @@ EXTENDED_DEV_PACKAGES = [
     "python3-dev",
 ]
 
+# Download tool packages for all DevBox images
+DOWNLOAD_APT_PACKAGES = [
+    "megatools",
+    "p7zip-full",
+]
+
+DOWNLOAD_PIP_PACKAGES = [
+    "gdown",
+    "tgdl",
+    "terabox-downloader",
+]
+
 # Function to fill in runtime modal objects
 def get_resource_config(config_type="cpu", is_rdp=False, secrets=None, volume=None):
   """
