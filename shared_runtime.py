@@ -11,6 +11,7 @@ import modal
 import sys
 import time
 import atexit
+import textwrap
 from persistence_utils import setup_persistence, get_persistence_items
 from backup_utils import restore_backup, register_custom_backup
 from utils import inject_ssh_key
@@ -44,14 +45,14 @@ def run_devbox_shared(extra_packages=None, devbox_type="ssh"):
 
     # Write devbox banner
     icon, name = DEVBOX_BANNERS.get(devbox_type, ("🚀", "DevBox"))
-    banner = f"""
+    banner = textwrap.dedent(f"""\
     ╔══════════════════════════════════════╗
     ║  {icon} {name:<30} ║
     ║  {'💾 Persistent: /data':<36} ║
     ╚══════════════════════════════════════╝
-    """
+    """)
     with open("/etc/devbox-banner", "w") as f:
-        f.write(banner.strip() + "\n")
+        f.write(banner)
 
     if extra_packages:
         print(f"Installing extra packages: {', '.join(extra_packages)}...", file=sys.stderr)
