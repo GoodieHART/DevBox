@@ -41,25 +41,25 @@ llamacpp_gpu_devbox_args["volumes"] = {"/data": dev_volume}
 @app.function(image=standard_devbox_image, **cpu_devbox_args)
 def launch_devbox(extra_packages: list[str] | None = None):
     """Launches a non-GPU personal development environment."""
-    run_devbox_shared(extra_packages)
+    run_devbox_shared(extra_packages, devbox_type="standard_devbox")
 
 
 @app.function(image=cuda_devbox_image, gpu="t4", **gpu_devbox_args)
 def launch_devbox_t4(extra_packages: list[str] | None = None):
     """Launches a T4 GPU-powered personal development environment."""
-    run_devbox_shared(extra_packages)
+    run_devbox_shared(extra_packages, devbox_type="cuda_devbox_t4")
 
 
 @app.function(image=cuda_devbox_image, gpu="l4", **gpu_devbox_args)
 def launch_devbox_l4(extra_packages: list[str] | None = None):
     """Launches an L4 GPU-powered personal development environment."""
-    run_devbox_shared(extra_packages)
+    run_devbox_shared(extra_packages, devbox_type="cuda_devbox_l4")
 
 
 @app.function(image=cuda_devbox_image, gpu="a10g", **gpu_devbox_args)
 def launch_devbox_a10g(extra_packages: list[str] | None = None):
     """Launches an A10G GPU-powered personal development environment."""
-    run_devbox_shared(extra_packages)
+    run_devbox_shared(extra_packages, devbox_type="cuda_devbox_a10g")
 
 @app.function(image=rdp_devbox_image, **cpu_devbox_args_rdp)
 def launch_rdp_devbox(extra_packages: list[str] = None):
@@ -84,22 +84,22 @@ def launch_rdp_devbox_a10g(extra_packages: list[str] = None):
 @app.function(image=doc_processing_image, **gpu_devbox_args)
 def launch_doc_processor():
     """Launches a document processing environment with Pandoc and TeX Live."""
-    run_devbox_shared(extra_packages=None)
+    run_devbox_shared(extra_packages=None, devbox_type="doc_processing")
 
 @app.function(image=assisted_coding_image, **cpu_devbox_args)
 def launch_assisted_coding():
     """Launches a development environment with Gemini CLI & OpenCode pre-installed."""
-    run_devbox_shared(extra_packages=None)
+    run_devbox_shared(extra_packages=None, devbox_type="assisted_coding")
 
 @app.function(image=llm_playroom_image, **gpu_devbox_args_rdp) # Needs review
 def launch_llm_playroom():
     """Launches an LLM Playroom environment with Ollama and preloaded models."""
-    run_devbox_shared(extra_packages=None) # add model selection here too!
+    run_devbox_shared(extra_packages=None, devbox_type="llm_playroom") # add model selection here too!
 
 @app.function(image=forensic_analysis_image, **cpu_devbox_args)
 def launch_forensics_image():
   """ Launches A Forensic Analysis Machine With Volatilty3 pre-installed. """
-  run_devbox_shared(extra_packages=None)
+  run_devbox_shared(extra_packages=None, devbox_type="forensic_analysis")
 
 # llama.cpp Research Center - Curated Model Catalog
 LLAMACPP_MODELS = {
