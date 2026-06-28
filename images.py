@@ -45,7 +45,25 @@ def create_base_devbox_image(python_version="3.10"):
         modal.Image.debian_slim(python_version=python_version)
         .apt_install(*CORE_DEV_PACKAGES, *EXTENDED_DEV_PACKAGES, *DOWNLOAD_APT_PACKAGES)
         .pip_install(*DOWNLOAD_PIP_PACKAGES)
-        .run_commands(*get_ssh_setup_commands())
+        .run_commands(
+            *get_ssh_setup_commands(),
+            # Install Starship prompt (pinned version)
+            "curl -sSLO https://github.com/starship/starship/releases/download/v1.22.1/starship-x86_64-unknown-linux-gnu.tar.gz",
+            "tar -xzf starship-x86_64-unknown-linux-gnu.tar.gz -C /usr/local/bin/",
+            "rm starship-x86_64-unknown-linux-gnu.tar.gz",
+            # Create starship init script (interactive only)
+            "printf '%s\\n' 'if command -v starship &> /dev/null && [ -t 0 ]; then' '  eval \"$(starship init bash)\"' 'fi' > /etc/profile.d/starship.sh",
+            # Create devbox-banner display script
+            "cat > /etc/profile.d/devbox-banner.sh << 'BANNER_EOF'\n"
+            "if [ -t 0 ] && [ -f /etc/devbox-banner ]; then\n"
+            "  clear\n"
+            "  cat /etc/devbox-banner\n"
+            "  echo\n"
+            "  python3 -c \"from quotes_loader import get_random_quote; q = get_random_quote(); print(q['text']); print('- ' + q['author'])\" 2>/dev/null || true\n"
+            "  [ -d /data ] && cd /data\n"
+            "fi\n"
+            "BANNER_EOF",
+        )
     )
 
 
@@ -63,7 +81,25 @@ def create_base_minimal_image(python_version="3.10"):
         modal.Image.debian_slim(python_version=python_version)
         .apt_install(*CORE_DEV_PACKAGES, *DOWNLOAD_APT_PACKAGES)
         .pip_install(*DOWNLOAD_PIP_PACKAGES)
-        .run_commands(*get_ssh_setup_commands())
+        .run_commands(
+            *get_ssh_setup_commands(),
+            # Install Starship prompt (pinned version)
+            "curl -sSLO https://github.com/starship/starship/releases/download/v1.22.1/starship-x86_64-unknown-linux-gnu.tar.gz",
+            "tar -xzf starship-x86_64-unknown-linux-gnu.tar.gz -C /usr/local/bin/",
+            "rm starship-x86_64-unknown-linux-gnu.tar.gz",
+            # Create starship init script (interactive only)
+            "printf '%s\\n' 'if command -v starship &> /dev/null && [ -t 0 ]; then' '  eval \"$(starship init bash)\"' 'fi' > /etc/profile.d/starship.sh",
+            # Create devbox-banner display script
+            "cat > /etc/profile.d/devbox-banner.sh << 'BANNER_EOF'\n"
+            "if [ -t 0 ] && [ -f /etc/devbox-banner ]; then\n"
+            "  clear\n"
+            "  cat /etc/devbox-banner\n"
+            "  echo\n"
+            "  python3 -c \"from quotes_loader import get_random_quote; q = get_random_quote(); print(q['text']); print('- ' + q['author'])\" 2>/dev/null || true\n"
+            "  [ -d /data ] && cd /data\n"
+            "fi\n"
+            "BANNER_EOF",
+        )
     )
 
 
@@ -72,7 +108,7 @@ standard_devbox_image = (
     create_base_devbox_image()
     .add_local_python_source(
         "images", "shared_runtime", "utils", "config",
-        "persistence_utils", "backup_utils"
+        "persistence_utils", "backup_utils", "quotes_loader"
     )
 )
 cuda_devbox_image = (
@@ -90,7 +126,7 @@ cuda_devbox_image = (
     .pip_install(*DOWNLOAD_PIP_PACKAGES)
     .add_local_python_source(
         "images", "shared_runtime", "utils", "config",
-        "persistence_utils", "backup_utils"
+        "persistence_utils", "backup_utils", "quotes_loader"
     )
 )
 
@@ -99,7 +135,7 @@ doc_processing_image = (
     .apt_install("pandoc", "texlive-full")
     .add_local_python_source(
         "images", "shared_runtime", "utils", "config",
-        "persistence_utils", "backup_utils"
+        "persistence_utils", "backup_utils", "quotes_loader"
     )
 )
 
@@ -116,7 +152,7 @@ assisted_coding_image = (
     )
     .add_local_python_source(
         "images", "shared_runtime", "utils", "config",
-        "persistence_utils", "backup_utils"
+        "persistence_utils", "backup_utils", "quotes_loader"
     )
 )
 
@@ -134,7 +170,7 @@ llm_playroom_image = (
     )
     .add_local_python_source(
         "images", "shared_runtime", "utils", "config",
-        "persistence_utils", "backup_utils"
+        "persistence_utils", "backup_utils", "quotes_loader"
     )
 )
 
@@ -170,7 +206,7 @@ llamacpp_cpu_image = (
     )
     .add_local_python_source(
         "images", "shared_runtime", "utils", "config",
-        "persistence_utils", "backup_utils", "exa_helper", "exa_proxy"
+        "persistence_utils", "backup_utils", "exa_helper", "exa_proxy", "quotes_loader"
     )
 )
 
@@ -238,6 +274,6 @@ forensic_analysis_image =  (
     )
     .add_local_python_source(
         "images", "shared_runtime", "utils", "config",
-        "persistence_utils", "backup_utils"
+        "persistence_utils", "backup_utils", "quotes_loader"
     )
 )
