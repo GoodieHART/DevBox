@@ -16,6 +16,17 @@ from backup_utils import restore_backup, register_custom_backup
 from utils import inject_ssh_key
 from config import IDLE_TIMEOUT_SECONDS
 
+DEVBOX_BANNERS = {
+    "standard_devbox": ("🛠️", "Standard DevBox"),
+    "cuda_devbox_t4": ("🎮", "CUDA DevBox (T4)"),
+    "cuda_devbox_l4": ("🎮", "CUDA DevBox (L4)"),
+    "cuda_devbox_a10g": ("🎮", "CUDA DevBox (A10G)"),
+    "doc_processing": ("📄", "Document Processing Box"),
+    "assisted_coding": ("🤖", "AI Assistants Box"),
+    "llm_playroom": ("🧠", "LLM Playroom"),
+    "forensic_analysis": ("🔍", "Forensics Analysis Box"),
+}
+
 
 def run_devbox_shared(extra_packages=None, devbox_type="ssh"):
     """Single consolidated function for all SSH DevBoxes."""
@@ -30,7 +41,17 @@ def run_devbox_shared(extra_packages=None, devbox_type="ssh"):
     register_custom_backup("/root", "/data/root_full_backup.tar.gz")
     
     inject_ssh_key()
-    
+
+    # Write devbox banner
+    icon, name = DEVBOX_BANNERS.get(devbox_type, ("🚀", "DevBox"))
+    banner = f"""
+    ╔══════════════════════════════════════╗
+    ║  {icon} {name:<30} ║
+    ║  {'💾 Persistent: /data':<36} ║
+    ╚══════════════════════════════════════╝
+    """
+    with open("/etc/devbox-banner", "w") as f:
+        f.write(banner.strip() + "\n")
 
     if extra_packages:
         print(f"Installing extra packages: {', '.join(extra_packages)}...", file=sys.stderr)
