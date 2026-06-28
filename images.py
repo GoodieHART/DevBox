@@ -114,7 +114,7 @@ standard_devbox_image = (
         "images", "shared_runtime", "utils", "config",
         "persistence_utils", "backup_utils", "quotes_loader"
     )
-    .add_local_file(os.path.join(_IMAGES_DIR, "quotes.json"), "/etc/quotes.json", copy=True)
+    .add_local_file(os.path.join(_IMAGES_DIR, "quotes.json"), "/etc/quotes.json")
 )
 cuda_devbox_image = (
     modal.Image.from_registry(
@@ -133,7 +133,7 @@ cuda_devbox_image = (
         "images", "shared_runtime", "utils", "config",
         "persistence_utils", "backup_utils", "quotes_loader"
     )
-    .add_local_file(os.path.join(_IMAGES_DIR, "quotes.json"), "/etc/quotes.json", copy=True)
+    .add_local_file(os.path.join(_IMAGES_DIR, "quotes.json"), "/etc/quotes.json")
 )
 
 doc_processing_image = (
@@ -143,7 +143,7 @@ doc_processing_image = (
         "images", "shared_runtime", "utils", "config",
         "persistence_utils", "backup_utils", "quotes_loader"
     )
-    .add_local_file(os.path.join(_IMAGES_DIR, "quotes.json"), "/etc/quotes.json", copy=True)
+    .add_local_file(os.path.join(_IMAGES_DIR, "quotes.json"), "/etc/quotes.json")
 )
 
 assisted_coding_image = (
@@ -161,7 +161,7 @@ assisted_coding_image = (
         "images", "shared_runtime", "utils", "config",
         "persistence_utils", "backup_utils", "quotes_loader"
     )
-    .add_local_file(os.path.join(_IMAGES_DIR, "quotes.json"), "/etc/quotes.json", copy=True)
+    .add_local_file(os.path.join(_IMAGES_DIR, "quotes.json"), "/etc/quotes.json")
 )
 
 llm_playroom_image = (
@@ -180,7 +180,7 @@ llm_playroom_image = (
         "images", "shared_runtime", "utils", "config",
         "persistence_utils", "backup_utils", "quotes_loader"
     )
-    .add_local_file(os.path.join(_IMAGES_DIR, "quotes.json"), "/etc/quotes.json", copy=True)
+    .add_local_file(os.path.join(_IMAGES_DIR, "quotes.json"), "/etc/quotes.json")
 )
 
 llamacpp_cpu_image = (
@@ -217,7 +217,7 @@ llamacpp_cpu_image = (
         "images", "shared_runtime", "utils", "config",
         "persistence_utils", "backup_utils", "exa_helper", "exa_proxy", "quotes_loader"
     )
-    .add_local_file(os.path.join(_IMAGES_DIR, "quotes.json"), "/etc/quotes.json", copy=True)
+    .add_local_file(os.path.join(_IMAGES_DIR, "quotes.json"), "/etc/quotes.json")
 )
 
 rdp_devbox_image = (
@@ -286,5 +286,5 @@ forensic_analysis_image =  (
         "images", "shared_runtime", "utils", "config",
         "persistence_utils", "backup_utils", "quotes_loader"
     )
-    .add_local_file(os.path.join(_IMAGES_DIR, "quotes.json"), "/etc/quotes.json", copy=True)
+    .add_local_file(os.path.join(_IMAGES_DIR, "quotes.json"), "/etc/quotes.json")
 )
