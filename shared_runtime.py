@@ -16,6 +16,7 @@ from persistence_utils import setup_persistence, get_persistence_items
 from backup_utils import restore_backup, register_custom_backup
 from utils import inject_ssh_key
 from config import IDLE_TIMEOUT_SECONDS
+from quotes_loader import get_random_quote
 
 DEVBOX_BANNERS = {
     "standard_devbox": ("🛠️", "Standard DevBox"),
@@ -43,7 +44,7 @@ def run_devbox_shared(extra_packages=None, devbox_type="ssh"):
     
     inject_ssh_key()
 
-    # Write devbox banner
+    # Write devbox banner with quote
     icon, name = DEVBOX_BANNERS.get(devbox_type, ("🚀", "DevBox"))
     banner = textwrap.dedent(f"""\
     ╔══════════════════════════════════════╗
@@ -51,6 +52,11 @@ def run_devbox_shared(extra_packages=None, devbox_type="ssh"):
     ║  {'💾 Persistent: /data':<36} ║
     ╚══════════════════════════════════════╝
     """)
+    try:
+        q = get_random_quote()
+        banner += f"\n{q['text']}\n- {q['author']}\n"
+    except Exception:
+        pass  # Quotes are optional — banner still works without them
     with open("/etc/devbox-banner", "w") as f:
         f.write(banner)
 

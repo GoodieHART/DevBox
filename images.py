@@ -62,8 +62,6 @@ def create_base_devbox_image(python_version="3.10"):
             "if [ -t 0 ] && [ -f /etc/devbox-banner ]; then\n"
             "  clear\n"
             "  cat /etc/devbox-banner\n"
-            "  echo\n"
-            "  python3 -c \"from quotes_loader import get_random_quote; q = get_random_quote(); print(q['text']); print('- ' + q['author'])\" 2>/dev/null || true\n"
             "  [ -d /data ] && cd /data\n"
             "fi\n"
             "BANNER_EOF",
@@ -98,8 +96,6 @@ def create_base_minimal_image(python_version="3.10"):
             "if [ -t 0 ] && [ -f /etc/devbox-banner ]; then\n"
             "  clear\n"
             "  cat /etc/devbox-banner\n"
-            "  echo\n"
-            "  python3 -c \"from quotes_loader import get_random_quote; q = get_random_quote(); print(q['text']); print('- ' + q['author'])\" 2>/dev/null || true\n"
             "  [ -d /data ] && cd /data\n"
             "fi\n"
             "BANNER_EOF",
