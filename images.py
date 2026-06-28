@@ -97,7 +97,6 @@ cuda_devbox_image = (
 doc_processing_image = (
     create_base_minimal_image()
     .apt_install("pandoc", "texlive-full")
-    .pip_install(*DOWNLOAD_PIP_PACKAGES)
     .add_local_python_source(
         "images", "shared_runtime", "utils", "config",
         "persistence_utils", "backup_utils"
@@ -115,7 +114,6 @@ assisted_coding_image = (
         "curl -fsSL https://opencode.ai/install | bash",
         *get_ssh_setup_commands()
     )
-    .pip_install(*DOWNLOAD_PIP_PACKAGES)
     .add_local_python_source(
         "images", "shared_runtime", "utils", "config",
         "persistence_utils", "backup_utils"
@@ -134,7 +132,6 @@ llm_playroom_image = (
         "curl -fsSL https://ollama.com/install.sh | bash",
         *get_ssh_setup_commands()
     )
-    .pip_install(*DOWNLOAD_PIP_PACKAGES)
     .add_local_python_source(
         "images", "shared_runtime", "utils", "config",
         "persistence_utils", "backup_utils"
@@ -155,9 +152,6 @@ llamacpp_cpu_image = (
         "hf",
         "huggingface_hub",
         "hf_transfer",
-        "gdown",
-        "tgdl",
-        "terabox-downloader",
     )
     .run_commands(
         # Download and extract prebuilt llama.cpp binaries
@@ -219,7 +213,6 @@ rdp_devbox_image = (
         'echo "root:devbox123" | chpasswd',
         *get_ssh_setup_commands()
     )
-    .pip_install(*DOWNLOAD_PIP_PACKAGES)
     .add_local_python_source(
         "images", "shared_runtime", "utils", "config",
         "persistence_utils", "backup_utils"
@@ -228,8 +221,7 @@ rdp_devbox_image = (
 
 forensic_analysis_image =  (
    create_base_minimal_image()
-  .pip_install(*DOWNLOAD_PIP_PACKAGES)
-  .pip_install("volatility3")
+  .pip_install(*DOWNLOAD_PIP_PACKAGES, "volatility3")
   .run_commands(
     "mkdir -p /opt/forensic_analysis",
     "mkdir -p /opt/forensic_analysis/volatility3/symbols",
