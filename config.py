@@ -2,25 +2,26 @@
 Configuration constants for DevBox Launcher.
 
 This module centralizes all configuration constants, resource allocations,
-and global settings used across the DevBox application.
+and global settings used across DevBox
 
-Author: DevBox Launcher
+Author: GoodieHART
 """
 
-# Auto-shutdown configuration
 # Container will shut down if no one is connected via SSH for this many seconds.
+# All Time Values are in seconds
 IDLE_TIMEOUT_SECONDS = 300  # 5 minutes
 
 # Version constants
-LLAMACPP_VERSION = "b7898"  # Latest stable release
+LLAMACPP_VERSION = "b9058" # this will be made dynamic in future
+STARSHIP_VERSION = "v1.22.1"
 
 # Resource configurations for different DevBox types
-# These will be filled with actual Modal objects during runtime
+
 
 # CPU-only DevBox resource arguments
 CPU_DEVBOX_ARGS = {
-    "secrets": None,  # Will be filled with modal.Secret.from_name("ssh-public-key")
-    "volumes": None,  # Will be filled with dev_volume
+    "secrets": None,
+    "volumes": None,
     "cpu": 0.5,
     "memory": 1024,
     "timeout": 3600,
@@ -28,43 +29,58 @@ CPU_DEVBOX_ARGS = {
 
 # Standard GPU DevBox resource arguments
 GPU_DEVBOX_ARGS = {
-    "secrets": None,  # Will be filled with modal.Secret.from_name("ssh-public-key")
-    "volumes": None,  # Will be filled with dev_volume
+    "secrets": None,
+    "volumes": None,
     "cpu": 1.0,
     "memory": 2048,
-    "timeout": 28800,  # 8 hours
+    "timeout": 18000,
 }
 
 # RDP-specific resource arguments (higher resources for desktop environment)
 CPU_DEVBOX_ARGS_RDP = {
-    "secrets": None,  # Will be filled with modal.Secret.from_name("ssh-public-key")
-    "volumes": None,  # Will be filled with dev_volume
-    "cpu": 1.0,  # Higher CPU for desktop environment
-    "memory": 2048,  # Double memory for XFCE + RDP
-    "timeout": 3600,  # 1 hour
+    "secrets": None, 
+    "volumes": None,
+    "cpu": 1.0,
+    "memory": 2048,
+    "timeout": 10800,
 }
 
 # RDP GPU resource arguments (highest resources)
 GPU_DEVBOX_ARGS_RDP = {
-    "secrets": None,  # Will be filled with modal.Secret.from_name("ssh-public-key")
-    "volumes": None,  # Will be filled with dev_volume
-    "cpu": 1.5,  # Higher CPU for GPU + desktop
-    "memory": 4096,  # Higher memory for GPU + desktop
-    "timeout": 28800,  # 8 hours
+    "secrets": None,
+    "volumes": None,
+    "cpu": 1.5,
+    "memory": 4096,
+    "timeout": 18000,
 }
 
-# GPU type mappings
-GPU_TYPES = {
-    "t4": "NVIDIA T4 - Cost-effective, good for inference",
-    "l4": "NVIDIA L4 - Newer, more performant than T4",
-    "a10g": "NVIDIA A10G - Higher performance, more VRAM",
-    "l40s": "NVIDIA L40S - High-end AI workload GPU"
+# llama.cpp Research Center resource arguments
+LLAMACPP_DEVBOX_ARGS = {
+    "secrets": None,
+    "volumes": None,
+    "cpu": 2.0,
+    "memory": 8192,  # 8GB for 7B models
+    "timeout": 14400,  # 4 hours max runtime
 }
+
+# GPU llama.cpp Research Center resource arguments
+LLAMACPP_GPU_DEVBOX_ARGS = {
+    "secrets": None,
+    "volumes": None,
+    "cpu": 2.0,
+    "memory": 16384,  # 16GB for Gemma4-26B-A4B
+    "timeout": 14400,  # 4 hours max runtime
+    "gpu": "t4",
+}
+
+# llama.cpp idle timeout (separate from container timeout)
+LLAMACPP_IDLE_TIMEOUT = 3600  # 1 hour idle
 
 # Package groups for reusable configurations
 CORE_DEV_PACKAGES = [
     "openssh-server",
-    "git", 
+    "git",
+    "nano",
     "neovim",
     "curl",
     "wget",
@@ -76,16 +92,27 @@ EXTENDED_DEV_PACKAGES = [
     "clang",
     "cmake",
     "htop",
-    "nano",
     "zlib1g-dev",
     "build-essential",
     "pkg-config",
     "python3-dev",
 ]
 
+# Download tool packages for all DevBox images
+DOWNLOAD_APT_PACKAGES = [
+    "megatools",
+    "p7zip-full",
+]
+
+DOWNLOAD_PIP_PACKAGES = [
+    "gdown",
+    "tgdl",
+    "terabox-downloader",
+]
+
 # Function to fill in runtime modal objects
-def get_resource_config(config_type="cpu", gpu_type=None, is_rdp=False):
-    """
+def get_resource_config(config_type="cpu", is_rdp=False, secrets=None, volume=None):
+  """
     Get complete resource configuration for DevBox type.
     
     Args:
@@ -96,18 +123,14 @@ def get_resource_config(config_type="cpu", gpu_type=None, is_rdp=False):
     Returns:
         dict: Complete configuration with Modal objects
     """
-    if config_type == "cpu":
-        base_config = CPU_DEVBOX_ARGS_RDP if is_rdp else CPU_DEVBOX_ARGS
-    elif config_type == "gpu":
-        base_config = GPU_DEVBOX_ARGS_RDP if is_rdp else GPU_DEVBOX_ARGS
-    else:
-        raise ValueError(f"Unknown config_type: {config_type}")
-    
-    # Add Modal objects (these need to be imported from the main module)
-    config = base_config.copy()
-    if config["secrets"] is None:
-        config["secrets"] = ["modal.Secret.from_name('ssh-public-key')"]
-    if config["volumes"] is None:
-        config["volumes"] = {"/data": None}  # Will be filled with actual volume
-    
-    return config
+  if config_type == "cpu":
+    base_config = CPU_DEVBOX_ARGS_RDP if is_rdp else CPU_DEVBOX_ARGS
+  elif config_type == "gpu":
+    base_config = GPU_DEVBOX_ARGS_RDP if is_rdp else GPU_DEVBOX_ARGS
+  else:
+    raise ValueError(f"Unknown config_type: {config_type}")
+
+  config = base_config.copy()
+  config["secrets"] = secrets
+  config["volumes"] = {"/data": volume}
+  return config

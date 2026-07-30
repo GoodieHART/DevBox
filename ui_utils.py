@@ -4,12 +4,10 @@ UI Utilities Module for DevBox Launcher
 This module provides reusable UI components for the DevBox application,
 including box creation, spinner animations, and visual feedback utilities.
 
-Author: DevBox Launcher
+Author: GoodieHART
 """
 
 import time
-import sys
-from typing import Optional
 
 
 def create_box(content: str, title: str = "", width: int = 60) -> None:

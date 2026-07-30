@@ -29,27 +29,32 @@ def load_quotes(quotes_file: str = "quotes.json") -> List[Dict[str, str]]:
         {"text": "Make it work, make it right, make it fast.", "author": "Kent Beck"}
     ]
     
-    try:
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        quotes_path = os.path.join(script_dir, quotes_file)
-        
-        if not os.path.exists(quotes_path):
-            return fallback_quotes
-            
-        with open(quotes_path, 'r', encoding='utf-8') as f:
-            quotes = json.load(f)
-            
-        if not isinstance(quotes, list) or not quotes:
-            return fallback_quotes
-            
-        for quote in quotes:
-            if not isinstance(quote, dict) or 'text' not in quote or 'author' not in quote:
-                return fallback_quotes
-                
-        return quotes
-        
-    except (FileNotFoundError, json.JSONDecodeError, KeyError, TypeError, ValueError):
-        return fallback_quotes
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # Try multiple paths to find quotes.json (module dir, /etc/, CWD)
+    search_paths = [
+        os.path.join(script_dir, quotes_file),
+        os.path.join("/etc", quotes_file),
+        quotes_file,
+    ]
+    
+    for path in search_paths:
+        try:
+            if not os.path.exists(path):
+                continue
+            with open(path, 'r', encoding='utf-8') as f:
+                quotes = json.load(f)
+            if not isinstance(quotes, list) or not quotes:
+                continue
+            for quote in quotes:
+                if not isinstance(quote, dict) or 'text' not in quote or 'author' not in quote:
+                    break
+            else:
+                return quotes
+        except (FileNotFoundError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+            continue
+    
+    return fallback_quotes
 
 
 def get_random_quote(quotes_file: str = "quotes.json") -> Dict[str, str]:

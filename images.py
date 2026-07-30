@@ -8,9 +8,11 @@ Author: GoodieHART
 """
 
 import modal
-from config import CORE_DEV_PACKAGES, EXTENDED_DEV_PACKAGES
+import os
+from config import CORE_DEV_PACKAGES, EXTENDED_DEV_PACKAGES, LLAMACPP_VERSION, DOWNLOAD_APT_PACKAGES, DOWNLOAD_PIP_PACKAGES
 
-LLAMACPP_VERSION = "b7898"
+# Absolute path to the directory containing this file (for add_local_file references)
+_IMAGES_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def get_ssh_setup_commands():
     """
@@ -45,8 +47,25 @@ def create_base_devbox_image(python_version="3.10"):
     """
     return (
         modal.Image.debian_slim(python_version=python_version)
-        .apt_install(*CORE_DEV_PACKAGES, *EXTENDED_DEV_PACKAGES)
-        .run_commands(*get_ssh_setup_commands())
+        .apt_install(*CORE_DEV_PACKAGES, *EXTENDED_DEV_PACKAGES, *DOWNLOAD_APT_PACKAGES)
+        .pip_install(*DOWNLOAD_PIP_PACKAGES)
+        .run_commands(
+            *get_ssh_setup_commands(),
+            # Install Starship prompt (pinned version)
+            "curl -sSLO https://github.com/starship/starship/releases/download/v1.22.1/starship-x86_64-unknown-linux-gnu.tar.gz",
+            "tar -xzf starship-x86_64-unknown-linux-gnu.tar.gz -C /usr/local/bin/",
+            "rm starship-x86_64-unknown-linux-gnu.tar.gz",
+            # Create starship init script (interactive only)
+            "printf '%s\\n' 'if command -v starship &> /dev/null && [ -t 0 ]; then' '  eval \"$(starship init bash)\"' 'fi' > /etc/profile.d/starship.sh",
+            # Create devbox-banner display script
+            "cat > /etc/profile.d/devbox-banner.sh << 'BANNER_EOF'\n"
+            "if [ -t 0 ] && [ -f /etc/devbox-banner ]; then\n"
+            "  clear\n"
+            "  cat /etc/devbox-banner\n"
+            "  [ -d /data ] && cd /data\n"
+            "fi\n"
+            "BANNER_EOF",
+        )
     )
 
 
@@ -62,8 +81,25 @@ def create_base_minimal_image(python_version="3.10"):
     """
     return (
         modal.Image.debian_slim(python_version=python_version)
-        .apt_install(*CORE_DEV_PACKAGES)
-        .run_commands(*get_ssh_setup_commands())
+        .apt_install(*CORE_DEV_PACKAGES, *DOWNLOAD_APT_PACKAGES)
+        .pip_install(*DOWNLOAD_PIP_PACKAGES)
+        .run_commands(
+            *get_ssh_setup_commands(),
+            # Install Starship prompt (pinned version)
+            "curl -sSLO https://github.com/starship/starship/releases/download/v1.22.1/starship-x86_64-unknown-linux-gnu.tar.gz",
+            "tar -xzf starship-x86_64-unknown-linux-gnu.tar.gz -C /usr/local/bin/",
+            "rm starship-x86_64-unknown-linux-gnu.tar.gz",
+            # Create starship init script (interactive only)
+            "printf '%s\\n' 'if command -v starship &> /dev/null && [ -t 0 ]; then' '  eval \"$(starship init bash)\"' 'fi' > /etc/profile.d/starship.sh",
+            # Create devbox-banner display script
+            "cat > /etc/profile.d/devbox-banner.sh << 'BANNER_EOF'\n"
+            "if [ -t 0 ] && [ -f /etc/devbox-banner ]; then\n"
+            "  clear\n"
+            "  cat /etc/devbox-banner\n"
+            "  [ -d /data ] && cd /data\n"
+            "fi\n"
+            "BANNER_EOF",
+        )
     )
 
 
@@ -72,8 +108,9 @@ standard_devbox_image = (
     create_base_devbox_image()
     .add_local_python_source(
         "images", "shared_runtime", "utils", "config",
-        "persistence_utils", "backup_utils"
+        "persistence_utils", "backup_utils", "quotes_loader"
     )
+    .add_local_file(os.path.join(_IMAGES_DIR, "quotes.json"), "/etc/quotes.json")
 )
 cuda_devbox_image = (
     modal.Image.from_registry(
@@ -81,16 +118,18 @@ cuda_devbox_image = (
         add_python="3.11"
     )
     .apt_install(
-        *CORE_DEV_PACKAGES,  # SSH and core tools
+        *CORE_DEV_PACKAGES,
         "nano",
         "libcudnn9-cuda-12", 
         "libcudnn9-dev-cuda-12",
     )
     .run_commands(*get_ssh_setup_commands())
+    .pip_install(*DOWNLOAD_PIP_PACKAGES)
     .add_local_python_source(
         "images", "shared_runtime", "utils", "config",
-        "persistence_utils", "backup_utils"
+        "persistence_utils", "backup_utils", "quotes_loader"
     )
+    .add_local_file(os.path.join(_IMAGES_DIR, "quotes.json"), "/etc/quotes.json")
 )
 
 doc_processing_image = (
@@ -98,11 +137,12 @@ doc_processing_image = (
     .apt_install("pandoc", "texlive-full")
     .add_local_python_source(
         "images", "shared_runtime", "utils", "config",
-        "persistence_utils", "backup_utils"
+        "persistence_utils", "backup_utils", "quotes_loader"
     )
+    .add_local_file(os.path.join(_IMAGES_DIR, "quotes.json"), "/etc/quotes.json")
 )
 
-gemini_cli_image = (
+assisted_coding_image = (
     create_base_minimal_image()
     .run_commands(
         # Install Node.js 20.x
@@ -115,8 +155,9 @@ gemini_cli_image = (
     )
     .add_local_python_source(
         "images", "shared_runtime", "utils", "config",
-        "persistence_utils", "backup_utils"
+        "persistence_utils", "backup_utils", "quotes_loader"
     )
+    .add_local_file(os.path.join(_IMAGES_DIR, "quotes.json"), "/etc/quotes.json")
 )
 
 llm_playroom_image = (
@@ -133,8 +174,9 @@ llm_playroom_image = (
     )
     .add_local_python_source(
         "images", "shared_runtime", "utils", "config",
-        "persistence_utils", "backup_utils"
+        "persistence_utils", "backup_utils", "quotes_loader"
     )
+    .add_local_file(os.path.join(_IMAGES_DIR, "quotes.json"), "/etc/quotes.json")
 )
 
 llamacpp_cpu_image = (
@@ -144,30 +186,39 @@ llamacpp_cpu_image = (
         "libcurl4", 
         "zlib1g",
     )
+    .pip_install(
+        "exa-py",       
+        "openai",
+        "httpx", 
+        "hf",
+        "huggingface_hub",
+        "hf_transfer",
+    )
     .run_commands(
-        # Download and extract prebuilt llama.cpp binaries (CPU only)
+        # Download and extract prebuilt llama.cpp binaries
         f"curl -L -o /tmp/llama.tar.gz https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_VERSION}/llama-{LLAMACPP_VERSION}-bin-ubuntu-x64.tar.gz",
         "mkdir -p /opt/llama.cpp",
         "tar -xzf /tmp/llama.tar.gz -C /opt/llama.cpp --strip-components=1",
         "rm /tmp/llama.tar.gz",
         
-        # Create symlinks for easy access
-        "ln -sf /opt/llama.cpp/bin/llama-cli /usr/local/bin/llama-cli",
-        "ln -sf /opt/llama.cpp/bin/llama-server /usr/local/bin/llama-server",
-        "ln -sf /opt/llama.cpp/bin/llama-bench /usr/local/bin/llama-bench",
-        "mkdir -p /opt/models/llama.cpp",
+        # symlinks for easy access
+        "ln -sf /opt/llama.cpp/llama-cli /usr/local/bin/llama-cli",
+        "ln -sf /opt/llama.cpp/llama-server /usr/local/bin/llama-server",
+        "ln -sf /opt/llama.cpp/llama-bench /usr/local/bin/llama-bench",
+        "ln -sf /opt/llama.cpp/llama-mtmd-cli /usr/local/bin/llama-mtmd-cli",
+        
         *get_ssh_setup_commands()
     )
     .add_local_python_source(
         "images", "shared_runtime", "utils", "config",
-        "persistence_utils", "backup_utils"
+        "persistence_utils", "backup_utils", "exa_helper", "exa_proxy", "quotes_loader"
     )
+    .add_local_file(os.path.join(_IMAGES_DIR, "quotes.json"), "/etc/quotes.json")
 )
 
 rdp_devbox_image = (
     create_base_devbox_image()
     .apt_install(
-        # RDP/Desktop packages
         "xrdp",
         "xfce4", 
         "xfce4-goodies",
@@ -177,7 +228,6 @@ rdp_devbox_image = (
         "tightvncserver",
     )
     .run_commands(
-        # RDP setup
         "mkdir -p /var/run/xrdp",
         "chmod 755 /etc/xrdp",
         # Create XFCE environment wrapper for proper XDG setup
@@ -209,4 +259,28 @@ rdp_devbox_image = (
         "images", "shared_runtime", "utils", "config",
         "persistence_utils", "backup_utils"
     )
+)
+
+forensic_analysis_image =  (
+   create_base_minimal_image()
+  .pip_install(*DOWNLOAD_PIP_PACKAGES, "volatility3")
+  .run_commands(
+    "mkdir -p /opt/forensic_analysis",
+    "mkdir -p /opt/forensic_analysis/volatility3/symbols",
+    
+    "curl https://downloads.volatilityfoundation.org/volatility3/symbols/windows.zip -o /tmp/windows.zip",
+    "curl https://downloads.volatilityfoundation.org/volatility3/symbols/linux.zip -o /tmp/linux.zip",
+    "curl https://downloads.volatilityfoundation.org/volatility3/symbols/mac.zip -o /tmp/mac.zip",
+    
+    "unzip /tmp/windows.zip -d /opt/forensic_analysis/volatility3/symbols",
+    "unzip /tmp/linux.zip -d /opt/forensic_analysis/volatility3/symbols",
+    "unzip /tmp/mac.zip -d /opt/forensic_analysis/volatility3/symbols",
+    # symbols ought to be moved to volatility's execution directory
+    *get_ssh_setup_commands()
+    )
+    .add_local_python_source(
+        "images", "shared_runtime", "utils", "config",
+        "persistence_utils", "backup_utils", "quotes_loader"
+    )
+    .add_local_file(os.path.join(_IMAGES_DIR, "quotes.json"), "/etc/quotes.json")
 )

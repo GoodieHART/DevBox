@@ -3,3 +3,15 @@ venv/
 .venv/
 env/
 ENV/
+docs/
+.omo/
+
+*.pyc
+*.pyo
+.env
+.DS_Store
+.vscode/
+.idea/
+*.egg-info/
+dist/
+build/

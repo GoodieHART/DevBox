@@ -7,42 +7,65 @@ DevBox types, including persistence setup, backup handling, and idle monitoring.
 Author: GoodieHART
 """
 
-import os
 import modal
 import sys
 import time
-import subprocess
 import atexit
+import textwrap
 from persistence_utils import setup_persistence, get_persistence_items
-from backup_utils import *
-from utils import *
+from backup_utils import restore_backup, register_custom_backup
+from utils import inject_ssh_key
 from config import IDLE_TIMEOUT_SECONDS
+from quotes_loader import get_random_quote
+
+DEVBOX_BANNERS = {
+    "standard_devbox": ("🛠️", "Standard DevBox"),
+    "cuda_devbox_t4": ("🎮", "CUDA DevBox (T4)"),
+    "cuda_devbox_l4": ("🎮", "CUDA DevBox (L4)"),
+    "cuda_devbox_a10g": ("🎮", "CUDA DevBox (A10G)"),
+    "doc_processing": ("📄", "Document Processing Box"),
+    "assisted_coding": ("🤖", "AI Assistants Box"),
+    "llm_playroom": ("🧠", "LLM Playroom"),
+    "forensic_analysis": ("🔍", "Forensics Analysis Box"),
+}
 
 
 def run_devbox_shared(extra_packages=None, devbox_type="ssh"):
     """Single consolidated function for all SSH DevBoxes."""
     import os
     import subprocess
-    
-    # 1. Restore backup
+
     restore_backup()
     
-    # 2. Setup persistence
     setup_persistence(get_persistence_items(devbox_type))
     
-    # 3. Register backup on exit
+    # Register backup on exit
     register_custom_backup("/root", "/data/root_full_backup.tar.gz")
     
-    # 4. Inject SSH key
     inject_ssh_key()
-    
-    # 5. Install extra packages
+
+    # Write devbox banner with quote
+    icon, name = DEVBOX_BANNERS.get(devbox_type, ("🚀", "DevBox"))
+    banner = textwrap.dedent(f"""\
+    ╔══════════════════════════════════════╗
+    ║  {icon} {name:<30} ║
+    ║  {'💾 Persistent: /data':<36} ║
+    ╚══════════════════════════════════════╝
+    """)
+    try:
+        q = get_random_quote()
+        banner += f"\n{q['text']}\n- {q['author']}\n"
+    except Exception:
+        pass  # Quotes are optional — banner still works without them
+    with open("/etc/devbox-banner", "w") as f:
+        f.write(banner)
+
     if extra_packages:
         print(f"Installing extra packages: {', '.join(extra_packages)}...", file=sys.stderr)
         subprocess.run(["apt-get", "update"], check=True)
         subprocess.run(["apt-get", "install", "-y"] + extra_packages, check=True)
     
-    # 6. Start SSH and monitor
+    # Start SSH and monitor
     subprocess.run(["/usr/sbin/sshd"])
     
     with modal.forward(22, unencrypted=True) as tunnel:
@@ -57,7 +80,7 @@ def run_devbox_shared(extra_packages=None, devbox_type="ssh"):
             print(f"[DEBUG] Current idle time: {idle_time}s", file=sys.stderr)
             if result.stdout:
                 idle_time = 0
-                print(f"[DEBUG] User Connected. Resetting idle timer.", file=sys.stderr)
+                print("[DEBUG] User Connected. Resetting idle timer.", file=sys.stderr)
             else:
                 idle_time += check_interval
                 remaining = IDLE_TIMEOUT_SECONDS - idle_time
@@ -73,19 +96,15 @@ def run_rdp_devbox_shared(extra_packages: list[str] = None):
     import subprocess
     import time
     
-    # Import utilities
     from backup_utils import restore_backup, register_custom_backup
     from persistence_utils import setup_persistence
     from utils import inject_ssh_key
     from config import IDLE_TIMEOUT_SECONDS
     
-    # 1. Restore backup
     restore_backup()
     
-    # 2. Inject SSH key (for fallback access)
     inject_ssh_key()
     
-    # 3. Setup persistence with RDP-specific items
     rdp_items = [
         ".bash_history", ".bashrc", ".profile", ".viminfo", ".vimrc",
         ".gitconfig", ".ssh/config", ".ssh/known_hosts",
@@ -94,16 +113,14 @@ def run_rdp_devbox_shared(extra_packages: list[str] = None):
     ]
     setup_persistence(rdp_items)
     
-    # 4. Register backup
     register_custom_backup("/root", "/data/root_full_backup.tar.gz")
     
-    # 5. Install extra packages
     if extra_packages:
         print(f"Installing extra packages: {', '.join(extra_packages)}...", file=sys.stderr)
         subprocess.run(["apt-get", "update"], check=True)
         subprocess.run(["apt-get", "install", "-y"] + extra_packages, check=True)
     
-    # 6. Setup XFCE environment
+    # Setup XFCE environment
     # Start D-Bus daemon for xfconfd
     subprocess.Popen(["dbus-daemon", "--system", "--fork"],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -125,16 +142,18 @@ def run_rdp_devbox_shared(extra_packages: list[str] = None):
     os.makedirs('/tmp/xdg-runtime', exist_ok=True)
     os.chmod('/tmp/xdg-runtime', 0o700)
     
-    # 7. Start RDP services
+    # Start RDP services
     subprocess.Popen(["/usr/sbin/xrdp"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.Popen(["/usr/sbin/xrdp-sesman"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     
-    # 8. Port forward and idle monitoring
     with modal.forward(3389, unencrypted=True) as tunnel:
-        print(f"\n🖥️ Your RDP Desktop is ready!", file=sys.stderr)
-        print(f"Address: {tunnel.host}:{tunnel.unencrypted_port}", file=sys.stderr)
-        print(f"Username: root", file=sys.stderr)
-        print(f"Password: rdpaccess", file=sys.stderr)
+        print("\n" + "=" * 60)
+        print("🖥️ Your RDP Desktop is ready!")
+        print("=" * 60)
+        print(f"\n📡 RDP Address: {tunnel.host}:{tunnel.unencrypted_port}")
+        print("👤 Username: root")
+        print("🔑 Password: devbox123")
+        print("\n" + "=" * 60)
         
         idle_time = 0
         check_interval = 15
@@ -159,4 +178,4 @@ def run_rdp_devbox_shared(extra_packages: list[str] = None):
             except (ValueError, AttributeError):
                 idle_time += check_interval
         
-        print(f"\nIdle timeout reached. Shutting down RDP Desktop.", file=sys.stderr)
+        print("\nIdle timeout reached. Shutting down RDP Desktop.", file=sys.stderr)
