@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import base64
+from pathlib import Path
+
 import pytest
 
 import windows_vm
@@ -109,3 +112,75 @@ def test_probe_kvm_reports_missing():
             return _FakeProcess()
 
     assert windows_vm.probe_kvm(_FakeSandbox()) == "KVM_MISSING"
+
+
+# ---------------------------------------------------------------------------
+# Runtime file upload + entrypoint start (todo 5 helpers)
+# ---------------------------------------------------------------------------
+
+
+def test_upload_runtime_files_writes_both_files_via_base64():
+    """Given a sandbox, entrypoint.sh + rpc_server.py are uploaded base64-encoded."""
+    calls = []
+
+    class _FakeProcess:
+        def wait(self):
+            return None
+
+    class _FakeSandbox:
+        def exec(self, *args, **kwargs):
+            calls.append((args, kwargs))
+            return _FakeProcess()
+
+    windows_vm.upload_runtime_files(_FakeSandbox())
+
+    assert len(calls) == 3
+    root = Path(windows_vm.__file__).resolve().parent
+    entry_b64 = base64.b64encode((root / "entrypoint.sh").read_bytes()).decode()
+    rpc_b64 = base64.b64encode((root / "rpc_server.py").read_bytes()).decode()
+
+    writes = [c for c in calls if "base64 -d" in c[0][2]]
+    assert len(writes) == 2
+    commands = [c[0][2] for c in writes]
+    assert any(entry_b64 in cmd and "/sandbox/entrypoint.sh" in cmd for cmd in commands)
+    assert any(rpc_b64 in cmd and "/sandbox/rpc_server.py" in cmd for cmd in commands)
+
+    chmod = [c for c in calls if "chmod +x" in c[0][2]]
+    assert len(chmod) == 1
+
+
+def test_start_entrypoint_passes_boot_mode_env():
+    """Given boot_mode, the entrypoint exec carries the BOOT_MODE env var."""
+    captured = {}
+    handle = object()
+
+    class _FakeSandbox:
+        def exec(self, *args, **kwargs):
+            captured["args"] = args
+            captured["kwargs"] = kwargs
+            return handle
+
+    result = windows_vm.start_entrypoint(_FakeSandbox(), boot_mode="install")
+
+    assert result is handle
+    assert captured["args"] == ("bash", "/sandbox/entrypoint.sh")
+    assert captured["kwargs"] == {"env": {"BOOT_MODE": "install"}}
+
+
+def test_start_entrypoint_defaults_to_boot_mode():
+    """Given no boot_mode, the entrypoint runs with BOOT_MODE=boot."""
+    captured = {}
+
+    class _FakeSandbox:
+        def exec(self, *args, **kwargs):
+            captured["kwargs"] = kwargs
+            return object()
+
+    windows_vm.start_entrypoint(_FakeSandbox())
+    assert captured["kwargs"] == {"env": {"BOOT_MODE": "boot"}}
+
+
+def test_start_entrypoint_rejects_unknown_mode():
+    """Given an invalid boot_mode, start_entrypoint raises ValueError."""
+    with pytest.raises(ValueError):
+        windows_vm.start_entrypoint(object(), boot_mode="warp")
