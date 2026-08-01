@@ -5,6 +5,9 @@ env/
 ENV/
 docs/
 .omo/
+.sisyphus/
+HANDOFF_CONTEXT.md
+MODAL_KNOWLEDGE.md
 
 *.pyc
 *.pyo
