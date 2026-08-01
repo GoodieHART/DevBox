@@ -33,6 +33,7 @@ def test_create_windows_sandbox_kwargs_exact(monkeypatch):
         "cpu": 4,
         "memory": 8192,
         "timeout": 7200,
+        "region": None,
         "experimental_options": {"vm_runtime": True},
         "unencrypted_ports": [3389],
         "encrypted_ports": [6080, 8765],
@@ -56,6 +57,25 @@ def test_create_windows_sandbox_rejects_unknown_boot_mode(monkeypatch):
         windows_vm.create_windows_sandbox(_AppRef(), boot_mode="warp")
 
     assert called is False
+
+
+def test_create_windows_sandbox_passes_region(monkeypatch):
+    """Given a region, Sandbox.create receives it unchanged (None default otherwise)."""
+    created = {}
+
+    def fake_create(**kwargs):
+        created["kwargs"] = kwargs
+        return object()
+
+    monkeypatch.setattr(windows_vm.modal.Sandbox, "create", staticmethod(fake_create))
+    monkeypatch.setattr(windows_vm, "windows_vm_image", lambda: "fake-image")
+
+    windows_vm.create_windows_sandbox(_AppRef(), boot_mode="install", region="aws-eu-west-1")
+    assert created["kwargs"]["region"] == "aws-eu-west-1"
+
+    created.clear()
+    windows_vm.create_windows_sandbox(_AppRef())
+    assert created["kwargs"]["region"] is None
 
 
 def test_probe_kvm_returns_stdout_stripped():

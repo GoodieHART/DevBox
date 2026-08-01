@@ -20,7 +20,9 @@ from images import windows_vm_image
 WINDOWS_VOLUME = modal.Volume.from_name("windows-vm-data", create_if_missing=True)
 
 
-def create_windows_sandbox(app_ref, boot_mode: str = "boot") -> modal.Sandbox:
+def create_windows_sandbox(
+    app_ref, boot_mode: str = "boot", region: str | list[str] | None = None
+) -> modal.Sandbox:
     """
     Create a Modal VM sandbox running the Windows VM (QEMU/KVM).
 
@@ -29,6 +31,9 @@ def create_windows_sandbox(app_ref, boot_mode: str = "boot") -> modal.Sandbox:
         boot_mode: "boot" to boot from the saved disk, "install" for a
             fresh unattended install. Consumed by the entrypoint launcher
             (todo 5), not by the sandbox create call itself.
+        region: Modal region(s) to run the sandbox in (e.g. "aws-us-east-1").
+            None = platform default. Useful because /dev/kvm availability in
+            VM sandboxes varies by region.
 
     Returns:
         modal.Sandbox: the running VM sandbox.
@@ -46,6 +51,7 @@ def create_windows_sandbox(app_ref, boot_mode: str = "boot") -> modal.Sandbox:
         cpu=WINDOWS_VM_CFG["cpu"],
         memory=WINDOWS_VM_CFG["memory"],
         timeout=WINDOWS_VM_CFG["timeout"],
+        region=region,
         experimental_options={"vm_runtime": True},  # VM sandbox -> /dev/kvm
         unencrypted_ports=[ports["rdp"]],  # raw TCP — RDP cannot use TLS relay
         encrypted_ports=[ports["novnc"], ports["rpc"]],  # HTTPS relay
