@@ -9,6 +9,8 @@ tests/test_windows_vm.py.
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 import urllib.error
 
 import pytest
@@ -140,16 +142,38 @@ def test_resolve_image_index_uses_runner():
 
 
 def test_resolve_image_index_default_runner_is_regular_container(monkeypatch):
-    """Given no runner, the regular-container wiminfo probe is used (no KVM)."""
+    """Given no runner, the default path goes through probe_wiminfo.probe (no KVM)."""
     captured = []
 
-    def fake_runner():
+    def fake_probe():
         captured.append(True)
         return WIMINFO_SAMPLE
 
-    monkeypatch.setattr(windows_vm, "_default_wiminfo_runner", fake_runner)
+    monkeypatch.setattr(windows_vm.probe_wiminfo, "probe", fake_probe)
     assert windows_vm.resolve_image_index() == 2
     assert captured == [True]
+
+
+def test_probe_wiminfo_module_is_self_contained():
+    """The probe module imports ONLY stdlib + modal — no repo modules at module level.
+
+    Regression test for the container crash: the probe image mounts only
+    probe_wiminfo (named add_local_python_source), so importing repo modules
+    (config/images/install_files) here would ModuleNotFoundError in the
+    worker container at import time.
+    """
+    code = (
+        "import probe_wiminfo, sys; "
+        "assert 'config' not in sys.modules, 'config leaked'; "
+        "assert 'images' not in sys.modules, 'images leaked'; "
+        "assert 'install_files' not in sys.modules, 'install_files leaked'; "
+        "print('CLEAN')"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=60,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "CLEAN" in result.stdout
 
 
 # ---------------------------------------------------------------------------
@@ -290,7 +314,9 @@ def test_install_windows_orchestration_order(fake_clock):
 
 def test_install_windows_resolves_index_when_not_given(fake_clock, monkeypatch):
     """Given no index, install_windows resolves it via the wiminfo runner."""
-    monkeypatch.setattr(windows_vm, "_default_wiminfo_runner", lambda: WIMINFO_SAMPLE)
+    monkeypatch.setattr(
+        windows_vm.probe_wiminfo, "probe", lambda: WIMINFO_SAMPLE
+    )
     vm = _FakeVM(statuses=("installing",), frames=(b"a" * 12000, b"b" * 12000))
     result = windows_vm.install_windows(vm, timeout=600, poll_interval=10)
     assert result.saw_installing is True

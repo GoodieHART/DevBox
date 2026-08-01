@@ -6,11 +6,12 @@ upload, unattended-install orchestration (todo 8), RDP tunnel, idle
 monitor, and connection-info printing.
 
 Todo 8 install orchestration is KVM-INDEPENDENT by design: the image index
-is resolved via ``wiminfo`` in a REGULAR Modal function container (no VM
-sandbox, no /dev/kvm), autounattend.xml is delivered over RPC /write-file,
-and the UEFI navigation + setup polling only speak to the in-sandbox RPC
-server. The live boot gate (VM sandbox + /dev/kvm) is deferred until the
-account has nested virtualization (see task-8 evidence).
+is resolved via ``wiminfo`` in a REGULAR Modal function container (see the
+self-contained probe_wiminfo.py — no VM sandbox, no /dev/kvm),
+autounattend.xml is delivered over RPC /write-file, and the UEFI navigation
++ setup polling only speak to the in-sandbox RPC server. The live boot gate
+(VM sandbox + /dev/kvm) is deferred until the account has nested
+virtualization (see task-8 evidence).
 
 Adapted from modal-projects/windows-sandboxes (MIT license):
 https://github.com/modal-projects/windows-sandboxes/blob/main/sandbox.py
@@ -21,7 +22,6 @@ from __future__ import annotations
 import base64
 import dataclasses
 import json
-import subprocess
 import time
 import urllib.error
 import urllib.request
@@ -30,6 +30,7 @@ from pathlib import Path
 import modal
 from modal.container_process import ContainerProcess
 
+import probe_wiminfo
 from config import WINDOWS_VM_CFG
 from images import windows_vm_image
 from install_files.autounattend import PRODUCT_KEY, build_autounattend
@@ -150,50 +151,15 @@ def start_entrypoint(sb: modal.Sandbox, boot_mode: str = "boot") -> ContainerPro
 # ---------------------------------------------------------------------------
 # Todo 8 — image-index resolution (KVM-independent: regular container)
 # ---------------------------------------------------------------------------
-#: Modal app hosting the KVM-independent probe functions (kebab-case per AGENTS.md).
-app = modal.App("windows-vm-rdp")
+# The wiminfo probe itself lives in probe_wiminfo.py — a self-contained
+# module importing ONLY stdlib + modal, mounted into its own image via a
+# NAMED add_local_python_source("probe_wiminfo"). (windows_vm_image() ends
+# with a NO-ARG add_local_python_source, which mounts nothing — importing
+# this module's repo deps inside that image would crash the container.)
 
 #: wiminfo edition name to resolve (the single-edition IoT LTSC 2024 DVD
 #: commonly indexes at 1; multi-edition media index it higher — never hardcode).
 IOT_LTSC_EDITION = "Windows 11 IoT Enterprise LTSC 2024"
-
-
-@app.function(
-    image=windows_vm_image(),
-    volumes={"/vol": WINDOWS_VOLUME},
-    timeout=1800,
-    cpu=1,
-    memory=1024,
-)
-def _wiminfo_probe() -> str:
-    """Run ``wiminfo /vol/isos/windows.iso`` in a REGULAR Modal container.
-
-    wimlib >= 1.13 (Debian ``wimtools``, in the VM image) reads the WIM
-    inside the ISO image directly. A regular function container needs no VM
-    sandbox and no /dev/kvm — this is the todo 8 precondition probe.
-
-    Returns:
-        str: the raw wiminfo stdout.
-
-    Raises:
-        RuntimeError: if wiminfo fails (missing ISO, corrupt WIM, ...).
-    """
-    result = subprocess.run(
-        ["wiminfo", "/vol/isos/windows.iso"],
-        capture_output=True, text=True, timeout=900,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"wiminfo failed (rc={result.returncode}): "
-            f"{(result.stderr or result.stdout).strip()}"
-        )
-    return result.stdout
-
-
-def _default_wiminfo_runner() -> str:
-    """Default wiminfo runner: the regular-container probe (module-level so
-    tests can monkeypatch it without invoking Modal)."""
-    return _wiminfo_probe.remote()
 
 
 def parse_wiminfo_index(stdout: str) -> int:
@@ -228,32 +194,22 @@ def parse_wiminfo_index(stdout: str) -> int:
 def resolve_image_index(runner=None) -> int:
     """Resolve the IoT LTSC 2024 image index from the ISO on the volume.
 
-    KVM-INDEPENDENT: by default runs wiminfo in a REGULAR modal function
-    container (windows_vm_image + the windows-vm-data volume at /vol) — no VM
-    sandbox, no /dev/kvm. Requires the ISO to have been uploaded first (T2
-    CLI: download + both ``modal volume put`` commands).
+    KVM-INDEPENDENT: by default runs wiminfo via ``probe_wiminfo.probe`` — a
+    REGULAR modal function container (self-contained module + the
+    windows-vm-data volume at /vol) — no VM sandbox, no /dev/kvm. Requires
+    the ISO to have been uploaded first (T2 CLI: download + both ``modal
+    volume put`` commands).
 
     Args:
         runner: optional callable returning wiminfo stdout (tests inject a
-            fake; production uses the default regular-container probe).
+            fake; production uses probe_wiminfo.probe).
 
     Returns:
         int: the resolved image index.
     """
     if runner is None:
-        runner = _default_wiminfo_runner
+        runner = probe_wiminfo.probe
     return parse_wiminfo_index(runner())
-
-
-@app.local_entrypoint()
-def probe_image_index() -> None:
-    """CLI probe: resolve + print the ISO's IoT LTSC 2024 image index.
-
-    ``modal run windows_vm.py`` — must use @app.local_entrypoint() (modal
-    1.5.3 ignores bare ``__main__``/``app.run()`` blocks).
-    """
-    index = resolve_image_index()
-    print(f"RESOLVED_IMAGE_INDEX={index}")
 
 
 # ---------------------------------------------------------------------------
