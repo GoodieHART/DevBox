@@ -11,6 +11,7 @@
 - [Prerequisites](#prerequisites)
 - [Setup](#setup)
 - [Connecting](#connecting)
+- [Windows VM (RDP)](#windows-vm-rdp)
 - [Important Notes](#important-notes)
 - [Troubleshooting](#troubleshooting)
 - [Architecture](#architecture)
@@ -151,7 +152,7 @@ The script launches a general-purpose DevBox, a Debian environment with essentia
 
 ## Launcher Options
 
-When you run `modal run devbox.py`, you'll be presented with 7 DevBox configurations. Here's what each one does:
+When you run `modal run devbox.py`, you'll be presented with 8 DevBox configurations. Here's what each one does:
 
 ### 1. 🛠️ Standard DevBox
 
@@ -229,6 +230,16 @@ Comes with **Volatility3** and symbol files for Windows, Linux, and macOS pre-in
 **Best for:** CTF challenges, incident response, malware analysis, digital forensics investigations.
 
 **Resources:** 0.5 vCPU / 1GB RAM
+
+---
+
+### 9. 🪟 Windows VM (RDP)
+
+A real **Windows 11 IoT Enterprise LTSC 2024** desktop via QEMU/KVM, running inside a Modal VM sandbox. The first run downloads the ISO and installs Windows automatically (~30-45 min for the install and image build); your disk lives on a persistent volume, so later launches boot straight to your saved desktop.
+
+**Best for:** Running real Windows apps, GUI-heavy Windows workflows, testing software in a genuine Windows environment.
+
+**Resources:** 4 vCPU / 8 GiB sandbox allocation · the Windows guest VM sees 4 GB RAM · auto-shutdown after 30 min idle
 
 ## GPU Options
 
@@ -338,6 +349,31 @@ Use those credentials with an RDP client:
 | **macOS** | [Microsoft Remote Desktop](https://apps.apple.com/app/microsoft-remote-desktop/id1295203466) (App Store) |
 | **Linux** | [Remmina](https://remmina.org/) |
 
+### RDP (Windows VM)
+
+The Windows VM prints its connection details once the guest is ready:
+
+```
+============================================================
+🪟 Your Windows VM is ready!
+============================================================
+
+📡 RDP Address: <host>:<port>
+👤 Username: Administrator
+🔑 Password: Devbox123!
+
+============================================================
+```
+
+Use those credentials with an RDP client:
+
+| Platform | Recommended Client |
+|----------|-------------------|
+| **Android/iOS** | Haven SSH Client, aRDP, or Windows App |
+| **Windows** | Built-in Remote Desktop (`mstsc.exe`) |
+| **macOS** | [Microsoft Remote Desktop](https://apps.apple.com/app/microsoft-remote-desktop/id1295203466) (App Store) |
+| **Linux** | [Remmina](https://remmina.org/) |
+
 ### WebUI (llama.cpp Research Center)
 
 The llama.cpp Research Center includes a built-in **WebUI** — a browser-based chat interface powered by llama-server's SvelteKit frontend. Once ready, you'll see:
@@ -381,6 +417,52 @@ Set-Alias -Name devbox -Value Start-DevBox
 ```
 
 Remember to replace `C:\path\to\your\DevBox\devbox.py` with the actual path to your `devbox.py` file. After saving, restart PowerShell or run `. $profile`.
+
+## Windows VM (RDP)
+
+Option 9 spins up a real **Windows 11 IoT Enterprise LTSC 2024** desktop in a Modal VM sandbox (hardware-accelerated QEMU/KVM). There are a couple of one-time steps before your first launch.
+
+### Prerequisites
+
+- The **Modal CLI** installed and configured:
+
+  ```bash
+  pip install modal
+  modal setup
+  ```
+
+- A **Modal account** (you already have one if you've used any other DevBox).
+
+### One-Time ISO Setup
+
+The Windows ISO comes from the **massgrave.dev** ecosystem. It's downloaded on your machine first, then uploaded to Modal storage. The download command verifies the SHA-256 checksum and writes the `.sha256` file for you.
+
+**Step 1 — Download the ISO** (the filename and checksum rotate upstream, so this resolves them for you; or grab the current links from the [massgrave.dev](https://massgrave.dev/) docs and skip to Step 2):
+
+```bash
+python windows_iso.py download --out isos/
+```
+
+**Step 2 — Upload the ISO and its checksum to the `windows-vm-data` volume** (exactly what the download command prints):
+
+```bash
+modal volume put windows-vm-data isos/en-us_windows_11_iot_enterprise_ltsc_2024_x64_dvd_f6b14814.iso /isos/windows.iso
+modal volume put windows-vm-data isos/en-us_windows_11_iot_enterprise_ltsc_2024_x64_dvd_f6b14814.iso.sha256 /isos/windows.iso.sha256
+```
+
+> **Heads up:** the ISO is never committed to git. `isos/` is gitignored.
+
+Then pick **option 9** from the launcher. The first run installs Windows automatically (expect ~30-45 minutes for the install and image build); later launches boot straight to your saved desktop from the persisted disk.
+
+### Cost
+
+Roughly **$0.76/hour** while the VM is running, and it auto-shuts down after **30 minutes** without RDP activity, so you only pay for time you actually use. See [modal.com/pricing](https://modal.com/pricing) for current rates.
+
+### Caveats
+
+- **Experimental:** the Windows VM runs on Modal's VM sandbox feature, which is experimental and may behave differently than regular DevBox containers.
+- **No activation:** Windows is installed unactivated. The embedded KMS GVLK key lets Setup complete, but no activation is performed.
+- **No GPU:** CPU-only, like the other boxes.
 
 ## Important Notes
 
