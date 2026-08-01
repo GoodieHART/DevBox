@@ -132,15 +132,22 @@ def _windows_boot_mode(volume: modal.Volume) -> str | None:
         "boot" when the saved disk exists, "install" when only the ISO
         exists, None when neither (the caller prints the ISO-setup steps).
     """
+    # NOTE: listdir() returns entry paths WITHOUT a leading slash, relative
+    # to the VOLUME ROOT even for subdirectory listings (verified live on
+    # modal 1.5.3: listdir("/") -> ["windows-disk.qcow2"], listdir("/isos")
+    # -> ["isos/windows.iso"]). Normalize to basenames so the predicate is
+    # robust to either slash convention.
     try:
-        root = {entry.path for entry in volume.listdir("/")}
-        if "/windows-disk.qcow2" in root:
+        root = {os.path.basename(entry.path) for entry in volume.listdir("/")}
+        if "windows-disk.qcow2" in root:
             return "boot"
-        if "/isos/windows.iso" in {entry.path for entry in volume.listdir("/isos")}:
+        isos = {os.path.basename(entry.path) for entry in volume.listdir("/isos")}
+        if "windows.iso" in isos:
             return "install"
     except Exception:
-        # Empty/not-yet-created volume or transient listing failure — nothing
-        # to boot or install.
+        # Empty/not-yet-created volume or transient listing failure (incl.
+        # listdir("/isos") raising when the dir doesn't exist) — nothing to
+        # boot or install.
         return None
     return None
 
