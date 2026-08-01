@@ -76,6 +76,15 @@ LLAMACPP_GPU_DEVBOX_ARGS = {
 # llama.cpp idle timeout (separate from container timeout)
 LLAMACPP_IDLE_TIMEOUT = 3600  # 1 hour idle
 
+# Windows VM (RDP) resource arguments (Modal VM sandbox — CPU only)
+WINDOWS_VM_CFG = {
+    "cpu": 4,
+    "memory": 8192,
+    "timeout": 7200,  # 2 hours max runtime
+    "idle_timeout": 1800,  # 30 minutes idle
+    "ports": {"rdp": 3389, "novnc": 6080, "rpc": 8765},
+}
+
 # Package groups for reusable configurations
 CORE_DEV_PACKAGES = [
     "openssh-server",

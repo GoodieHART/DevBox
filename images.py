@@ -284,3 +284,24 @@ forensic_analysis_image =  (
     )
     .add_local_file(os.path.join(_IMAGES_DIR, "quotes.json"), "/etc/quotes.json")
 )
+
+def windows_vm_image():
+    """
+    Create the Windows VM image with the QEMU/KVM stack and helper tools.
+
+    Provides the full toolchain for the Windows VM (RDP) sandbox: QEMU/KVM
+    system emulation, OVMF UEFI firmware, disk/ISO utilities (wimtools,
+    dosfstools, mtools), swtpm, and the noVNC web frontend (websockify).
+
+    Returns:
+        modal.Image: Windows VM image
+    """
+    return (
+        modal.Image.debian_slim(python_version="3.12")
+        .apt_install(
+            "qemu-system-x86", "qemu-utils", "ovmf", "kmod", "socat",
+            "wget", "dosfstools", "mtools", "wimtools", "swtpm",
+            "novnc", "python3-websockify",
+        )
+        .add_local_python_source()
+    )
