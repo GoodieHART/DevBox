@@ -1,13 +1,15 @@
 import modal
 import random
 import platform
+import os
 
 from images import (
     standard_devbox_image, cuda_devbox_image, doc_processing_image,
-    assisted_coding_image, llm_playroom_image, llamacpp_cpu_image, rdp_devbox_image, forensic_analysis_image
+    assisted_coding_image, llm_playroom_image, llamacpp_cpu_image, rdp_devbox_image, forensic_analysis_image,
+    windows_vm_image
 )
 from shared_runtime import run_devbox_shared, run_rdp_devbox_shared
-from config import get_resource_config, LLAMACPP_DEVBOX_ARGS, LLAMACPP_GPU_DEVBOX_ARGS, LLAMACPP_IDLE_TIMEOUT
+from config import get_resource_config, LLAMACPP_DEVBOX_ARGS, LLAMACPP_GPU_DEVBOX_ARGS, LLAMACPP_IDLE_TIMEOUT, WINDOWS_VM_CFG
 
 
 app = modal.App(
@@ -100,6 +102,116 @@ def launch_llm_playroom():
 def launch_forensics_image():
   """ Launches A Forensic Analysis Machine With Volatilty3 pre-installed. """
   run_devbox_shared(extra_packages=None, devbox_type="forensic_analysis")
+
+# ---------------------------------------------------------------------------
+# Windows VM (RDP) — option 9 (plan todo 11)
+# ---------------------------------------------------------------------------
+# Launcher image for the launch_windows_vm function container. windows_vm_image()
+# ends with a NO-ARG add_local_python_source() which mounts NOTHING (verified on
+# modal 1.5.3 — the T8 probe bug class), so this COMPOSES a NAMED mount of every
+# repo module the function body imports (windows_vm -> config/images/install_files/
+# probe_wiminfo). The VM sandbox itself still uses the plain windows_vm_image()
+# inside create_windows_sandbox — untouched.
+_windows_vm_launcher_image = windows_vm_image().add_local_python_source(
+    "windows_vm", "config", "images", "install_files", "probe_wiminfo"
+)
+
+
+def _windows_boot_mode(volume: modal.Volume) -> str | None:
+    """BOOT-MODE PREDICATE (B1): key on DISK presence, NEVER ISO presence.
+
+    install iff ``/vol/windows-disk.qcow2`` is ABSENT (and the ISO present);
+    otherwise boot. The ISO persists on the volume, so keying on it would
+    reinstall Windows on every launch. Uses the volume filesystem API
+    (``listdir`` — a live cloud call that auto-hydrates the handle; no mount).
+
+    Args:
+        volume: the ``windows-vm-data`` Volume handle.
+
+    Returns:
+        "boot" when the saved disk exists, "install" when only the ISO
+        exists, None when neither (the caller prints the ISO-setup steps).
+    """
+    try:
+        root = {entry.path for entry in volume.listdir("/")}
+        if "/windows-disk.qcow2" in root:
+            return "boot"
+        if "/isos/windows.iso" in {entry.path for entry in volume.listdir("/isos")}:
+            return "install"
+    except Exception:
+        # Empty/not-yet-created volume or transient listing failure — nothing
+        # to boot or install.
+        return None
+    return None
+
+
+@app.function(
+    image=_windows_vm_launcher_image,
+    cpu=WINDOWS_VM_CFG["cpu"],
+    memory=WINDOWS_VM_CFG["memory"],
+    timeout=WINDOWS_VM_CFG["timeout"],
+)
+def launch_windows_vm():
+    """Launches the Windows 11 IoT LTSC 2024 VM (RDP) in a Modal VM sandbox.
+
+    First run installs Windows unattended from the ISO on the volume
+    (~30-45 min install ETA); later runs boot straight from the persisted
+    disk (install skipped). Prints connection info and runs the 30-min idle
+    auto-shutdown loop — those land in windows_vm.py in todos 10/12 and are
+    wired here via getattr with the real call shapes, so this flow works
+    standalone until they ship (live dispatch QA is todo 12/14).
+    """
+    # Dry-run guard (M3): FIRST line — never create a sandbox when set.
+    # main() ALSO checks this locally: modal 1.5.3 does not reliably
+    # propagate client shell env vars into cloud function containers, so the
+    # acceptance "no sandbox created" is guaranteed in both places.
+    if os.environ.get("WINDOWS_VM_DRY_RUN"):
+        print("WINDOWS_VM_DRY_RUN: launching windows VM (no sandbox created)")
+        return
+
+    import windows_vm  # lazy import — mounted via _windows_vm_launcher_image
+
+    boot_mode = _windows_boot_mode(windows_vm.WINDOWS_VOLUME)
+    if boot_mode is None:
+        print("❌ No Windows disk or ISO found on the windows-vm-data volume.")
+        print("   First launch needs the ISO: python windows_iso.py download --out isos/")
+        print("   then run the two 'modal volume put' commands it prints (see README).")
+        return
+
+    if boot_mode == "install":
+        print("⏰ First run: unattended Windows install — ~30-45 min (install ETA).")
+    else:
+        print("💾 Saved disk found — booting Windows (install skipped).")
+
+    sb = windows_vm.create_windows_sandbox(app, boot_mode=boot_mode)
+    try:
+        windows_vm.upload_runtime_files(sb)
+        entrypoint = windows_vm.start_entrypoint(sb, boot_mode=boot_mode)
+
+        # T10 integration point: windows_vm.print_connection_info(sb) — lands
+        # in todo 10; wired with the real call shape so T10 only fills the
+        # function in windows_vm.py (getattr keeps this flow standalone).
+        print_connection_info = getattr(windows_vm, "print_connection_info", None)
+        if print_connection_info is not None:
+            print_connection_info(sb)
+        else:
+            print("ℹ️  Connection info will print here once "
+                  "windows_vm.print_connection_info ships (todo 10).")
+
+        # T12 integration point: windows_vm.idle_monitor(sb) — same wiring;
+        # blocks until the guest powers down after 30-min idle, then the
+        # sandbox terminates.
+        idle_monitor = getattr(windows_vm, "idle_monitor", None)
+        if idle_monitor is not None:
+            idle_monitor(sb)
+        else:
+            print("ℹ️  Idle auto-shutdown will run here once "
+                  "windows_vm.idle_monitor ships (todo 12).")
+            # Hold until the entrypoint exits so the launcher stays alive
+            # with the VM (sandbox auto-terminates on entrypoint exit).
+            entrypoint.wait()
+    finally:
+        sb.terminate()
 
 # llama.cpp Research Center - Curated Model Catalog
 LLAMACPP_MODELS = {
@@ -634,11 +746,13 @@ def main():
 
     8. 🚀 llama.cpp Research Center (GPU)
     GPU-accelerated inference + 32K context + T4 GPU
+
+    9. 🪟 Windows VM (RDP) - Windows 11 IoT LTSC 2024 via QEMU/KVM
     """
     create_box(menu_box, "🚀 LAUNCH OPTIONS")
     
     try:
-      choice = input("Enter your choice (1-8): ").strip()
+      choice = input("Enter your choice (1-9): ").strip()
     except EOFError:
       print("\nNo input received. Exiting.")
       return
@@ -876,6 +990,23 @@ def main():
         show_spinner("Preparing GPU-accelerated environment", 3)
         launch_llamacpp_playroom_gpu.remote()
 
+    elif choice == "9":
+        windows_box = """
+        🪟 Launching Windows VM (RDP)...
+        🖥️  Windows 11 IoT Enterprise LTSC 2024 via QEMU/KVM
+        ⏰ First run: ~30-45 min unattended install (then boots from disk)
+        """
+        create_box(windows_box, "🪟 WINDOWS VM (RDP)")
+        # Dry-run safety (T11): modal 1.5.3 does not reliably propagate
+        # client shell env vars into cloud containers — guard HERE (local)
+        # as well as inside launch_windows_vm so the acceptance "no sandbox
+        # created" holds even if the function-body guard never executes.
+        if os.environ.get("WINDOWS_VM_DRY_RUN"):
+            print("WINDOWS_VM_DRY_RUN: launching windows VM (no sandbox created)")
+            return
+        show_spinner("Preparing Windows VM", 3)
+        launch_windows_vm.remote()
+
     else:
         error_box = """
         ❌ Invalid choice selected.
@@ -888,5 +1019,6 @@ def main():
         • 6 for llama.cpp Research Center (CPU)
         • 7 for Forensics Machine
         • 8 for llama.cpp Research Center (GPU)
+        • 9 for Windows VM (RDP)
         """
         create_box(error_box, "❌ ERROR")
