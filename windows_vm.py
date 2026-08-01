@@ -227,8 +227,8 @@ class WindowsVMClient:
     The base_url is the Modal tunnel URL for port 8765 (``encrypted_ports``
     relay: TLS terminates at the Modal edge, the server speaks plaintext —
     see rpc_server.py docstring). Endpoints used by the install
-    orchestration: GET /status, GET /screenshot, GET /health, POST
-    /write-file, POST /sendkey, POST /type.
+    orchestration and idle monitor: GET /status, GET /screenshot, GET
+    /health, POST /write-file, POST /sendkey, POST /type, POST /hmp.
     """
 
     def __init__(self, base_url: str, timeout: float = 15.0):
@@ -298,6 +298,15 @@ class WindowsVMClient:
             return self._request("GET", "/screenshot")
         except RpcError:
             return None
+
+    def hmp(self, command: str) -> dict:
+        """POST /hmp: send one HMP command (e.g. 'system_powerdown').
+
+        Matches rpc_server.py's /hmp contract: ``{"command": ...}`` in,
+        ``{"result": ...}`` out. Used by the idle monitor to request a
+        graceful ACPI shutdown of the guest.
+        """
+        return json.loads(self._request("POST", "/hmp", {"command": command}))
 
 
 def rpc_client_for_sandbox(sb) -> WindowsVMClient:
@@ -539,3 +548,164 @@ def install_windows(vm, *, index: int | None = None,
     deliver_autounattend(vm, index)
     navigate_uefi_boot(vm)
     return wait_for_setup(vm, timeout=timeout, poll_interval=poll_interval)
+
+
+# ---------------------------------------------------------------------------
+# Todo 12 — idle monitor + auto-shutdown (KVM-independent portion)
+# ---------------------------------------------------------------------------
+# Auto-shutdown after ``idle_timeout`` (30 min default = 1800, NOT the SSH
+# boxes' 300) without active RDP sessions. RDP activity is counted
+# SANDBOX-SIDE via ``ss -tn state established '( sport = :3389 )'`` (Metis
+# B2): ESTABLISHED sockets on the hostfwd port are live RDP sessions; no
+# guest command execution, no guest-side netstat.
+
+#: RDP port on the sandbox (QEMU hostfwd target; ``ss`` filters on this sport).
+RDP_PORT = WINDOWS_VM_CFG["ports"]["rdp"]
+#: Idle-monitor poll cadence (seconds).
+IDLE_POLL_INTERVAL = 60
+#: Graceful-shutdown cap: /status must reach 'stopped' within this window
+#: (the entrypoint keeps the sandbox alive ~10s after QEMU exits).
+SHUTDOWN_TIMEOUT_SECONDS = 120
+#: /status poll interval while waiting for the graceful shutdown to land.
+SHUTDOWN_POLL_INTERVAL = 5
+
+
+def count_rdp_connections(stdout: str) -> int:
+    """Count ESTABLISHED RDP (port 3389) connections in ``ss -tn`` output.
+
+    ``ss -tn state established '( sport = :3389 )'`` prints one header line
+    (``State ...``) followed by one line per established connection; the
+    header is skipped and the remaining non-empty lines are counted.
+
+    Args:
+        stdout: raw ``ss`` output (str — matches sb.exec stdout typing).
+
+    Returns:
+        int: the number of established RDP connections (0 for header-only
+        or empty output).
+    """
+    lines = [ln for ln in stdout.splitlines() if ln.strip()]
+    if lines and lines[0].strip().startswith("State"):
+        lines = lines[1:]
+    return len(lines)
+
+
+def _safe_status(client) -> str | None:
+    """GET /status, mapping RpcError to None (server gone / tunnel down)."""
+    try:
+        return client.get_status()
+    except RpcError:
+        return None
+
+
+def _rdp_ss_stdout(sb) -> str:
+    """Run the sandbox-side ``ss`` RDP probe and return its stdout.
+
+    Metis B2: the connection check runs in the SANDBOX (never in the guest);
+    ESTABLISHED sockets on the hostfwd port are live RDP sessions.
+    """
+    proc = sb.exec("bash", "-c", f"ss -tn state established '( sport = :{RDP_PORT} )'")
+    return proc.stdout.read()
+
+
+def _graceful_powerdown(client, sb) -> bool:
+    """HMP system_powerdown, then wait for /status 'stopped' (bounded).
+
+    Must NOT terminate before the graceful attempt: the guest gets
+    SHUTDOWN_TIMEOUT_SECONDS to honour the ACPI powerdown. When 'stopped'
+    is observed the entrypoint exits 0 and the sandbox terminates on its
+    own; only a guest that ignores ACPI gets ``sb.terminate()``.
+
+    Args:
+        client: RPC client with ``hmp(command)`` and ``get_status()``.
+        sb: the sandbox (terminate fallback).
+
+    Returns:
+        bool: True when 'stopped' was observed (no forced termination).
+    """
+    client.hmp("system_powerdown")
+    print("[idle] system_powerdown sent — waiting for guest to power off")
+    deadline = time.monotonic() + SHUTDOWN_TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
+        if _safe_status(client) == "stopped":
+            print("[idle] guest powered down (status=stopped) — sandbox ends on its own")
+            return True
+        time.sleep(SHUTDOWN_POLL_INTERVAL)
+    print("[idle] guest ignored ACPI powerdown — terminating sandbox")
+    sb.terminate()
+    return False
+
+
+def idle_monitor(sb, idle_timeout: float = WINDOWS_VM_CFG["idle_timeout"]) -> None:
+    """Auto-shutdown the Windows VM after ``idle_timeout`` without RDP activity.
+
+    Loop cadence: IDLE_POLL_INTERVAL (60s). Each iteration reads /status,
+    then counts established RDP connections sandbox-side (``ss``). A
+    consecutive zero-connection streak of ``idle_timeout`` seconds (default
+    1800 = 30 min) triggers the graceful shutdown sequence:
+    POST /hmp ``system_powerdown`` -> poll /status for ``stopped`` (max
+    SHUTDOWN_TIMEOUT_SECONDS) -> on success return (the entrypoint exits 0
+    and the sandbox terminates on its own); on timeout the sandbox is
+    terminated as a fallback. Never powers down during an install session
+    (``installing``/``installed`` statuses) — install mode runs the
+    fixed-timeout flow (sandbox timeout) instead, and this loop only holds
+    the launcher alive with the VM (T11's entrypoint.wait() semantics).
+
+    Persistence semantics: relaunching with an existing
+    ``/vol/windows-disk.qcow2`` boots straight to Windows (no cdrom —
+    entrypoint.sh's contract, which never re-creates the disk); T11's
+    boot-mode predicate keys on DISK presence, never ISO presence. No code
+    here enforces that — the entrypoint owns it.
+
+    Args:
+        sb: the running VM sandbox (tunnels() for the RPC client, exec for
+            the ``ss`` probe, terminate() as the shutdown fallback).
+        idle_timeout: consecutive-zero-connection seconds before shutdown
+            (default 1800 — 30 min; config's 300 is the SSH boxes' timeout).
+
+    Returns:
+        None. Returns after a graceful powerdown, a spontaneous guest
+        shutdown, or when the RPC server becomes unreachable (sandbox
+        gone).
+    """
+    client = rpc_client_for_sandbox(sb)
+    # RPC server starts BEFORE QEMU (entrypoint contract) — bound the startup
+    # window so a just-started sandbox is never mistaken for a dead one.
+    client.wait_ready(timeout=120)
+    zero_since: float | None = None
+    saw_running = False
+    while True:
+        status = _safe_status(client)
+        if status is None:
+            return  # RPC server unreachable — sandbox is gone
+        if status == "stopped" and saw_running:
+            return  # QEMU exited on its own (guest powered off externally)
+        if status in ("installing", "installed"):
+            # Install session: never idle-powerdown (fixed-timeout flow
+            # governs); 'installed' events are defensive non-idle signals.
+            zero_since = None
+            print(f"[idle] install session (status={status}) — no idle powerdown")
+            time.sleep(IDLE_POLL_INTERVAL)
+            continue
+        if status == "running":
+            saw_running = True
+        # Boot mode ('running', or 'stopped' during QEMU startup):
+        try:
+            connections = count_rdp_connections(_rdp_ss_stdout(sb))
+        except Exception:  # noqa: BLE001 — a failing probe never counts as idle
+            print("[idle] ss probe failed — not counting as idle")
+            zero_since = None
+            time.sleep(IDLE_POLL_INTERVAL)
+            continue
+        if connections > 0:
+            zero_since = None
+            print(f"[idle] {connections} active RDP connection(s) — idle timer reset")
+        else:
+            if zero_since is None:
+                zero_since = time.monotonic()
+            elapsed = time.monotonic() - zero_since
+            if elapsed >= idle_timeout:
+                _graceful_powerdown(client, sb)
+                return
+            print(f"[idle] no RDP connections — shutdown in {idle_timeout - elapsed:.0f}s")
+        time.sleep(IDLE_POLL_INTERVAL)
