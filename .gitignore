@@ -15,3 +15,5 @@ docs/
 *.egg-info/
 dist/
 build/
+isos/
+*.qcow2
