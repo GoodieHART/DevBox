@@ -114,34 +114,36 @@ main() {
     esac
     echo "=== windows-vm entrypoint: BOOT_MODE=$MODE ==="
 
-    # (a) OVMF vars: persistent copy on the volume (code pflash is read-only).
+    # (a) KVM gate — production guardrail, no TCG fallback. Runs BEFORE any
+    # volume write so an abort on a KVM-less account leaves zero side effects
+    # (no orphaned disk that would flip the next launch to boot mode).
+    check_kvm || exit 1
+
+    # (b) OVMF vars: persistent copy on the volume (code pflash is read-only).
     if [ ! -f "$OVMF_VARS" ]; then
         echo "Copying OVMF vars to volume..."
         cp /usr/share/OVMF/OVMF_VARS_4M.fd "$OVMF_VARS"
     fi
 
-    # (b) Disk: create once; boot mode must never re-create it (persistence).
+    # (c) Disk: create once; boot mode must never re-create it (persistence).
     if [ ! -f "$DISK_PATH" ]; then
         echo "Creating 60G qcow2 disk..."
         qemu-img create -f qcow2 "$DISK_PATH" 60G
     fi
 
-    # (c) KVM gate — production guardrail, no TCG fallback.
-    check_kvm || exit 1
-
-    # (c2) Install mode only: SHA-256 gate before anything touches the ISO.
+    # (d) Install mode only: SHA-256 gate before anything touches the ISO.
     if [ "$MODE" = "install" ]; then
         echo "=== INSTALL MODE ==="
         verify_iso_sha256 "$ISO_PATH" "$SHA_FILE" || exit 1
     fi
 
-    # (f) RPC server FIRST so the client can /write-file the answer file while
+    # (e) RPC server FIRST so the client can /write-file the answer file while
     # QEMU is not yet running (todo 8 contract: XML lands before QEMU starts).
     echo "Starting RPC server (BOOT_MODE=$MODE) on :8765 ..."
     BOOT_MODE="$MODE" python3 "$RPC_SERVER" &
     echo "RPC server started."
 
-    # (e) noVNC web proxy (Debian novnc package ships /usr/share/novnc).
+    # (f) noVNC web proxy (Debian novnc package ships /usr/share/novnc).
     echo "Starting websockify (noVNC) on :6080 -> 127.0.0.1:5900 ..."
     websockify --web=/usr/share/novnc 0.0.0.0:6080 127.0.0.1:5900 >/tmp/websockify.log 2>&1 &
     echo "websockify started."
