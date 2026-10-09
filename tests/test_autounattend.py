@@ -143,6 +143,9 @@ def test_first_logon_commands_exactly_four_with_marker_last():
     assert MARKER_URL in marker
 
 
+@pytest.mark.skipif(
+    shutil.which("mcopy") is None, reason="mtools not installed on host"
+)
 def test_floppy_is_fat12_and_contains_autounattend_xml(tmp_path):
     """A built floppy is FAT12 and round-trips autounattend.xml verbatim."""
     xml_str = build_autounattend(1)

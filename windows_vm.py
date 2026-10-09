@@ -55,7 +55,7 @@ def create_windows_sandbox(
         boot_mode: "boot" to boot from the saved disk, "install" for a
             fresh unattended install. Consumed by the entrypoint launcher
             (todo 5), not by the sandbox create call itself.
-        region: Modal region(s) to run the sandbox in (e.g. "aws-us-east-1").
+        region: Modal region(s) to run the sandbox in (e.g. "us-east").
             None = platform default. Useful because /dev/kvm availability in
             VM sandboxes varies by region.
 
