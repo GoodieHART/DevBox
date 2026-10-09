@@ -90,7 +90,14 @@ hermes_image = (
         "git clone --depth 1 https://github.com/NousResearch/hermes-agent.git /opt/hermes-src",
         "cd /opt/hermes-src && HERMES_NIX_BUILD=1 python -m pip install -e '.[messaging,mcp,cron,cli]'",
     )
-    .pip_install("modal>=1.0.0,<2", "ruamel.yaml", "python-dotenv")
+    .pip_install(
+        "modal>=1.0.0,<2",
+        "ruamel.yaml",
+        "python-dotenv",
+        "requests",
+        "psutil",
+        "openai",
+    )
 )
 
 hermes_volume = modal.Volume.from_name(HERMES_VOLUME_NAME, create_if_missing=True)
@@ -223,9 +230,8 @@ def _wait_ready(port: int, path: str, attempts: int = 60) -> None:
     volumes={HERMES_HOME: hermes_volume},
     secrets=[hermes_env],
     timeout=86400,  # 24h platform cap; container recycles, state re-reads from volume
-    min_containers=1,  # keep warm (requires `modal deploy`, costs idle)
     max_containers=1,  # singleton: two gateways on one home corrupts state
-    scaledown_window=1200,
+    scaledown_window=600,
 )
 @modal.concurrent(max_inputs=1)
 @modal.web_server(PROXY_PORT)
