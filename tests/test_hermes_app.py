@@ -56,6 +56,7 @@ def test_single_port_proxy_layout():
     assert '"hermes", "gateway", "run"' in src
     assert '"hermes", "dashboard"' in src
     assert "--no-open" in src
+    assert "threading.Thread(target=supervise, daemon=True).start()" in src
 
 
 def test_source_installed_clean_image():
@@ -90,3 +91,8 @@ def test_no_proxy_auth_breaking_openai_clients():
     # Modal-Key headers would lock out stock OpenAI clients; the kwarg must
     # never be *enabled* (docstring may discuss it, code must not set it)
     assert "requires_proxy_auth=True" not in src
+
+
+def test_readiness_accepts_http_errors_below_500():
+    src = _source("hermes_app.py")
+    assert "socket.create_connection((\"127.0.0.1\", port), timeout=2)" in src

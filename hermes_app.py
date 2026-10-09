@@ -66,6 +66,7 @@ through the proxy -- plain HTTP views, sessions, and the OpenAI API work.
 
 import http.server
 import shutil
+import socket
 import subprocess
 import threading
 import time
@@ -85,9 +86,12 @@ app = modal.App(name="hermes-gateway")
 
 hermes_image = (
     modal.Image.debian_slim(python_version="3.11")
-    .apt_install("git")
+    .apt_install("git", "curl", "ca-certificates")
     .run_commands(
+        "curl -fsSL https://deb.nodesource.com/setup_22.x | bash -",
+        "apt-get install -y nodejs",
         "git clone --depth 1 https://github.com/NousResearch/hermes-agent.git /opt/hermes-src",
+        "cd /opt/hermes-src && npm install --workspace web && npm run build -w web",
         "cd /opt/hermes-src && HERMES_NIX_BUILD=1 python -m pip install -e '.[messaging,mcp,cron,cli]'",
     )
     .pip_install(
@@ -97,6 +101,8 @@ hermes_image = (
         "requests",
         "psutil",
         "openai",
+        "fastapi[standard]",
+        "snowballstemmer",
     )
 )
 
@@ -214,11 +220,8 @@ def start_proxy(port: int = PROXY_PORT):
 def _wait_ready(port: int, path: str, attempts: int = 60) -> None:
     for _ in range(attempts):
         try:
-            with urllib.request.urlopen(
-                f"http://127.0.0.1:{port}{path}", timeout=2
-            ) as resp:
-                if resp.status < 500:  # redirects (login gate) count as alive
-                    return
+            with socket.create_connection(("127.0.0.1", port), timeout=2):
+                return
         except Exception:
             pass
         time.sleep(2)
@@ -247,26 +250,22 @@ def gateway():
     )
     dash_proc = subprocess.Popen(
         ["hermes", "dashboard", "--host", "0.0.0.0",
-         "--port", str(DASH_PORT), "--no-open"],
+         "--port", str(DASH_PORT), "--skip-build", "--no-open"],
         env=env,
     )
     _wait_ready(GATEWAY_PORT, "/")
     _wait_ready(DASH_PORT, "/api/status")
 
-    proxy = start_proxy(PROXY_PORT)
-    try:
-        while True:  # supervise: either child dying recycles the container
+    start_proxy(PROXY_PORT)
+
+    def supervise() -> None:
+        while True:
             for name, proc in (("gateway", gw_proc), ("dashboard", dash_proc)):
                 code = proc.poll()
                 if code is not None:
-                    # 75 = supervisor-restart request; any exit relaunches
-                    # everything fresh on the replacement container.
                     raise RuntimeError(
                         f"Hermes {name} exited with code {code} -- recycling"
                     )
             time.sleep(5)
-    finally:
-        proxy.shutdown()
-        for proc in (gw_proc, dash_proc):
-            if proc.poll() is None:
-                proc.terminate()
+
+    threading.Thread(target=supervise, daemon=True).start()
