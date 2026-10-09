@@ -27,15 +27,17 @@ def _top_level_names(name):
 
 def test_hermes_app_structure():
     names = _top_level_names("hermes_app.py")
-    for expected in ("gateway", "route", "start_proxy", "app", "hermes_image", "dev_volume"):
+    for expected in ("gateway", "route", "start_proxy", "app", "hermes_image", "hermes_volume", "HERMES_VOLUME_NAME"):
         assert expected in names
 
 
-def test_shared_volume_not_new_volume():
+def test_dedicated_volume_isolated_from_devbox():
     src = _source("hermes_app.py")
-    assert 'DEV_VOLUME_NAME = "my-dev-volume"' in src
-    assert "Volume.from_name(DEV_VOLUME_NAME" in src
-    assert "/data/.hermes" in src  # Hermes confined to subtree, not volume root
+    assert 'HERMES_VOLUME_NAME = "hermes-home-volume"' in src
+    assert "Volume.from_name(HERMES_VOLUME_NAME" in src
+    assert "DEV_VOLUME_NAME" not in src  # old shared-volume constant gone
+    assert 'from_name("my-dev-volume")' not in src  # never binds DevBox storage
+    assert "/data/hermes-home" in src  # Hermes confined to subtree, not volume root
     assert "with_mount_options" not in src  # no mount-options API dependency
 
 

@@ -1,16 +1,16 @@
-"""Hermes gateway + dashboard as a SEPARATE Modal App sharing DevBox's volume.
+"""Hermes gateway + dashboard as a SEPARATE Modal App on its own volume.
 
 Why separate: Modal's unit of deployment is the App. Keeping Hermes out of
 ``devbox.py`` means DevBox boxes keep their own timeouts/idle kills while
 Hermes gets its own image, schedule, and stable web URL.
 
-Volume reuse: mounts the SAME ``my-dev-volume`` object DevBox uses
-(``modal.Volume.from_name("my-dev-volume")`` resolves to the identical volume,
-no duplication). Hermes state is confined to the ``.hermes/`` subtree via
-``HERMES_HOME=/data/.hermes`` so it never mixes with DevBox files at the
-volume root (``root_full_backup.tar.gz``, ``.config_persistence/``,
-``models/``). Plain whole-volume mount, so no version-sensitive mount-option
-API is needed.
+Dedicated volume: mounts its OWN ``hermes-home-volume`` object
+(``create_if_missing=True`` provisions it on first shell/deploy) -- deliberately
+NOT DevBox's ``my-dev-volume``. That shared volume's daemon began refusing
+``mkdir`` with ``EACCES`` (first on one subdir name, then spreading to fresh
+names), so Hermes keeps isolated storage. State lives at
+``HERMES_HOME=/data/hermes-home``. Plain whole-volume mount, so no
+version-sensitive mount-option API is needed.
 
 Docker-image provision used: ``modal.Image.from_registry`` (no Docker daemon
 involved -- Modal re-materializes the registry layers; see
@@ -35,21 +35,19 @@ Ops rules (read before deploy):
   Hermes Docker docs for shared data dirs).
 - SQLITE: set ``database.journal_mode: delete`` in the Hermes config. WAL
   needs co-located shm and is unsupported on network volumes.
-- CONCURRENCY WITH DEVBOX: DevBox boxes and this gateway share the volume
-  object. They touch disjoint paths (Hermes only writes under ``.hermes/``),
-  but Modal volumes are last-write-wins with no cross-container locking, so
-  avoid running a DevBox box that bulk-writes the volume at the same time as
-  the gateway is checkpointing state.
+- ISOLATION FROM DEVBOX: this app uses its own volume object, so DevBox
+  boxes (on ``my-dev-volume``) can never contend with the gateway --
+  no shared paths, no last-write-wins hazards across apps.
 - LIFECYCLE: ``modal deploy hermes_app.py`` (persistent URL). ``modal run``
   is ephemeral. Containers recycle at the 24h function cap; both processes
-  re-read ``.hermes/`` on boot (Telegram getUpdates resumes from stored
+  re-read ``hermes-home/`` on boot (Telegram getUpdates resumes from stored
   offset; Discord websocket reconnects).
 - NO ``requires_proxy_auth``: it demands Modal-Key/Modal-Secret headers that
   standard OpenAI clients cannot send. Auth stays at the app layer
   (``API_SERVER_KEY`` + dashboard basic auth below).
 
 First-time setup (one-off, before first deploy):
-    modal shell hermes_app.py   # then: HERMES_HOME=/data/.hermes hermes setup
+    modal shell hermes_app.py   # then: HERMES_HOME=/data/hermes-home hermes setup
 or create the ``hermes-env`` secret below and let the gateway start cold.
 
 Secrets: create ONE secret holding gateway + dashboard env:
@@ -79,8 +77,11 @@ import urllib.request
 
 import modal
 
-DEV_VOLUME_NAME = "my-dev-volume"  # SAME volume object DevBox mounts at /data
-HERMES_HOME = "/data/.hermes"  # Hermes subtree inside the shared volume
+HERMES_VOLUME_NAME = "hermes-home-volume"  # OWN volume object, NOT DevBox's my-dev-volume
+HERMES_HOME = "/data/hermes-home"  # Hermes subtree inside the dedicated volume
+# NOTE: deliberately not a dot-dir. /data/.hermes/cron became un-creatable
+# (persistent daemon-side EACCES on that exact name while siblings worked);
+# a fresh non-dot path sidesteps the poisoned state entirely.
 GATEWAY_PORT = 8642  # Hermes OpenAI-compatible API + health endpoint
 DASH_PORT = 9119  # Hermes web dashboard
 PROXY_PORT = 8000  # the ONE port Modal exposes; routes to both above
@@ -93,7 +94,7 @@ hermes_image = modal.Image.from_registry(
     # Pin to "X.Y.Z@sha256:..." digest for exact deployments.
 ).entrypoint([])  # bypass image dispatcher; Modal runtime entrypoint execs
 
-dev_volume = modal.Volume.from_name(DEV_VOLUME_NAME, create_if_missing=True)
+hermes_volume = modal.Volume.from_name(HERMES_VOLUME_NAME, create_if_missing=True)
 hermes_env = modal.Secret.from_name("hermes-env")
 
 _HOP_BY_HOP = frozenset({
@@ -220,7 +221,7 @@ def _wait_ready(port: int, path: str, attempts: int = 60) -> None:
 
 @app.function(
     image=hermes_image,
-    volumes={"/data": dev_volume},  # same object as DevBox; Hermes lives in .hermes/
+    volumes={"/data": hermes_volume},  # dedicated volume; Hermes home is hermes-home/
     secrets=[hermes_env],
     timeout=86400,  # 24h platform cap; container recycles, state re-reads from volume
     min_containers=1,  # keep warm (requires `modal deploy`, costs idle)
