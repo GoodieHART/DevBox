@@ -57,6 +57,7 @@ def test_single_port_proxy_layout():
     assert '"hermes", "dashboard"' in src
     assert "--no-open" in src
     assert "threading.Thread(target=supervise, daemon=True).start()" in src
+    assert '"HERMES_DEV": "1"' in src
 
 
 def test_source_installed_clean_image():

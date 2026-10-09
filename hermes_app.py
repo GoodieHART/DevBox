@@ -243,7 +243,11 @@ def gateway():
     import os
 
     os.environ["HERMES_HOME"] = HERMES_HOME
-    env = {**os.environ, "HERMES_HOME": HERMES_HOME}
+    env = {
+        **os.environ,
+        "HERMES_HOME": HERMES_HOME,
+        "HERMES_DEV": "1",
+    }
 
     gw_proc = subprocess.Popen(
         ["hermes", "gateway", "run", "--external-supervisor"], env=env
