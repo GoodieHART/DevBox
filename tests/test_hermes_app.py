@@ -33,12 +33,11 @@ def test_hermes_app_structure():
 
 def test_dedicated_volume_isolated_from_devbox():
     src = _source("hermes_app.py")
-    assert 'HERMES_VOLUME_NAME = "hermes-home-volume"' in src
+    assert 'HERMES_VOLUME_NAME = "my-dev-volume"' in src
     assert "Volume.from_name(HERMES_VOLUME_NAME" in src
-    assert "DEV_VOLUME_NAME" not in src  # old shared-volume constant gone
-    assert 'from_name("my-dev-volume")' not in src  # never binds DevBox storage
-    assert "/data/hermes-home" in src  # Hermes confined to subtree, not volume root
-    assert "with_mount_options" not in src  # no mount-options API dependency
+    assert "DEV_VOLUME_NAME" not in src
+    assert 'HERMES_HOME = "/root/.hermes"' in src
+    assert 'volumes={HERMES_HOME: hermes_volume}' in src
 
 
 def test_singleton_guards():
@@ -57,6 +56,16 @@ def test_single_port_proxy_layout():
     assert '"hermes", "gateway", "run"' in src
     assert '"hermes", "dashboard"' in src
     assert "--no-open" in src
+
+
+def test_source_installed_clean_image():
+    src = _source("hermes_app.py")
+    assert "modal.Image.debian_slim(python_version=\"3.11\")" in src
+    assert 'apt_install("git")' in src
+    assert "git clone --depth 1 https://github.com/NousResearch/hermes-agent.git" in src
+    assert "HERMES_NIX_BUILD=1 python -m pip install -e" in src
+    assert '"ruamel.yaml"' in src
+    assert '"python-dotenv"' in src
 
 
 def test_proxy_routing_rules_in_source():

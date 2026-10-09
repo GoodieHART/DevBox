@@ -4,13 +4,11 @@ Why separate: Modal's unit of deployment is the App. Keeping Hermes out of
 ``devbox.py`` means DevBox boxes keep their own timeouts/idle kills while
 Hermes gets its own image, schedule, and stable web URL.
 
-Dedicated volume: mounts its OWN ``hermes-home-volume`` object
-(``create_if_missing=True`` provisions it on first shell/deploy) -- deliberately
-NOT DevBox's ``my-dev-volume``. That shared volume's daemon began refusing
-``mkdir`` with ``EACCES`` (first on one subdir name, then spreading to fresh
-names), so Hermes keeps isolated storage. State lives at
-``HERMES_HOME=/data/hermes-home``. Plain whole-volume mount, so no
-version-sensitive mount-option API is needed.
+Shared volume: mounts DevBox's ``my-dev-volume`` directly at Hermes's final
+home path, ``/root/.hermes``. The clean Debian image avoids the prebuilt image's
+non-empty home mount conflict, while direct mounting avoids nested volume-path
+initialization failures. Hermes state shares the volume with DevBox files, so
+avoid concurrent bulk writes to the volume while Hermes is checkpointing state.
 
 Docker-image provision used: ``modal.Image.from_registry`` (no Docker daemon
 involved -- Modal re-materializes the registry layers; see
@@ -35,9 +33,8 @@ Ops rules (read before deploy):
   Hermes Docker docs for shared data dirs).
 - SQLITE: set ``database.journal_mode: delete`` in the Hermes config. WAL
   needs co-located shm and is unsupported on network volumes.
-- ISOLATION FROM DEVBOX: this app uses its own volume object, so DevBox
-  boxes (on ``my-dev-volume``) can never contend with the gateway --
-  no shared paths, no last-write-wins hazards across apps.
+- SHARED STORAGE: this app uses DevBox's ``my-dev-volume`` at a separate home
+  path. Avoid concurrent bulk volume writes while the gateway checkpoints state.
 - LIFECYCLE: ``modal deploy hermes_app.py`` (persistent URL). ``modal run``
   is ephemeral. Containers recycle at the 24h function cap; both processes
   re-read ``hermes-home/`` on boot (Telegram getUpdates resumes from stored
@@ -47,7 +44,7 @@ Ops rules (read before deploy):
   (``API_SERVER_KEY`` + dashboard basic auth below).
 
 First-time setup (one-off, before first deploy):
-    modal shell hermes_app.py   # then: HERMES_HOME=/data/hermes-home hermes setup
+    modal shell hermes_app.py   # then: HERMES_HOME=/root/.hermes hermes setup
 or create the ``hermes-env`` secret below and let the gateway start cold.
 
 Secrets: create ONE secret holding gateway + dashboard env:
@@ -77,11 +74,8 @@ import urllib.request
 
 import modal
 
-HERMES_VOLUME_NAME = "hermes-home-volume"  # OWN volume object, NOT DevBox's my-dev-volume
-HERMES_HOME = "/data/hermes-home"  # Hermes subtree inside the dedicated volume
-# NOTE: deliberately not a dot-dir. /data/.hermes/cron became un-creatable
-# (persistent daemon-side EACCES on that exact name while siblings worked);
-# a fresh non-dot path sidesteps the poisoned state entirely.
+HERMES_VOLUME_NAME = "my-dev-volume"
+HERMES_HOME = "/root/.hermes"
 GATEWAY_PORT = 8642  # Hermes OpenAI-compatible API + health endpoint
 DASH_PORT = 9119  # Hermes web dashboard
 PROXY_PORT = 8000  # the ONE port Modal exposes; routes to both above
@@ -89,10 +83,15 @@ API_PREFIX = "/gateway"  # paths under here (prefix stripped) go to the API
 
 app = modal.App(name="hermes-gateway")
 
-hermes_image = modal.Image.from_registry(
-    "nousresearch/hermes-agent:stable",
-    # Pin to "X.Y.Z@sha256:..." digest for exact deployments.
-).entrypoint([])  # bypass image dispatcher; Modal runtime entrypoint execs
+hermes_image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .apt_install("git")
+    .run_commands(
+        "git clone --depth 1 https://github.com/NousResearch/hermes-agent.git /opt/hermes-src",
+        "cd /opt/hermes-src && HERMES_NIX_BUILD=1 python -m pip install -e '.[messaging,mcp,cron,cli]'",
+    )
+    .pip_install("modal>=1.0.0,<2", "ruamel.yaml", "python-dotenv")
+)
 
 hermes_volume = modal.Volume.from_name(HERMES_VOLUME_NAME, create_if_missing=True)
 hermes_env = modal.Secret.from_name("hermes-env")
@@ -121,7 +120,7 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 _direct_opener = urllib.request.build_opener(_NoRedirect)
 
 
-def route(path: str) -> tuple:
+def route(path: str) -> tuple[int, str]:
     """Map a proxy path to ``(target_port, backend_path)``.
 
     ``/gateway`` and ``/gateway/...`` go to the API server with the prefix
@@ -221,7 +220,7 @@ def _wait_ready(port: int, path: str, attempts: int = 60) -> None:
 
 @app.function(
     image=hermes_image,
-    volumes={"/data": hermes_volume},  # dedicated volume; Hermes home is hermes-home/
+    volumes={HERMES_HOME: hermes_volume},
     secrets=[hermes_env],
     timeout=86400,  # 24h platform cap; container recycles, state re-reads from volume
     min_containers=1,  # keep warm (requires `modal deploy`, costs idle)
@@ -234,8 +233,7 @@ def gateway():
     """Run gateway + dashboard side by side behind the single-port proxy."""
     import os
 
-    os.environ.setdefault("HERMES_HOME", HERMES_HOME)
-    os.makedirs(HERMES_HOME, exist_ok=True)
+    os.environ["HERMES_HOME"] = HERMES_HOME
     env = {**os.environ, "HERMES_HOME": HERMES_HOME}
 
     gw_proc = subprocess.Popen(
