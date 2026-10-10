@@ -28,7 +28,7 @@ behind a stdlib reverse proxy):
 OpenAI-compatible clients: set base URL to ``.../gateway/v1``.
 
 Ops rules (read before deploy):
-- SINGLETON: ``max_containers=1`` + ``max_inputs=1``. Never run two gateway
+- SINGLETON: ``min_containers=1`` + ``max_containers=1`` + ``max_inputs=1``. Never run two gateway
   containers against one home -- session/memory stores corrupt (same rule as
   Hermes Docker docs for shared data dirs).
 - SQLITE: set ``database.journal_mode: delete`` in the Hermes config. WAL
@@ -37,8 +37,7 @@ Ops rules (read before deploy):
   path. Avoid concurrent bulk volume writes while the gateway checkpoints state.
 - LIFECYCLE: ``modal deploy hermes_app.py`` (persistent URL). ``modal run``
   is ephemeral. Containers recycle at the 24h function cap; both processes
-  re-read ``hermes-home/`` on boot (Telegram getUpdates resumes from stored
-  offset; Discord websocket reconnects).
+  re-read ``hermes-home/`` on boot. Telegram polling remains owned by Hermes.
 - NO ``requires_proxy_auth``: it demands Modal-Key/Modal-Secret headers that
   standard OpenAI clients cannot send. Auth stays at the app layer
   (``API_SERVER_KEY`` + dashboard basic auth below).
@@ -108,6 +107,7 @@ hermes_image = (
 
 hermes_volume = modal.Volume.from_name(HERMES_VOLUME_NAME, create_if_missing=True)
 hermes_env = modal.Secret.from_name("hermes-env")
+telegram_bot_secret = modal.Secret.from_name("telegram-bot-secret")
 
 _HOP_BY_HOP = frozenset({
     "connection",
@@ -231,10 +231,12 @@ def _wait_ready(port: int, path: str, attempts: int = 60) -> None:
 @app.function(
     image=hermes_image,
     volumes={HERMES_HOME: hermes_volume},
-    secrets=[hermes_env],
+    secrets=[hermes_env, telegram_bot_secret],
     timeout=86400,  # 24h platform cap; container recycles, state re-reads from volume
+    min_containers=1,
     max_containers=1,  # singleton: two gateways on one home corrupts state
-    scaledown_window=600,
+    cpu=1.0,
+    memory=2048,
 )
 @modal.concurrent(max_inputs=1)
 @modal.web_server(PROXY_PORT)
@@ -248,7 +250,6 @@ def gateway():
         "HERMES_HOME": HERMES_HOME,
         "HERMES_DEV": "1",
     }
-
     gw_proc = subprocess.Popen(
         ["hermes", "gateway", "run", "--external-supervisor"], env=env
     )

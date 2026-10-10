@@ -46,6 +46,16 @@ def test_singleton_guards():
     assert "max_inputs=1" in src
 
 
+def test_warm_gateway_owns_native_telegram_polling():
+    src = _source("hermes_app.py")
+    assert 'telegram_bot_secret = modal.Secret.from_name("telegram-bot-secret")' in src
+    assert "secrets=[hermes_env, telegram_bot_secret]" in src
+    assert "min_containers=1" in src
+    assert "cpu=1.0" in src
+    assert "memory=2048" in src
+    assert '"TELEGRAM_BOT_TOKEN"' not in src.split("def gateway", 1)[1]
+
+
 def test_single_port_proxy_layout():
     src = _source("hermes_app.py")
     assert "PROXY_PORT" in src
@@ -63,7 +73,7 @@ def test_single_port_proxy_layout():
 def test_source_installed_clean_image():
     src = _source("hermes_app.py")
     assert "modal.Image.debian_slim(python_version=\"3.11\")" in src
-    assert 'apt_install("git")' in src
+    assert '.apt_install("git", "curl", "ca-certificates")' in src
     assert "git clone --depth 1 https://github.com/NousResearch/hermes-agent.git" in src
     assert "HERMES_NIX_BUILD=1 python -m pip install -e" in src
     assert '"ruamel.yaml"' in src
