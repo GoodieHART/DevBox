@@ -30,4 +30,4 @@ Planned improvements and future work for DevBox.
 - [ ] Use tldr for welcome messages from installed packages
 - [x] Install `p7zip-full` for 7z files
 - [ ] Add notes of file verification tools present
-- [ ] Rearrange file structures
+- [x] Rearrange file structures (done: devbox_core/runtime/integrations/ui packages)

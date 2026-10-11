@@ -230,6 +230,18 @@ Comes with **Volatility3** and symbol files for Windows, Linux, and macOS pre-in
 
 **Resources:** 0.5 vCPU / 1GB RAM
 
+---
+
+### 8. 🤖 OpenCode Box
+
+A dedicated **OpenCode web server** (`opencode web --port 4096 --hostname 0.0.0.0`) with SSH access on the side. Open the printed URL in a browser for the web UI, or SSH in and run `opencode attach http://127.0.0.1:4096` to drive the same sessions from the terminal. Workdir is `/data`, so sessions and files persist between launches. OpenCode auth/config (`~/.config/opencode`, `~/.local/share/opencode`) is symlinked to the persistent volume.
+
+**Best for:** Running OpenCode as an always-on remote backend — browser UI plus terminal attach.
+
+**Resources:** 1.0 vCPU / 2GB RAM · 30 min idle timeout (SSH or web activity resets it)
+
+> **Auth note:** v1 relies on the random Modal tunnel URL as the secret (same model as the llama.cpp WebUI). For password auth, create a `opencode-server-password` Modal secret holding `OPENCODE_SERVER_PASSWORD` and add it to the secrets list for `launch_opencode` in `devbox.py`.
+
 ## GPU Options
 
 Several DevBox types support optional GPU acceleration. Here's a quick comparison:
@@ -243,6 +255,16 @@ Several DevBox types support optional GPU acceleration. Here's a quick compariso
 > ⚠️ GPU usage incurs charges on your Modal account. See [modal.com/pricing](https://modal.com/pricing) for current rates.
 
 For reference, Modal's free tier covers approximately **270 hours/month** of CPU-only usage. GPU hours are billed separately.
+
+### CPU-only mode (no GPU payment method)
+
+Modal validates every function in the app at startup — including GPU ones you never pick. If your account has no GPU payment method, run in CPU-only mode:
+
+```bash
+DEVBOX_CPU_ONLY=1 modal run devbox.py
+```
+
+This skips registering the GPU launchers entirely, so validation never trips. GPU menu choices print a notice instead of failing. Unset the variable (default) and everything behaves as before.
 
 ## Prerequisites
 
@@ -349,6 +371,18 @@ The llama.cpp Research Center includes a built-in **WebUI** — a browser-based 
 
 Just paste that URL into any modern browser (Chrome, Firefox, Safari, Edge) and you'll get a full chat interface with your selected model. No additional setup needed.
 
+### OpenCode Web (OpenCode Box)
+
+The OpenCode Box prints a web URL alongside the SSH command:
+
+```
+🤖 Your OpenCode Box is ready!
+🌐 OpenCode web: http://<host>:<port>
+🔐 SSH: ssh root@<host> -p <port>
+```
+
+Open the URL for the browser UI. From SSH you can attach a terminal TUI to the same backend with `opencode attach http://127.0.0.1:4096`, or run `opencode` directly for a local TUI session rooted at `/data`.
+
 ### Alias for Quick Launch
 
 To make launching your DevBox even faster, you can create an alias for the `modal run devbox.py` command in your shell configuration file (e.g., `.bashrc`, `.zshrc`, or PowerShell profile).
@@ -392,6 +426,7 @@ Remember to replace `C:\path\to\your\DevBox\devbox.py` with the actual path to y
 ### Idle Timeouts
 
 - **Standard boxes**: Auto-shutdown after **5 minutes** of no active SSH connection.
+- **OpenCode Box**: Auto-shutdown after **30 minutes** with no SSH or web activity.
 - **llama.cpp Research Center**: Extended timeout of **1 hour** to accommodate long-running inference sessions.
 - A countdown warning will appear in the terminal where you ran `modal run` before shutdown.
 
@@ -440,6 +475,7 @@ DevBox uses Modal Secrets to securely pass credentials into containers at runtim
 | `ssh-public-key` | `PUBKEY` | All boxes | Container starts, but you can't SSH in |
 | `gemini-api-key` | `GEMINI_API_KEY` | AI Assistants Box | Gemini CLI prompts for key on first use |
 | `exa-api-key` | `EXA_API_KEY` | llama.cpp Research Center | EXA Search disabled, everything else works |
+| `opencode-server-password` | `OPENCODE_SERVER_PASSWORD` | OpenCode Box (optional) | No password auth; tunnel URL is the only secret |
 
 ### Understanding GGUF Model Names
 
@@ -492,24 +528,36 @@ Double-check the address, username, and password printed when the container star
 
 Check your internet connection and make sure the HuggingFace URL is valid. Some models require you to be logged in to HuggingFace — if it's a gated model, you'll need to set up HF token authentication. Try a different model from the catalog first to isolate the issue.
 
+### "Payment method" errors on GPU functions
+
+If you see `Please add a payment method to use A10G GPU functions` (or similar for T4/L4), Modal is validating the GPU launchers at app startup — even if you only wanted a CPU box. Either add a payment method, or run in [CPU-only mode](#cpu-only-mode-no-gpu-payment-method):
+
+```bash
+DEVBOX_CPU_ONLY=1 modal run devbox.py
+```
+
 ## Architecture
 
-The codebase is currently flat — all files live in the root directory. A structure rehaul is planned for the future, but for now here's what each file does:
+The codebase is organized into domain packages. Entrypoints stay at the root so Modal commands don't change (`modal run devbox.py`, `modal deploy hermes_app.py`):
 
-| File | Purpose |
+| Path | Purpose |
 |------|---------|
 | `devbox.py` | Main launcher — interactive menu, Modal function definitions, entry point |
-| `config.py` | Resource allocations (CPU, memory, timeouts), package lists, GPU configs |
-| `images.py` | Container image definitions for all 7 DevBox types |
-| `shared_runtime.py` | Shared runtime logic — SSH/RDP idle monitoring, auto-shutdown, connection output |
-| `utils.py` | SSH key injection utility |
-| `gpu_utils.py` | GPU configuration helpers and base GPU launch args |
-| `exa_helper.py` | EXA Search integration for llama.cpp Research Center |
-| `quotes_loader.py` | Random motivational quotes displayed at launcher startup |
-| `quotes.json` | Quote catalog loaded by `quotes_loader.py` |
-| `ui_utils.py` | UI helper functions — `create_box()`, `show_spinner()` |
-| `backup_utils.py` | Backup registration and data persistence helpers |
-| `persistence_utils.py` | Symlink management for dotfiles persistence across sessions |
+| `hermes_app.py` | Hermes gateway + dashboard app (separate Modal App, own schedule and URL) |
+| `devbox_core/config.py` | Resource allocations (CPU, memory, timeouts), package lists, GPU configs |
+| `devbox_core/images.py` | Container image definitions for all DevBox types |
+| `runtime/shared_runtime.py` | Shared runtime logic — SSH/RDP idle monitoring, auto-shutdown, connection output |
+| `runtime/utils.py` | SSH key injection utility (+ system info) |
+| `runtime/gpu_utils.py` | GPU configuration helpers and base GPU launch args |
+| `runtime/persistence_utils.py` | Symlink management for dotfiles persistence across sessions |
+| `runtime/backup_utils.py` | Backup registration and data persistence helpers |
+| `integrations/exa_helper.py` | EXA Search integration for llama.cpp Research Center |
+| `integrations/exa_proxy.py` | EXA reverse proxy (browser port → llama-server) with tool-call loop |
+| `ui/ui_utils.py` | UI helper functions — `create_box()`, `show_spinner()` |
+| `ui/quotes_loader.py` | Random motivational quotes displayed at launcher startup |
+| `ui/quotes.json` | Quote catalog loaded by `quotes_loader.py` |
+| `tests/test_opencode.py` | Structural tests for the OpenCode box (no Modal credentials needed) |
+| `tests/test_hermes_app.py` | Structural tests for the Hermes gateway app (no Modal credentials needed) |
 
 ## Roadmap
 

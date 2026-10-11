@@ -1,13 +1,28 @@
 import modal
+import os
 import random
 import platform
 
-from images import (
+from devbox_core.images import (
     standard_devbox_image, cuda_devbox_image, doc_processing_image,
-    assisted_coding_image, llm_playroom_image, llamacpp_cpu_image, rdp_devbox_image, forensic_analysis_image
+    assisted_coding_image, opencode_image, llm_playroom_image, llamacpp_cpu_image, rdp_devbox_image, forensic_analysis_image
 )
-from shared_runtime import run_devbox_shared, run_rdp_devbox_shared
-from config import get_resource_config, LLAMACPP_DEVBOX_ARGS, LLAMACPP_GPU_DEVBOX_ARGS, LLAMACPP_IDLE_TIMEOUT
+from runtime.shared_runtime import run_devbox_shared, run_rdp_devbox_shared, run_opencode_shared
+from devbox_core.config import get_resource_config, OPENCODE_DEVBOX_ARGS, LLAMACPP_DEVBOX_ARGS, LLAMACPP_GPU_DEVBOX_ARGS, LLAMACPP_IDLE_TIMEOUT
+
+
+# Paywall gate: set DEVBOX_CPU_ONLY=1 to run this app on a Modal account
+# without a GPU payment method. GPU-backed launchers stay defined as plain
+# functions but are never registered on the Modal app, so Modal skips GPU
+# validation entirely. Unset (default) = today's behavior, unchanged.
+CPU_ONLY = os.environ.get("DEVBOX_CPU_ONLY", "").strip().lower() in ("1", "true", "yes")
+
+
+def _unless_cpu_only(decorator):
+    """Apply a Modal @app.function decorator unless CPU-only mode is on."""
+    def apply(fn):
+        return fn if CPU_ONLY else decorator(fn)
+    return apply
 
 
 app = modal.App(
@@ -28,6 +43,11 @@ gpu_devbox_args = get_resource_config("gpu", secrets = juicy_secrets, volume = d
 
 gpu_devbox_args_rdp = get_resource_config("gpu", secrets = juicy_secrets, volume = dev_volume, is_rdp = True)
 
+# OpenCode box config — dedicated resource envelope (filled in below like the rest)
+opencode_devbox_args = OPENCODE_DEVBOX_ARGS.copy()
+opencode_devbox_args["secrets"] = juicy_secrets
+opencode_devbox_args["volumes"] = {"/data": dev_volume}
+
 # llama.cpp Research Center config - fill in secrets and volume
 llamacpp_devbox_args = LLAMACPP_DEVBOX_ARGS.copy()
 llamacpp_devbox_args["secrets"] = juicy_secrets
@@ -44,19 +64,19 @@ def launch_devbox(extra_packages: list[str] | None = None):
     run_devbox_shared(extra_packages, devbox_type="standard_devbox")
 
 
-@app.function(image=cuda_devbox_image, gpu="t4", **gpu_devbox_args)
+@_unless_cpu_only(app.function(image=cuda_devbox_image, gpu="t4", **gpu_devbox_args))
 def launch_devbox_t4(extra_packages: list[str] | None = None):
     """Launches a T4 GPU-powered personal development environment."""
     run_devbox_shared(extra_packages, devbox_type="cuda_devbox_t4")
 
 
-@app.function(image=cuda_devbox_image, gpu="l4", **gpu_devbox_args)
+@_unless_cpu_only(app.function(image=cuda_devbox_image, gpu="l4", **gpu_devbox_args))
 def launch_devbox_l4(extra_packages: list[str] | None = None):
     """Launches an L4 GPU-powered personal development environment."""
     run_devbox_shared(extra_packages, devbox_type="cuda_devbox_l4")
 
 
-@app.function(image=cuda_devbox_image, gpu="a10g", **gpu_devbox_args)
+@_unless_cpu_only(app.function(image=cuda_devbox_image, gpu="a10g", **gpu_devbox_args))
 def launch_devbox_a10g(extra_packages: list[str] | None = None):
     """Launches an A10G GPU-powered personal development environment."""
     run_devbox_shared(extra_packages, devbox_type="cuda_devbox_a10g")
@@ -66,17 +86,17 @@ def launch_rdp_devbox(extra_packages: list[str] = None):
     """Launches an RDP desktop development environment."""
     run_rdp_devbox_shared(extra_packages)
 
-@app.function(image=rdp_devbox_image, gpu="t4", **gpu_devbox_args_rdp)
+@_unless_cpu_only(app.function(image=rdp_devbox_image, gpu="t4", **gpu_devbox_args_rdp))
 def launch_rdp_devbox_t4(extra_packages: list[str] = None):
     """Launches an RDP desktop with T4 GPU."""
     run_rdp_devbox_shared(extra_packages)
 
-@app.function(image=rdp_devbox_image, gpu="l4", **gpu_devbox_args_rdp)
+@_unless_cpu_only(app.function(image=rdp_devbox_image, gpu="l4", **gpu_devbox_args_rdp))
 def launch_rdp_devbox_l4(extra_packages: list[str] = None):
     """Launches an RDP desktop with L4 GPU."""
     run_rdp_devbox_shared(extra_packages)
 
-@app.function(image=rdp_devbox_image, gpu="a10g", **gpu_devbox_args_rdp)
+@_unless_cpu_only(app.function(image=rdp_devbox_image, gpu="a10g", **gpu_devbox_args_rdp))
 def launch_rdp_devbox_a10g(extra_packages: list[str] = None):
     """Launches an RDP desktop with A10G GPU."""
     run_rdp_devbox_shared(extra_packages)
@@ -90,6 +110,11 @@ def launch_doc_processor():
 def launch_assisted_coding():
     """Launches a development environment with Gemini CLI & OpenCode pre-installed."""
     run_devbox_shared(extra_packages=None, devbox_type="assisted_coding")
+
+@app.function(image=opencode_image, **opencode_devbox_args)
+def launch_opencode(extra_packages: list[str] | None = None):
+    """Launches a dedicated OpenCode server box (browser web UI + SSH)."""
+    run_opencode_shared(extra_packages)
 
 @app.function(image=llm_playroom_image, **gpu_devbox_args_rdp) # Needs review
 def launch_llm_playroom():
@@ -166,10 +191,11 @@ def launch_llamacpp_playroom():
     import time
     import json
     import httpx
-    from utils import inject_ssh_key
-    from exa_helper import get_exa_api_key, get_tools_for_model
+    from runtime.utils import inject_ssh_key
+    from integrations.exa_helper import get_exa_api_key, get_tools_for_model
     
-    modal.interact()  # Enable user input
+    modal.interact()# enable user input
+                   
     
     print("\n🧠 Launching llama.cpp Research Center")
     print("💻 CPU-Optimized Inference")
@@ -195,7 +221,7 @@ def launch_llamacpp_playroom():
             if os.path.isdir(home_path) and not os.path.islink(home_path):
                 shutil.rmtree(home_path)
             else:
-                os.remove(home_path)
+                os.remove(home_path)  # missing else statement block #todo
         
         os.symlink(volume_path, home_path)
     
@@ -227,7 +253,7 @@ def launch_llamacpp_playroom():
     
     # --- Download Model ---
     model_dir = "/data/models"
-    os.makedirs(model_dir, exist_ok=True)
+    os.makedirs(model_dir, exist_ok=True) #move doundload function to separate file
     model_path = f"{model_dir}/{selected_model['filename']}"
     
     if not os.path.exists(model_path):
@@ -306,7 +332,7 @@ def launch_llamacpp_playroom():
     
     # --- Start EXA Proxy (if enabled) ---
     if use_exa:
-        from exa_proxy import start_exa_proxy
+        from integrations.exa_proxy import start_exa_proxy
         print("  Starting EXA Search proxy...")
         start_exa_proxy(port=8081, target_port=8080)
         web_port = 8081
@@ -368,7 +394,7 @@ def launch_llamacpp_playroom():
             print(f"\n\n⏰ Idle timeout reached ({LLAMACPP_IDLE_TIMEOUT}s). Shutting down.")
             server_process.terminate()
 
-@app.function(image=llamacpp_cpu_image, **llamacpp_gpu_devbox_args)
+@_unless_cpu_only(app.function(image=llamacpp_cpu_image, **llamacpp_gpu_devbox_args))
 def launch_llamacpp_playroom_gpu():
     """GPU-accelerated llama.cpp Research Center with curated models, WebUI, and EXA Search."""
     import os
@@ -379,8 +405,8 @@ def launch_llamacpp_playroom_gpu():
     import time
     import json
     import httpx
-    from utils import inject_ssh_key
-    from exa_helper import get_exa_api_key, get_tools_for_model
+    from runtime.utils import inject_ssh_key
+    from integrations.exa_helper import get_exa_api_key, get_tools_for_model
     
     modal.interact()
     
@@ -523,7 +549,7 @@ def launch_llamacpp_playroom_gpu():
     
     # --- Start EXA Proxy (if enabled) ---
     if use_exa:
-        from exa_proxy import start_exa_proxy
+        from integrations.exa_proxy import start_exa_proxy
         print("  Starting EXA Search proxy...")
         start_exa_proxy(port=8081, target_port=8080)
         web_port = 8081
@@ -589,11 +615,11 @@ def launch_llamacpp_playroom_gpu():
 @app.local_entrypoint()
 def main():
   
-    from ui_utils import create_box, show_spinner
-    from quotes_loader import get_random_quote, format_quote
-    from utils import inject_ssh_key, display_system_info
-    from config import IDLE_TIMEOUT_SECONDS
-    from gpu_utils import get_gpu_config, get_available_gpus
+    from ui.ui_utils import create_box, show_spinner
+    from ui.quotes_loader import get_random_quote, format_quote
+    from runtime.utils import inject_ssh_key, display_system_info
+    from devbox_core.config import IDLE_TIMEOUT_SECONDS
+    from runtime.gpu_utils import get_gpu_config, get_available_gpus
 
     banner = """
 ╔══════════════════════════════════════════════════════════╗
@@ -634,11 +660,14 @@ def main():
 
     8. 🚀 llama.cpp Research Center (GPU)
     GPU-accelerated inference + 32K context + T4 GPU
+
+    9. 🤖 OpenCode Box
+    Dedicated OpenCode web server (browser UI + SSH, workdir /data)
     """
     create_box(menu_box, "🚀 LAUNCH OPTIONS")
     
     try:
-      choice = input("Enter your choice (1-8): ").strip()
+      choice = input("Enter your choice (1-9): ").strip()
     except EOFError:
       print("\nNo input received. Exiting.")
       return
@@ -681,6 +710,9 @@ def main():
         gpu_choice = "n"
 
       if gpu_choice == "y":
+        if CPU_ONLY:
+          create_box("GPU launchers are disabled in CPU-only mode (DEVBOX_CPU_ONLY=1).\nUnset it or add a GPU payment method to use them.", "⚡ GPU UNAVAILABLE")
+          return
         gpu_menu = """
         1. 🎯 T4 GPU (Cost-effective, good for inference)
         2. 🚀 L4 GPU (More Performant than T4)
@@ -789,6 +821,9 @@ def main():
             gpu_choice = "n"
 
         if gpu_choice == "y":
+            if CPU_ONLY:
+              create_box("GPU launchers are disabled in CPU-only mode (DEVBOX_CPU_ONLY=1).\nUnset it or add a GPU payment method to use them.", "⚡ GPU UNAVAILABLE")
+              return
             gpu_menu = """
             1. 🎯 T4 GPU (Cost-effective, good for graphics)
             2. 🚀 L4 GPU (Newer, more performant than T4)
@@ -855,6 +890,9 @@ def main():
         launch_forensics_image.remote()
 
     elif choice == "8":
+        if CPU_ONLY:
+          create_box("GPU launchers are disabled in CPU-only mode (DEVBOX_CPU_ONLY=1).\nUnset it or add a GPU payment method to use them.", "⚡ GPU UNAVAILABLE")
+          return
         research_gpu_box = """
         🚀 Launching GPU llama.cpp Research Center...
         
@@ -876,6 +914,17 @@ def main():
         show_spinner("Preparing GPU-accelerated environment", 3)
         launch_llamacpp_playroom_gpu.remote()
 
+    elif choice == "9":
+        opencode_box = """
+        🤖 Launching OpenCode Box...
+        🌐 Web UI (browser) + SSH access
+        📁 Workdir /data (persistent)
+        🔒 Set OPENCODE_SERVER_PASSWORD secret for password auth (optional)
+        """
+        create_box(opencode_box, "🤖 OPENCODE BOX")
+        show_spinner("Starting OpenCode server", 2)
+        launch_opencode.remote()
+
     else:
         error_box = """
         ❌ Invalid choice selected.
@@ -888,5 +937,6 @@ def main():
         • 6 for llama.cpp Research Center (CPU)
         • 7 for Forensics Machine
         • 8 for llama.cpp Research Center (GPU)
+        • 9 for OpenCode Box
         """
         create_box(error_box, "❌ ERROR")
