@@ -230,7 +230,8 @@ llamacpp_cpu_image = (
     )
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
-        "runtime.persistence_utils", "runtime.backup_utils", "integrations.exa_helper", "integrations.exa_proxy", "ui.quotes_loader"
+        "runtime.persistence_utils", "runtime.backup_utils", "integrations.exa_helper", "integrations.exa_proxy", "ui.quotes_loader",
+        "runtime.llamacpp_runtime", "devbox_core.llamacpp_models"
     )
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "ui", "quotes.json"), "/etc/quotes.json")
 )

@@ -131,7 +131,7 @@ def test_launch_opencode_defined_and_uses_opencode_image():
 
 
 def test_menu_exposes_opencode_option():
-    src = _source("devbox.py")
+    src = _source("ui/launcher_menu.py")
     assert 'choice == "9"' in src
     assert "launch_opencode.remote()" in src
 
@@ -140,3 +140,47 @@ def test_existing_launchers_still_defined():
     names = _top_level_names("devbox.py")
     for expected in ("launch_devbox", "launch_assisted_coding", "launch_rdp_devbox", "launch_llamacpp_playroom"):
         assert expected in names
+
+
+# --- modal packaging (AST + source, no import) ---
+#
+# devbox.py executes remotely, so every module it imports at TOP LEVEL must
+# be uploaded via add_local_python_source. A cpu_gate extraction once passed
+# pytest locally but crash-looped every remote container with
+# ModuleNotFoundError — these tests pin that gap shut.
+
+
+def _top_level_local_imports(name):
+    """Dotted top-level from-imports in a file (function-local excluded)."""
+    tree = _tree(name)
+    mods = set()
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            mods.add(node.module)
+    return mods
+
+
+def _packaged_modules():
+    """Every module name passed to add_local_python_source in images.py."""
+    mods = set()
+    for node in ast.walk(_tree("devbox_core/images.py")):
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "add_local_python_source"):
+            for arg in node.args:
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                    mods.add(arg.value)
+    return mods
+
+
+def test_devbox_top_level_imports_are_packaged():
+    packaged = _packaged_modules()
+    for mod in _top_level_local_imports("devbox.py"):
+        if mod.split(".")[0] in ("devbox_core", "runtime", "integrations", "ui"):
+            assert mod in packaged, f"{mod} imported at devbox.py top level but never packaged"
+
+
+def test_llamacpp_image_packages_llamacpp_modules():
+    src = _source("devbox_core/images.py")
+    block = src.split("llamacpp_cpu_image")[1].split("rdp_devbox_image")[0]
+    assert "runtime.llamacpp_runtime" in block
+    assert "devbox_core.llamacpp_models" in block

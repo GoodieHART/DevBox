@@ -149,3 +149,45 @@ def get_resource_config(config_type="cpu", is_rdp=False, secrets=None, volume=No
   config["secrets"] = secrets
   config["volumes"] = {"/data": volume}
   return config
+
+
+def build_devbox_args(secrets, volume):
+  """
+    Build all seven Modal function arg dicts from live handles.
+
+    Args:
+        secrets: list of Modal Secret handles (all boxes share them).
+        volume: Modal Volume handle mounted at /data.
+
+    Returns:
+        dict: all seven arg dicts keyed by their devbox.py names.
+  """
+  cpu_devbox_args = get_resource_config("cpu", secrets=secrets, volume=volume)
+
+  cpu_devbox_args_rdp = get_resource_config("cpu", secrets=secrets, volume=volume, is_rdp=True)
+
+  gpu_devbox_args = get_resource_config("gpu", secrets=secrets, volume=volume, is_rdp=True)
+
+  gpu_devbox_args_rdp = get_resource_config("gpu", secrets=secrets, volume=volume, is_rdp=True)
+
+  opencode_devbox_args = OPENCODE_DEVBOX_ARGS.copy()
+  opencode_devbox_args["secrets"] = secrets
+  opencode_devbox_args["volumes"] = {"/data": volume}
+
+  llamacpp_devbox_args = LLAMACPP_DEVBOX_ARGS.copy()
+  llamacpp_devbox_args["secrets"] = secrets
+  llamacpp_devbox_args["volumes"] = {"/data": volume}
+
+  llamacpp_gpu_devbox_args = LLAMACPP_GPU_DEVBOX_ARGS.copy()
+  llamacpp_gpu_devbox_args["secrets"] = secrets
+  llamacpp_gpu_devbox_args["volumes"] = {"/data": volume}
+
+  return {
+    "cpu_devbox_args": cpu_devbox_args,
+    "cpu_devbox_args_rdp": cpu_devbox_args_rdp,
+    "gpu_devbox_args": gpu_devbox_args,
+    "gpu_devbox_args_rdp": gpu_devbox_args_rdp,
+    "opencode_devbox_args": opencode_devbox_args,
+    "llamacpp_devbox_args": llamacpp_devbox_args,
+    "llamacpp_gpu_devbox_args": llamacpp_gpu_devbox_args,
+  }
