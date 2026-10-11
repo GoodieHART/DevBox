@@ -299,6 +299,14 @@ This is needed for **all** DevBox types. Without it, the container will still st
 modal secret create ssh-public-key PUBKEY="$(cat ~/.ssh/id_rsa.pub)"
 ```
 
+> **Multiple devices?** Put one key per line under `PUBKEYS` — as many as you need:
+>
+> ```bash
+> modal secret create ssh-public-key PUBKEYS="$(cat ~/.ssh/laptop.pub ~/.ssh/phone.pub)"
+> ```
+>
+> Every key in the value is installed into `authorized_keys`. The old single-key `PUBKEY` still works.
+
 ### Optional: Gemini API Key
 
 Only needed if you plan to use the **AI Assistants Box** (OpenCode + Gemini CLI). If missing, Gemini CLI will prompt you for the key on first use — no hard crash.

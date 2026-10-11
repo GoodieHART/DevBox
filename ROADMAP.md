@@ -13,7 +13,7 @@ Planned improvements and future work for DevBox.
 - [ ] Allow Dockerfile config importation
 - [ ] Automatic install of popular packages and frameworks (e.g. `rust`)
 - [ ] Preinstall necessary programs for LLM playgrounds
-- [ ] Support for multiple SSH key storage with unified access
+- [x] Support for multiple SSH key storage with unified access (done: PUBKEYS one-per-line in ssh-public-key secret)
 - [ ] Session restore/backup function
 - [ ] Allow for `tmux` sessions
 - [ ] Dynamically select llama-cpp version (currently hardcoded)
