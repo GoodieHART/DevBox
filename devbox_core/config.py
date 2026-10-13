@@ -14,6 +14,8 @@ IDLE_TIMEOUT_SECONDS = 300  # 5 minutes
 # Version constants
 LLAMACPP_VERSION = "b9058" # this will be made dynamic in future
 STARSHIP_VERSION = "v1.22.1"
+NODE_MAJOR_VERSION = "24"
+REA_AGENTS_VERSION = "6.4.0"
 
 # Resource configurations for different DevBox types
 
