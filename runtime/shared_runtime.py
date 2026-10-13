@@ -18,6 +18,20 @@ from runtime.utils import inject_ssh_key
 from devbox_core.config import IDLE_TIMEOUT_SECONDS
 from ui.quotes_loader import get_random_quote
 
+
+def seed_opencode_config(source_path="/etc/devbox/opencode.json"):
+    import os
+    import shutil
+
+    target_path = "/root/.config/opencode/opencode.json"
+    parent = os.path.dirname(target_path)
+    if os.path.lexists(parent) and not os.path.isdir(parent):
+        os.remove(parent)
+    os.makedirs(parent, exist_ok=True)
+    if os.path.exists(target_path) and os.path.getsize(target_path) > 0:
+        return
+    shutil.copyfile(source_path, target_path)
+
 DEVBOX_BANNERS = {
     "standard_devbox": ("🛠️", "Standard DevBox"),
     "cuda_devbox_t4": ("🎮", "CUDA DevBox (T4)"),
@@ -39,6 +53,9 @@ def run_devbox_shared(extra_packages=None, devbox_type="ssh"):
     restore_backup()
     
     setup_persistence(get_persistence_items(devbox_type))
+
+    if devbox_type == "assisted_coding":
+        seed_opencode_config()
     
     # Register backup on exit
     register_custom_backup("/root", "/data/root_full_backup.tar.gz")
@@ -205,6 +222,7 @@ def run_opencode_shared(extra_packages=None):
     restore_backup()
 
     setup_persistence(get_persistence_items("opencode"))
+    seed_opencode_config()
 
     # Register backup on exit (same target as SSH boxes)
     register_custom_backup("/root", "/data/root_full_backup.tar.gz")
@@ -255,7 +273,11 @@ def run_opencode_shared(extra_packages=None):
             stderr=subprocess.PIPE,
         )
     except FileNotFoundError:
-        print("❌ 'opencode' binary not found. Image build likely failed.", file=sys.stderr)
+        print(
+            "❌ 'opencode' binary not found. The image install step or a stale "
+            "session backup (/data/root_full_backup.tar.gz) may be at fault.",
+            file=sys.stderr,
+        )
         raise
 
     # Wait for server readiness (fail fast with a clear error instead of

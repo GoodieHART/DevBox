@@ -86,10 +86,13 @@ def restore_backup(backup_file="/data/root_full_backup.tar.gz", restore_dir="/")
     if os.path.exists(backup_file):
         print("Restoring previous session data...", file=sys.stderr)
         try:
-            # Clean restore directory (preserve only essential system files)
+            # Clean restore directory (preserve essential system files and
+            # image-installed tooling such as /root/.opencode, which the
+            # shared session backup may predate)
             subprocess.run([
                 "find", "/root", "-mindepth", "1", "-maxdepth", "1",
                 "!", "-name", "lost+found",
+                "!", "-name", ".opencode",
                 "-exec", "rm", "-rf", "{}", "+"
             ], check=False)
             

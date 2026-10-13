@@ -10,7 +10,8 @@ import sys
 
 
 def setup_persistence(
-    items_to_persist, persistent_storage_dir="/data/.config_persistence"
+    items_to_persist, persistent_storage_dir="/data/.config_persistence",
+    home_base="/root",
 ):
     """
     Set up persistent dotfiles and configs using symbolic links.
@@ -18,6 +19,7 @@ def setup_persistence(
     Args:
         items_to_persist (list): List of files/directories to persist
         persistent_storage_dir (str): Base directory for persistent storage
+        home_base (str): Home directory to link from (defaults to /root)
     """
     # --- Set up persistent dotfiles and desktop configs using symbolic links ---
     print("Linking persistent configuration files...", file=sys.stderr)
@@ -27,15 +29,32 @@ def setup_persistence(
     for item in items_to_persist:
         # Determine paths
         volume_path = os.path.join(persistent_storage_dir, item)
-        home_path = os.path.join("/root", item)
+        home_path = os.path.join(home_base, item)
 
         # Create parent directory in volume if needed
         if os.path.dirname(volume_path):
             os.makedirs(os.path.dirname(volume_path), exist_ok=True)
 
+        # A stale volume entry from an older image may have the wrong type
+        # (e.g. empty file where the current image ships a directory).
+        # Reconcile before linking so later makedirs/copy steps keep working.
+        if os.path.lexists(volume_path) and (
+            os.path.isdir(home_path) != os.path.isdir(volume_path)
+        ):
+            if os.path.isdir(volume_path) and not os.path.islink(volume_path):
+                shutil.rmtree(volume_path)
+            else:
+                os.remove(volume_path)
+
+        # Paths in DIRECTORY_PERSISTENCE_ITEMS must always be directories:
+        # older images left empty-file placeholders that break tools
+        # expecting directories (e.g. opencode mkdir log).
+        if item in DIRECTORY_PERSISTENCE_ITEMS and os.path.lexists(volume_path) and not os.path.isdir(volume_path):
+            os.remove(volume_path)
+
         # Ensure the target exists before creating symlink
         if not os.path.exists(volume_path):
-            if os.path.isdir(home_path):
+            if item in DIRECTORY_PERSISTENCE_ITEMS or os.path.isdir(home_path):
                 os.makedirs(volume_path, exist_ok=True)
             else:
                 # Create empty file at target location
@@ -104,6 +123,18 @@ OPENCODE_PERSISTENCE_ITEMS = SSH_PERSISTENCE_ITEMS + [
     ".cache/opencode",
 ]
 
+DIRECTORY_PERSISTENCE_ITEMS = frozenset([
+    ".config/opencode",
+    ".local/share/opencode",
+    ".cache/opencode",
+])
+
+ASSISTED_CODING_PERSISTENCE_ITEMS = GEMINI_PERSISTENCE_ITEMS + [
+    ".config/opencode",
+    ".local/share/opencode",
+    ".cache/opencode",
+]
+
 
 def get_persistence_items(devbox_type="ssh"):
     """
@@ -119,7 +150,7 @@ def get_persistence_items(devbox_type="ssh"):
         "ssh": SSH_PERSISTENCE_ITEMS,
         "rdp": RDP_PERSISTENCE_ITEMS,
         "gemini": GEMINI_PERSISTENCE_ITEMS,
-        "assisted_coding": GEMINI_PERSISTENCE_ITEMS,
+        "assisted_coding": ASSISTED_CODING_PERSISTENCE_ITEMS,
         "llm": LLM_PERSISTENCE_ITEMS,
         "unsloth": UNSLOTH_PERSISTENCE_ITEMS,
         "opencode": OPENCODE_PERSISTENCE_ITEMS,
