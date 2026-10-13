@@ -8,10 +8,15 @@ Modal-dependent files by AST + source inspection.
 """
 
 import ast
+import json
 import pathlib
 
 from devbox_core import config
-from runtime.persistence_utils import OPENCODE_PERSISTENCE_ITEMS, get_persistence_items
+from runtime.persistence_utils import (
+    OPENCODE_PERSISTENCE_ITEMS,
+    get_persistence_items,
+    setup_persistence,
+)
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -47,6 +52,18 @@ def test_opencode_resource_envelope_sane():
     assert args["timeout"] >= config.OPENCODE_IDLE_TIMEOUT_SECONDS
 
 
+def test_rea_version_is_centralized():
+    assert config.REA_AGENTS_VERSION == "6.4.0"
+    assert config.NODE_MAJOR_VERSION == "24"
+
+
+def test_opencode_config_uses_installed_rea_binary():
+    config_path = ROOT / "integrations" / "opencode.json"
+    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    assert payload["mcp"]["rea"]["command"] == ["rea", "mcp"]
+    assert "rea-agents@" not in config_path.read_text(encoding="utf-8")
+
+
 def test_existing_envelopes_untouched():
     assert config.CPU_DEVBOX_ARGS == {"secrets": None, "volumes": None, "cpu": 0.5, "memory": 1024, "timeout": 3600}
     assert config.IDLE_TIMEOUT_SECONDS == 300
@@ -68,6 +85,39 @@ def test_unknown_type_still_falls_back_to_ssh():
     assert get_persistence_items("does-not-exist") == get_persistence_items("ssh")
 
 
+def test_setup_persistence_repairs_stale_file_volume_entry(tmp_path):
+    home = tmp_path / "home"
+    store = tmp_path / "store"
+    home_item = home / ".config" / "opencode"
+    home_item.mkdir(parents=True)
+    stale = store / ".config" / "opencode"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("", encoding="utf-8")
+    setup_persistence(
+        [".config/opencode"],
+        persistent_storage_dir=str(store),
+        home_base=str(home),
+    )
+    assert stale.is_dir()
+    assert home_item.is_symlink()
+    assert home_item.resolve() == stale.resolve()
+
+
+def test_setup_persistence_enforces_directories_without_home(tmp_path):
+    home = tmp_path / "home"
+    store = tmp_path / "store"
+    stale = store / ".local" / "share" / "opencode"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("", encoding="utf-8")
+    setup_persistence(
+        [".local/share/opencode"],
+        persistent_storage_dir=str(store),
+        home_base=str(home),
+    )
+    assert stale.is_dir()
+    assert (home / ".local" / "share" / "opencode").is_symlink()
+
+
 def test_assisted_coding_mapping_preserved():
     # launch_assisted_coding uses devbox_type="assisted_coding" which previously
     # fell through to SSH defaults; it now maps to the gemini envelope.
@@ -85,6 +135,10 @@ def test_opencode_image_installs_opencode_and_ssh():
     src = _source("devbox_core/images.py")
     assert "opencode.ai/install" in src
     assert "get_ssh_setup_commands" in src
+    assert "REA_AGENTS_VERSION" in src
+    assert "npm install -g rea-agents@" in src
+    assert "integrations" in src and "opencode.json" in src
+    assert "mkdir -p /root/.config/opencode" in src
     # Dedicated box: must not bundle Gemini CLI (that's the assisted box's job)
     block = src.split("opencode_image")[1].split("llamacpp_cpu_image")[0]
     assert "gemini-cli" not in block
@@ -112,6 +166,18 @@ def test_run_opencode_shared_serves_and_forwards():
     ssh_idx = src.index("def run_opencode_shared")
     tail = src[ssh_idx:]
     assert tail.index("modal.forward(22") < tail.index("modal.forward(OPENCODE_PORT")
+
+
+def test_runtime_seeds_baseline_without_overwriting_config():
+    src = _source("runtime/shared_runtime.py")
+    assert "def seed_opencode_config" in src
+    assert "os.path.getsize(target_path) > 0" in src
+    assert "seed_opencode_config()" in src
+
+
+def test_restore_preserves_image_installed_opencode():
+    src = _source("runtime/backup_utils.py")
+    assert '"-name", ".opencode"' in src or "'-name', '.opencode'" in src
 
 
 def test_run_devbox_shared_still_defined():
