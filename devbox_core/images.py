@@ -9,7 +9,15 @@ Author: GoodieHART
 
 import modal
 import os
-from devbox_core.config import CORE_DEV_PACKAGES, EXTENDED_DEV_PACKAGES, LLAMACPP_VERSION, DOWNLOAD_APT_PACKAGES, DOWNLOAD_PIP_PACKAGES
+from devbox_core.config import (
+    CORE_DEV_PACKAGES,
+    EXTENDED_DEV_PACKAGES,
+    LLAMACPP_VERSION,
+    DOWNLOAD_APT_PACKAGES,
+    DOWNLOAD_PIP_PACKAGES,
+    NODE_MAJOR_VERSION,
+    REA_AGENTS_VERSION,
+)
 
 # Absolute path to the directory containing this file (for add_local_file references)
 _IMAGES_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -145,9 +153,10 @@ doc_processing_image = (
 assisted_coding_image = (
     create_base_minimal_image()
     .run_commands(
-        # Install Node.js 20.x
-        "curl -fsSL https://deb.nodesource.com/setup_20.x | bash -",
+        f"curl -fsSL https://deb.nodesource.com/setup_{NODE_MAJOR_VERSION}.x | bash -",
         "apt-get install -y nodejs",
+        f"npm install -g rea-agents@{REA_AGENTS_VERSION}",
+        "mkdir -p /root/.config/opencode /root/.local/share/opencode /root/.cache/opencode",
         # Install OpenCode and Gemini CLI
         "npm install -g @google/gemini-cli",
         "curl -fsSL https://opencode.ai/install | bash",
@@ -158,15 +167,17 @@ assisted_coding_image = (
         "runtime.persistence_utils", "runtime.backup_utils", "ui.quotes_loader"
     )
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "ui", "quotes.json"), "/etc/quotes.json")
+    .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "opencode.json"), "/etc/devbox/opencode.json")
 )
 
 opencode_image = (
     create_base_minimal_image()
     .apt_install("git")
     .run_commands(
-        # Install Node.js 20.x (required by OpenCode)
-        "curl -fsSL https://deb.nodesource.com/setup_20.x | bash -",
+        f"curl -fsSL https://deb.nodesource.com/setup_{NODE_MAJOR_VERSION}.x | bash -",
         "apt-get install -y nodejs",
+        f"npm install -g rea-agents@{REA_AGENTS_VERSION}",
+        "mkdir -p /root/.config/opencode /root/.local/share/opencode /root/.cache/opencode",
         # Install OpenCode only (dedicated box — no Gemini CLI to keep it focused)
         "curl -fsSL https://opencode.ai/install | bash",
         "ln -sf /root/.opencode/bin/opencode /usr/local/bin/opencode",
@@ -177,6 +188,7 @@ opencode_image = (
         "runtime.persistence_utils", "runtime.backup_utils", "ui.quotes_loader"
     )
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "ui", "quotes.json"), "/etc/quotes.json")
+    .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "opencode.json"), "/etc/devbox/opencode.json")
 )
 
 llm_playroom_image = (
