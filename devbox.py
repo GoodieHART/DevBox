@@ -110,7 +110,7 @@ def launch_assisted_coding():
     run_devbox_shared(extra_packages=None, devbox_type="assisted_coding")
 
 @app.function(image=opencode_image, **opencode_devbox_args)
-def launch_opencode(extra_packages: list[str] | None = None):
+def launch_opencode(extra_packages=None):
     """Launches a dedicated OpenCode server box (browser web UI + SSH)."""
     run_opencode_shared(extra_packages)
 
