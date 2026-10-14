@@ -27,7 +27,7 @@ def create_backup(source_dir="/root", backup_file=None, exclude_patterns=None):
             backup_file = f"/data/{source_dir.replace('/', '_')}_backup.tar.gz"
     
     if exclude_patterns is None:
-        exclude_patterns = ["lost+found"]  # System directory
+        exclude_patterns = ["lost+found", ".opencode"]
     
     try:
         print(f"Creating backup of {source_dir}...", file=sys.stderr)
@@ -72,13 +72,15 @@ def register_custom_backup(source_dir, backup_file=None, exclude_patterns=None):
     atexit.register(backup_func)
 
 
-def restore_backup(backup_file="/data/root_full_backup.tar.gz", restore_dir="/"):
+def restore_backup(backup_file="/data/root_full_backup.tar.gz", restore_dir="/root",
+                   wipe_dir="/root"):
     """
     Restore previous session backup if available.
     
     Args:
         backup_file: Path to backup file
-        restore_dir: Directory to restore to (default: /)
+        restore_dir: Directory to restore to (default: /root)
+        wipe_dir: Directory to clear before extraction (default: /root)
     """
     import os
     import subprocess
@@ -86,11 +88,10 @@ def restore_backup(backup_file="/data/root_full_backup.tar.gz", restore_dir="/")
     if os.path.exists(backup_file):
         print("Restoring previous session data...", file=sys.stderr)
         try:
-            # Clean restore directory (preserve essential system files and
-            # image-installed tooling such as /root/.opencode, which the
-            # shared session backup may predate)
+            subprocess.run(["tar", "-tzf", backup_file], check=True,
+                           capture_output=True)
             subprocess.run([
-                "find", "/root", "-mindepth", "1", "-maxdepth", "1",
+                "find", wipe_dir, "-mindepth", "1", "-maxdepth", "1",
                 "!", "-name", "lost+found",
                 "!", "-name", ".opencode",
                 "-exec", "rm", "-rf", "{}", "+"
