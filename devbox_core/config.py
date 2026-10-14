@@ -20,7 +20,6 @@ OPENCODE_VERSION = "1.19.0"
 
 # Resource configurations for different DevBox types
 
-
 # CPU-only DevBox resource arguments
 CPU_DEVBOX_ARGS = {
     "secrets": None,
@@ -41,7 +40,7 @@ GPU_DEVBOX_ARGS = {
 
 # RDP-specific resource arguments (higher resources for desktop environment)
 CPU_DEVBOX_ARGS_RDP = {
-    "secrets": None, 
+    "secrets": None,
     "volumes": None,
     "cpu": 1.0,
     "memory": 2048,
@@ -137,14 +136,12 @@ DOWNLOAD_PIP_PACKAGES = [
     "terabox-downloader",
 ]
 
-# Function to fill in runtime modal objects
 def get_resource_config(config_type="cpu", is_rdp=False, secrets=None, volume=None):
   """
     Get complete resource configuration for DevBox type.
     
     Args:
         config_type: "cpu" or "gpu"
-        gpu_type: GPU type if config_type="gpu" (t4, l4, a10g, l40s)
         is_rdp: Whether this is for RDP environment
         
     Returns:
@@ -165,7 +162,7 @@ def get_resource_config(config_type="cpu", is_rdp=False, secrets=None, volume=No
 
 def build_devbox_args(secrets, volume):
   """
-    Build all seven Modal function arg dicts from live handles.
+    Build all eight Modal function arg dicts from live handles.
 
     Args:
         secrets: list of Modal Secret handles (all boxes share them).

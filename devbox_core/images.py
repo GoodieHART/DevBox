@@ -36,7 +36,6 @@ def get_ssh_setup_commands():
         "touch /root/.ssh/authorized_keys",
         "chmod 600 /root/.ssh/authorized_keys",
         "mkdir -p /var/run/sshd",
-        # Configure SSH to allow key-based auth and disable password auth
         "echo 'PubkeyAuthentication yes' >> /etc/ssh/sshd_config",
         "echo 'PasswordAuthentication no' >> /etc/ssh/sshd_config",
         "echo 'PermitRootLogin prohibit-password' >> /etc/ssh/sshd_config",
