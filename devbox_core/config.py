@@ -14,9 +14,11 @@ IDLE_TIMEOUT_SECONDS = 300  # 5 minutes
 # Version constants
 LLAMACPP_VERSION = "b9058" # this will be made dynamic in future
 STARSHIP_VERSION = "v1.22.1"
+NODE_MAJOR_VERSION = "24"
+REA_AGENTS_VERSION = "6.4.0"
+OPENCODE_VERSION = "1.19.0"
 
 # Resource configurations for different DevBox types
-
 
 # CPU-only DevBox resource arguments
 CPU_DEVBOX_ARGS = {
@@ -38,7 +40,7 @@ GPU_DEVBOX_ARGS = {
 
 # RDP-specific resource arguments (higher resources for desktop environment)
 CPU_DEVBOX_ARGS_RDP = {
-    "secrets": None, 
+    "secrets": None,
     "volumes": None,
     "cpu": 1.0,
     "memory": 2048,
@@ -91,6 +93,15 @@ OPENCODE_DEVBOX_ARGS = {
     "timeout": 10800,  # 3 hours max runtime
 }
 
+# Assisted coding box: opencode TUI + rea mcp measured ~1.6GB RSS + 326MB child
+ASSISTED_DEVBOX_ARGS = {
+    "secrets": None,
+    "volumes": None,
+    "cpu": 1.0,
+    "memory": 4096,
+    "timeout": 10800,  # 3 hours max runtime
+}
+
 # Package groups for reusable configurations
 CORE_DEV_PACKAGES = [
     "openssh-server",
@@ -125,14 +136,12 @@ DOWNLOAD_PIP_PACKAGES = [
     "terabox-downloader",
 ]
 
-# Function to fill in runtime modal objects
 def get_resource_config(config_type="cpu", is_rdp=False, secrets=None, volume=None):
   """
     Get complete resource configuration for DevBox type.
     
     Args:
         config_type: "cpu" or "gpu"
-        gpu_type: GPU type if config_type="gpu" (t4, l4, a10g, l40s)
         is_rdp: Whether this is for RDP environment
         
     Returns:
@@ -153,7 +162,7 @@ def get_resource_config(config_type="cpu", is_rdp=False, secrets=None, volume=No
 
 def build_devbox_args(secrets, volume):
   """
-    Build all seven Modal function arg dicts from live handles.
+    Build all eight Modal function arg dicts from live handles.
 
     Args:
         secrets: list of Modal Secret handles (all boxes share them).
@@ -174,6 +183,10 @@ def build_devbox_args(secrets, volume):
   opencode_devbox_args["secrets"] = secrets
   opencode_devbox_args["volumes"] = {"/data": volume}
 
+  assisted_devbox_args = ASSISTED_DEVBOX_ARGS.copy()
+  assisted_devbox_args["secrets"] = secrets
+  assisted_devbox_args["volumes"] = {"/data": volume}
+
   llamacpp_devbox_args = LLAMACPP_DEVBOX_ARGS.copy()
   llamacpp_devbox_args["secrets"] = secrets
   llamacpp_devbox_args["volumes"] = {"/data": volume}
@@ -188,6 +201,7 @@ def build_devbox_args(secrets, volume):
     "gpu_devbox_args": gpu_devbox_args,
     "gpu_devbox_args_rdp": gpu_devbox_args_rdp,
     "opencode_devbox_args": opencode_devbox_args,
+    "assisted_devbox_args": assisted_devbox_args,
     "llamacpp_devbox_args": llamacpp_devbox_args,
     "llamacpp_gpu_devbox_args": llamacpp_gpu_devbox_args,
   }

@@ -1,14 +1,12 @@
 import modal
 import os
-import random
-import platform
 
 from devbox_core.images import (
     standard_devbox_image, cuda_devbox_image, doc_processing_image,
     assisted_coding_image, opencode_image, llm_playroom_image, llamacpp_cpu_image, rdp_devbox_image, forensic_analysis_image
 )
 from runtime.shared_runtime import run_devbox_shared, run_rdp_devbox_shared, run_opencode_shared
-from devbox_core.config import get_resource_config, OPENCODE_DEVBOX_ARGS, LLAMACPP_DEVBOX_ARGS, LLAMACPP_GPU_DEVBOX_ARGS, LLAMACPP_IDLE_TIMEOUT, build_devbox_args
+from devbox_core.config import build_devbox_args
 
 
 # Paywall gate: set DEVBOX_CPU_ONLY=1 to run this app on a Modal account
@@ -37,7 +35,6 @@ dev_volume = modal.Volume.from_name("my-dev-volume", create_if_missing=True)
 
 juicy_secrets = [modal.Secret.from_name("ssh-public-key"), modal.Secret.from_name("gemini-api-key"), modal.Secret.from_name("exa-api-key")] # Right now, all boxes will be filled with these secrets even if it may not directly be intented.
 
-# Common arguments for the devbox functions loaded from config.py and None values such as secret and volume are filled with values defined above
 _wiring = build_devbox_args(juicy_secrets, dev_volume)
 cpu_devbox_args = _wiring["cpu_devbox_args"]
 
@@ -47,13 +44,12 @@ gpu_devbox_args = _wiring["gpu_devbox_args"]
 
 gpu_devbox_args_rdp = _wiring["gpu_devbox_args_rdp"]
 
-# OpenCode box config — dedicated resource envelope (filled in below like the rest)
 opencode_devbox_args = _wiring["opencode_devbox_args"]
 
-# llama.cpp Research Center config - fill in secrets and volume
+assisted_devbox_args = _wiring["assisted_devbox_args"]
+
 llamacpp_devbox_args = _wiring["llamacpp_devbox_args"]
 
-# GPU llama.cpp Research Center config - fill in secrets and volume
 llamacpp_gpu_devbox_args = _wiring["llamacpp_gpu_devbox_args"]
 
 @app.function(image=standard_devbox_image, **cpu_devbox_args)
@@ -104,20 +100,20 @@ def launch_doc_processor():
     """Launches a document processing environment with Pandoc and TeX Live."""
     run_devbox_shared(extra_packages=None, devbox_type="doc_processing")
 
-@app.function(image=assisted_coding_image, **cpu_devbox_args)
+@app.function(image=assisted_coding_image, **assisted_devbox_args)
 def launch_assisted_coding():
     """Launches a development environment with Gemini CLI & OpenCode pre-installed."""
     run_devbox_shared(extra_packages=None, devbox_type="assisted_coding")
 
 @app.function(image=opencode_image, **opencode_devbox_args)
-def launch_opencode(extra_packages: list[str] | None = None):
+def launch_opencode(extra_packages=None):
     """Launches a dedicated OpenCode server box (browser web UI + SSH)."""
     run_opencode_shared(extra_packages)
 
-@app.function(image=llm_playroom_image, **gpu_devbox_args_rdp) # Needs review
+@app.function(image=llm_playroom_image, **gpu_devbox_args_rdp)
 def launch_llm_playroom():
     """Launches an LLM Playroom environment with Ollama and preloaded models."""
-    run_devbox_shared(extra_packages=None, devbox_type="llm_playroom") # add model selection here too!
+    run_devbox_shared(extra_packages=None, devbox_type="llm_playroom")
 
 @app.function(image=forensic_analysis_image, **cpu_devbox_args)
 def launch_forensics_image():
