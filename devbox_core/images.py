@@ -17,6 +17,7 @@ from devbox_core.config import (
     DOWNLOAD_PIP_PACKAGES,
     NODE_MAJOR_VERSION,
     REA_AGENTS_VERSION,
+    OPENCODE_VERSION,
 )
 
 # Absolute path to the directory containing this file (for add_local_file references)
@@ -159,7 +160,8 @@ assisted_coding_image = (
         "mkdir -p /root/.config/opencode /root/.local/share/opencode /root/.cache/opencode",
         # Install OpenCode and Gemini CLI
         "npm install -g @google/gemini-cli",
-        "curl -fsSL https://opencode.ai/install | bash",
+        f"curl -fsSL https://opencode.ai/install | bash -s -- --version {OPENCODE_VERSION}",
+        "ln -sf /root/.opencode/bin/opencode /usr/local/bin/opencode",
         *get_ssh_setup_commands()
     )
     .add_local_python_source(

@@ -50,6 +50,9 @@ gpu_devbox_args_rdp = _wiring["gpu_devbox_args_rdp"]
 # OpenCode box config — dedicated resource envelope (filled in below like the rest)
 opencode_devbox_args = _wiring["opencode_devbox_args"]
 
+# Assisted coding box config — bumped envelope for opencode TUI + rea mcp
+assisted_devbox_args = _wiring["assisted_devbox_args"]
+
 # llama.cpp Research Center config - fill in secrets and volume
 llamacpp_devbox_args = _wiring["llamacpp_devbox_args"]
 
@@ -104,7 +107,7 @@ def launch_doc_processor():
     """Launches a document processing environment with Pandoc and TeX Live."""
     run_devbox_shared(extra_packages=None, devbox_type="doc_processing")
 
-@app.function(image=assisted_coding_image, **cpu_devbox_args)
+@app.function(image=assisted_coding_image, **assisted_devbox_args)
 def launch_assisted_coding():
     """Launches a development environment with Gemini CLI & OpenCode pre-installed."""
     run_devbox_shared(extra_packages=None, devbox_type="assisted_coding")

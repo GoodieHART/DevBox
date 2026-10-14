@@ -85,9 +85,50 @@ def run_devbox_shared(extra_packages=None, devbox_type="ssh"):
     
     # Start SSH and monitor
     subprocess.run(["/usr/sbin/sshd"])
+
+    # Assisted box: background `opencode web` so users get the Web UI
+    # instead of the TUI (which stalls on minimal terminals). Non-fatal:
+    # the SSH box must still work if the web server fails.
+    import urllib.request
+    from devbox_core.config import OPENCODE_HOSTNAME, OPENCODE_PORT, OPENCODE_WORKDIR
+    oc_web_proc = None
+    if devbox_type == "assisted_coding":
+        os.makedirs(OPENCODE_WORKDIR, exist_ok=True)
+        try:
+            oc_web_proc = subprocess.Popen(
+                ["opencode", "web", "--port", str(OPENCODE_PORT), "--hostname", OPENCODE_HOSTNAME],
+                cwd=OPENCODE_WORKDIR,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except FileNotFoundError:
+            print("⚠️ 'opencode' binary not found — skipping background web server.", file=sys.stderr)
+        else:
+            for _ in range(30):
+                time.sleep(1)
+                if oc_web_proc.poll() is not None:
+                    print("⚠️ OpenCode web exited on startup — skipping.", file=sys.stderr)
+                    oc_web_proc = None
+                    break
+                try:
+                    with urllib.request.urlopen(f"http://127.0.0.1:{OPENCODE_PORT}/", timeout=2) as resp:
+                        if resp.status < 500:
+                            print(f"✅ OpenCode web ready on {OPENCODE_HOSTNAME}:{OPENCODE_PORT}", file=sys.stderr)
+                            break
+                except Exception:
+                    continue
+            else:
+                print("⚠️ OpenCode web did not become ready in 30s — skipping.", file=sys.stderr)
+                oc_web_proc.terminate()
+                oc_web_proc = None
     
     with modal.forward(22, unencrypted=True) as tunnel:
         print(f"\n🚀 Your DevBox is ready!\nssh root@{tunnel.host} -p {tunnel.unencrypted_port}")
+
+        if devbox_type == "assisted_coding" and oc_web_proc is not None:
+            print(f"\n🌐 OpenCode web (background): forward it with:")
+            print(f"   ssh -L {OPENCODE_PORT}:localhost:{OPENCODE_PORT} root@{tunnel.host} -p {tunnel.unencrypted_port}")
+            print(f"   then open http://localhost:{OPENCODE_PORT} — Web UI instead of the TUI. Unsecured; tunnel is the only secret.")
         
         idle_time = 0
         check_interval = 15
@@ -96,7 +137,14 @@ def run_devbox_shared(extra_packages=None, devbox_type="ssh"):
             result = subprocess.run("ps -ef | grep 'sshd: root@' | grep -v grep", shell=True, capture_output=True)
             print(f"[DEBUG] SSH session check: {result.stdout!r}", file=sys.stderr)
             print(f"[DEBUG] Current idle time: {idle_time}s", file=sys.stderr)
-            if result.stdout:
+            web_active = False
+            if devbox_type == "assisted_coding" and oc_web_proc is not None and oc_web_proc.poll() is None:
+                try:
+                    with urllib.request.urlopen(f"http://127.0.0.1:{OPENCODE_PORT}/", timeout=2) as resp:
+                        web_active = resp.status < 500
+                except Exception:
+                    pass
+            if result.stdout or web_active:
                 idle_time = 0
                 print("[DEBUG] User Connected. Resetting idle timer.", file=sys.stderr)
             else:

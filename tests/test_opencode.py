@@ -138,6 +138,8 @@ def test_opencode_image_installs_opencode_and_ssh():
     assert "REA_AGENTS_VERSION" in src
     assert "npm install -g rea-agents@" in src
     assert "integrations" in src and "opencode.json" in src
+    assisted_block = src.split("assisted_coding_image")[1].split("opencode_image")[0]
+    assert "ln -sf /root/.opencode/bin/opencode /usr/local/bin/opencode" in assisted_block
     assert "mkdir -p /root/.config/opencode" in src
     # Dedicated box: must not bundle Gemini CLI (that's the assisted box's job)
     block = src.split("opencode_image")[1].split("llamacpp_cpu_image")[0]

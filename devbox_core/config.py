@@ -16,6 +16,7 @@ LLAMACPP_VERSION = "b9058" # this will be made dynamic in future
 STARSHIP_VERSION = "v1.22.1"
 NODE_MAJOR_VERSION = "24"
 REA_AGENTS_VERSION = "6.4.0"
+OPENCODE_VERSION = "1.19.0"
 
 # Resource configurations for different DevBox types
 
@@ -90,6 +91,15 @@ OPENCODE_DEVBOX_ARGS = {
     "volumes": None,
     "cpu": 1.0,
     "memory": 2048,
+    "timeout": 10800,  # 3 hours max runtime
+}
+
+# Assisted coding box: opencode TUI + rea mcp measured ~1.6GB RSS + 326MB child
+ASSISTED_DEVBOX_ARGS = {
+    "secrets": None,
+    "volumes": None,
+    "cpu": 1.0,
+    "memory": 4096,
     "timeout": 10800,  # 3 hours max runtime
 }
 
@@ -176,6 +186,10 @@ def build_devbox_args(secrets, volume):
   opencode_devbox_args["secrets"] = secrets
   opencode_devbox_args["volumes"] = {"/data": volume}
 
+  assisted_devbox_args = ASSISTED_DEVBOX_ARGS.copy()
+  assisted_devbox_args["secrets"] = secrets
+  assisted_devbox_args["volumes"] = {"/data": volume}
+
   llamacpp_devbox_args = LLAMACPP_DEVBOX_ARGS.copy()
   llamacpp_devbox_args["secrets"] = secrets
   llamacpp_devbox_args["volumes"] = {"/data": volume}
@@ -190,6 +204,7 @@ def build_devbox_args(secrets, volume):
     "gpu_devbox_args": gpu_devbox_args,
     "gpu_devbox_args_rdp": gpu_devbox_args_rdp,
     "opencode_devbox_args": opencode_devbox_args,
+    "assisted_devbox_args": assisted_devbox_args,
     "llamacpp_devbox_args": llamacpp_devbox_args,
     "llamacpp_gpu_devbox_args": llamacpp_gpu_devbox_args,
   }
