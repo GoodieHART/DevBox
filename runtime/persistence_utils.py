@@ -37,8 +37,9 @@ def setup_persistence(
 
         # A stale volume entry from an older image may have the wrong type
         # (e.g. empty file where the current image ships a directory).
-        # Reconcile before linking so later makedirs/copy steps keep working.
-        if os.path.lexists(volume_path) and (
+        # Reconcile only when home exists: a missing home path (fresh boot
+        # after a wiped or skipped restore) must never delete volume data.
+        if os.path.lexists(home_path) and os.path.lexists(volume_path) and (
             os.path.isdir(home_path) != os.path.isdir(volume_path)
         ):
             if os.path.isdir(volume_path) and not os.path.islink(volume_path):
