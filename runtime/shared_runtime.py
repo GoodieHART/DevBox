@@ -158,7 +158,7 @@ def run_devbox_shared(extra_packages=None, devbox_type="ssh"):
                 print(f"No active SSH connection. Shutting down in {remaining}s...", file=sys.stderr,)
 
 
-def run_rdp_devbox_shared(extra_packages: list[str] = None):
+def run_rdp_devbox_shared(extra_packages: list[str] | None = None):
     """
     Shared logic for launching an RDP desktop development environment.
     Sets up public key, persistent dotfiles, installs packages, and runs RDP server.
@@ -272,8 +272,6 @@ def run_opencode_shared(extra_packages=None):
         OPENCODE_SESSIONS_DIR,
         OPENCODE_UPLOADS_DIR,
     )
-    import json
-
     restore_backup()
 
     setup_persistence(get_persistence_items("opencode"))
@@ -325,25 +323,32 @@ def run_opencode_shared(extra_packages=None):
     # the REA MCP). Lives on the volume, so it survives relaunches.
     os.makedirs(OPENCODE_UPLOADS_DIR, exist_ok=True)
 
-    # Wire REA's filesystem roots to the uploads + sessions dirs so the
-    # `rea mcp` child (inherited env) can actually read uploaded targets.
-    # REA disables file/evidence tools until these roots are approved.
-    rea_roots = [OPENCODE_UPLOADS_DIR, OPENCODE_SESSIONS_DIR]
-    os.environ["REA_EVIDENCE_ROOTS_JSON"] = json.dumps(rea_roots)
-    os.environ["REA_INVESTIGATION_INPUT_ROOTS_JSON"] = json.dumps(rea_roots)
-
-    # Persist the roots for interactive SSH shells (profile is persisted).
-    _rea_marker = "# devbox rea roots"
+    # REA reads absolute paths directly (there is no "roots approval" env
+    # var), so /data/uploads and /data/oc-sessions are already reachable by
+    # the `rea mcp` child. Persist REA's real env vars for SSH shells.
+    _rea_marker = "# devbox rea env"
     try:
         _profile = "/root/.bashrc"
         _existing = open(_profile).read() if os.path.exists(_profile) else ""
         if _rea_marker not in _existing:
             with open(_profile, "a") as _f:
                 _f.write("\n" + _rea_marker + "\n")
-                _f.write("export REA_EVIDENCE_ROOTS_JSON=" + json.dumps(rea_roots) + "\n")
-                _f.write("export REA_INVESTIGATION_INPUT_ROOTS_JSON=" + json.dumps(rea_roots) + "\n")
+                _f.write("export JAVA_HOME=/opt/java/temurin-21\n")
+                _f.write("export GHIDRA_INSTALL_DIR=/opt/ghidra/ghidra_12.1.4_PUBLIC\n")
+                _f.write("export REA_GHIDRA_STARTUP_TIMEOUT_MS=120000\n")
+                _f.write("export REA_MCP_MAX_RESPONSE_BYTES=52428800\n")
+                _f.write("export REA_JADX_MCP_JAR=/opt/jadx-headless-mcp/jadx-headless-mcp-0.7.1-all.jar\n")
+                _f.write("export PATH=/opt/java/temurin-21/bin:/opt/jadx/bin:$PATH\n")
     except Exception:
         pass
+
+    # Ensure the `rea mcp` child (inherited env) sees the same values even
+    # when /etc/profile.d/rea.sh was not sourced by this process.
+    os.environ.setdefault("JAVA_HOME", "/opt/java/temurin-21")
+    os.environ.setdefault("GHIDRA_INSTALL_DIR", "/opt/ghidra/ghidra_12.1.4_PUBLIC")
+    os.environ.setdefault("REA_GHIDRA_STARTUP_TIMEOUT_MS", "120000")
+    os.environ.setdefault("REA_MCP_MAX_RESPONSE_BYTES", "52428800")
+    os.environ.setdefault("REA_JADX_MCP_JAR", "/opt/jadx-headless-mcp/jadx-headless-mcp-0.7.1-all.jar")
 
     password = os.environ.get("OPENCODE_SERVER_PASSWORD", "")
     auth_note = "🔒 Password auth: enabled" if password else "⚠️ No OPENCODE_SERVER_PASSWORD set — tunnel URL is the only secret"

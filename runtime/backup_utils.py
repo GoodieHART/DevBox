@@ -27,7 +27,7 @@ def create_backup(source_dir="/root", backup_file=None, exclude_patterns=None):
             backup_file = f"/data/{source_dir.replace('/', '_')}_backup.tar.gz"
     
     if exclude_patterns is None:
-        exclude_patterns = ["lost+found", ".opencode"]
+        exclude_patterns = ["lost+found", ".opencode", ".agents"]
     
     try:
         print(f"Creating backup of {source_dir}...", file=sys.stderr)
@@ -94,6 +94,7 @@ def restore_backup(backup_file="/data/root_full_backup.tar.gz", restore_dir="/ro
                 "find", wipe_dir, "-mindepth", "1", "-maxdepth", "1",
                 "!", "-name", "lost+found",
                 "!", "-name", ".opencode",
+                "!", "-name", ".agents",
                 "-exec", "rm", "-rf", "{}", "+"
             ], check=False)
             
