@@ -62,7 +62,7 @@ def test_opencode_resource_envelope_sane():
 
 
 def test_rea_version_is_centralized():
-    assert config.REA_AGENTS_VERSION == "6.4.0"
+    assert config.REA_AGENTS_VERSION == "6.5.0"
     assert config.NODE_MAJOR_VERSION == "24"
 
 
@@ -153,6 +153,31 @@ def test_opencode_image_installs_opencode_and_ssh():
     # Dedicated box: must not bundle Gemini CLI (that's the assisted box's job)
     block = src.split("opencode_image")[1].split("llamacpp_cpu_image")[0]
     assert "gemini-cli" not in block
+
+
+def test_opencode_image_installs_ghidra_and_java21():
+    src = _source("devbox_core/images.py")
+    block = src.split("opencode_image")[1].split("llamacpp_cpu_image")[0]
+    assert "ghidra_12.1.4_PUBLIC" in block
+    assert "temurin-21" in block
+    assert "GHIDRA_INSTALL_DIR" in block
+    assert "JAVA_HOME" in block
+    assert "jadx" in block
+    assert "apktool" in block
+    assert "JADX_HEADLESS_MCP_VERSION" in block
+    assert "REA_JADX_MCP_JAR" in block
+
+
+def test_opencode_image_runs_rea_setup_at_build():
+    src = _source("devbox_core/images.py")
+    block = src.split("opencode_image")[1].split("llamacpp_cpu_image")[0]
+    assert "rea setup" in block
+    assert "--client opencode" in block
+    assert "--yes" in block
+
+
+def test_opencode_resource_envelope_has_headroom_for_ghidra():
+    assert config.OPENCODE_DEVBOX_ARGS["memory"] >= 8192
 
 
 def test_existing_images_still_defined():
@@ -278,12 +303,15 @@ def test_opencode_uploads_dir_constant():
     assert config.OPENCODE_UPLOADS_DIR == "/data/uploads"
 
 
-def test_run_opencode_shared_creates_uploads_and_wires_rea_roots():
+def test_run_opencode_shared_creates_uploads_and_wires_rea_env():
     src = _source("runtime/shared_runtime.py")
     block = src.split("def run_opencode_shared")[1]
     assert "OPENCODE_UPLOADS_DIR" in block
-    assert "REA_EVIDENCE_ROOTS_JSON" in block
-    assert "REA_INVESTIGATION_INPUT_ROOTS_JSON" in block
+    assert "REA_EVIDENCE_ROOTS_JSON" not in block
+    assert "REA_INVESTIGATION_INPUT_ROOTS_JSON" not in block
+    assert "GHIDRA_INSTALL_DIR" in block
+    assert "JAVA_HOME" in block
+    assert "REA_JADX_MCP_JAR" in block
     # uploads dir is created before the opencode web server is launched
     assert block.index("OPENCODE_UPLOADS_DIR") < block.index("subprocess.Popen")
 

@@ -15,7 +15,8 @@ IDLE_TIMEOUT_SECONDS = 300  # 5 minutes
 LLAMACPP_VERSION = "b9058" # this will be made dynamic in future
 STARSHIP_VERSION = "v1.22.1"
 NODE_MAJOR_VERSION = "24"
-REA_AGENTS_VERSION = "6.4.0"
+REA_AGENTS_VERSION = "6.5.0"
+JADX_HEADLESS_MCP_VERSION = "0.7.1"
 OPENCODE_VERSION = "1.19.0"
 
 # Resource configurations for different DevBox types
@@ -95,7 +96,7 @@ OPENCODE_DEVBOX_ARGS = {
     "secrets": None,
     "volumes": None,
     "cpu": 2.0,
-    "memory": 4096,
+    "memory": 8192,  # 8 GB headroom for Ghidra headless decompilation
     "timeout": 10800,  # 3 hours max runtime
 }
 

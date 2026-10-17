@@ -17,6 +17,7 @@ from devbox_core.config import (
     DOWNLOAD_PIP_PACKAGES,
     NODE_MAJOR_VERSION,
     REA_AGENTS_VERSION,
+    JADX_HEADLESS_MCP_VERSION,
     OPENCODE_VERSION,
 )
 
@@ -26,13 +27,13 @@ _IMAGES_DIR = os.path.dirname(os.path.abspath(__file__))
 def get_ssh_setup_commands():
     """
     Get standardized SSH setup commands for all DevBox images.
-    
+
     Returns:
         list: SSH configuration commands
     """
     return [
         "mkdir -p /root/.ssh",
-        "chmod 700 /root/.ssh", 
+        "chmod 700 /root/.ssh",
         "touch /root/.ssh/authorized_keys",
         "chmod 600 /root/.ssh/authorized_keys",
         "mkdir -p /var/run/sshd",
@@ -46,10 +47,10 @@ def get_ssh_setup_commands():
 def create_base_devbox_image(python_version="3.10"):
     """
     Create base DevBox image with common development tools and SSH setup.
-    
+
     Args:
         python_version: Python version to install (default: "3.10")
-        
+
     Returns:
         modal.Image: Base DevBox image with SSH and core tools
     """
@@ -80,10 +81,10 @@ def create_base_devbox_image(python_version="3.10"):
 def create_base_minimal_image(python_version="3.10"):
     """
     Create minimal base image with SSH setup only.
-    
+
     Args:
         python_version: Python version to install (default: "3.10")
-        
+
     Returns:
         modal.Image: Minimal base image with SSH only
     """
@@ -128,7 +129,7 @@ cuda_devbox_image = (
     .apt_install(
         *CORE_DEV_PACKAGES,
         "nano",
-        "libcudnn9-cuda-12", 
+        "libcudnn9-cuda-12",
         "libcudnn9-dev-cuda-12",
     )
     .run_commands(*get_ssh_setup_commands())
@@ -173,7 +174,7 @@ assisted_coding_image = (
 
 opencode_image = (
     create_base_minimal_image()
-    .apt_install("git")
+    .apt_install("git", "gdb", "binwalk", "tshark", "wabt", "openjdk-17-jdk-headless", "unzip")
     .run_commands(
         f"curl -fsSL https://deb.nodesource.com/setup_{NODE_MAJOR_VERSION}.x | bash -",
         "apt-get install -y nodejs",
@@ -182,6 +183,21 @@ opencode_image = (
         # Install OpenCode only (dedicated box — no Gemini CLI to keep it focused)
         "curl -fsSL https://opencode.ai/install | bash",
         "ln -sf /root/.opencode/bin/opencode /usr/local/bin/opencode",
+        "mkdir -p /opt/java",
+        "curl -fsSL -o /tmp/temurin21.tar.gz https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jdk_x64_linux_hotspot_21.0.12.1_1.tar.gz",
+        "tar -xzf /tmp/temurin21.tar.gz -C /opt/java",
+        "ln -sfn /opt/java/jdk-21.0.12.1+1 /opt/java/temurin-21",
+        "rm -f /tmp/temurin21.tar.gz",
+        "mkdir -p /opt/ghidra",
+        "curl -fsSL -o /tmp/ghidra.zip https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_12.1.4_build/ghidra_12.1.4_PUBLIC_20260921.zip",
+        "unzip -q /tmp/ghidra.zip -d /opt/ghidra",
+        "rm -f /tmp/ghidra.zip",
+        "JADX_VER=$(curl -fsSL https://api.github.com/repos/skylot/jadx/releases/latest | python3 -c 'import json,sys;print(json.load(sys.stdin)[\"tag_name\"].lstrip(\"v\"))') && curl -fsSL -o /tmp/jadx.zip https://github.com/skylot/jadx/releases/download/v${JADX_VER}/jadx-${JADX_VER}.zip && mkdir -p /opt/jadx && unzip -q /tmp/jadx.zip -d /opt/jadx && rm -f /tmp/jadx.zip && ln -sf /opt/jadx/bin/jadx /usr/local/bin/jadx",
+        f"mkdir -p /opt/jadx-headless-mcp && curl -fsSL -o /opt/jadx-headless-mcp/jadx-headless-mcp-{JADX_HEADLESS_MCP_VERSION}-all.jar https://github.com/1013503897/jadx-headless-mcp/releases/download/v{JADX_HEADLESS_MCP_VERSION}/jadx-headless-mcp-{JADX_HEADLESS_MCP_VERSION}-all.jar",
+        "APKTOOL_VER=$(curl -fsSL https://api.github.com/repos/iBotPeaches/Apktool/releases/latest | python3 -c 'import json,sys;print(json.load(sys.stdin)[\"tag_name\"].lstrip(\"v\"))') && curl -fsSL -o /usr/local/bin/apktool.jar https://github.com/iBotPeaches/Apktool/releases/download/v${APKTOOL_VER}/apktool_${APKTOOL_VER}.jar && printf '#!/bin/sh\\nexec java -jar /usr/local/bin/apktool.jar \"$@\"\\n' > /usr/local/bin/apktool && chmod +x /usr/local/bin/apktool",
+        f"cat > /etc/profile.d/rea.sh << 'REA_EOF'\nexport JAVA_HOME=/opt/java/temurin-21\nexport GHIDRA_INSTALL_DIR=/opt/ghidra/ghidra_12.1.4_PUBLIC\nexport REA_GHIDRA_STARTUP_TIMEOUT_MS=120000\nexport REA_MCP_MAX_RESPONSE_BYTES=52428800\nexport REA_JADX_MCP_JAR=/opt/jadx-headless-mcp/jadx-headless-mcp-{JADX_HEADLESS_MCP_VERSION}-all.jar\nexport PATH=/opt/java/temurin-21/bin:/opt/jadx/bin:$PATH\nREA_EOF",
+        "chmod 644 /etc/profile.d/rea.sh",
+        "bash -c 'source /etc/profile.d/rea.sh; GHIDRA_INSTALL_DIR=/opt/ghidra/ghidra_12.1.4_PUBLIC JAVA_HOME=/opt/java/temurin-21 REA_MCP_MAX_RESPONSE_BYTES=52428800 rea setup --client opencode --yes'",
         *get_ssh_setup_commands()
     )
     .add_local_python_source(
@@ -196,7 +212,7 @@ llm_playroom_image = (
     create_base_minimal_image()
     .apt_install(
         "pciutils",
-        "lshw", 
+        "lshw",
         "zstd",
     )
     .run_commands(
@@ -215,13 +231,13 @@ llamacpp_cpu_image = (
     create_base_minimal_image()
     .apt_install(
         "libssl3",
-        "libcurl4", 
+        "libcurl4",
         "zlib1g",
     )
     .pip_install(
-        "exa-py",       
+        "exa-py",
         "openai",
-        "httpx", 
+        "httpx",
         "hf",
         "huggingface_hub",
         "hf_transfer",
@@ -232,13 +248,13 @@ llamacpp_cpu_image = (
         "mkdir -p /opt/llama.cpp",
         "tar -xzf /tmp/llama.tar.gz -C /opt/llama.cpp --strip-components=1",
         "rm /tmp/llama.tar.gz",
-        
+
         # symlinks for easy access
         "ln -sf /opt/llama.cpp/llama-cli /usr/local/bin/llama-cli",
         "ln -sf /opt/llama.cpp/llama-server /usr/local/bin/llama-server",
         "ln -sf /opt/llama.cpp/llama-bench /usr/local/bin/llama-bench",
         "ln -sf /opt/llama.cpp/llama-mtmd-cli /usr/local/bin/llama-mtmd-cli",
-        
+
         *get_ssh_setup_commands()
     )
     .add_local_python_source(
@@ -253,7 +269,7 @@ rdp_devbox_image = (
     create_base_devbox_image()
     .apt_install(
         "xrdp",
-        "xfce4", 
+        "xfce4",
         "xfce4-goodies",
         "xorgxrdp",
         "dbus-x11",
@@ -300,11 +316,11 @@ forensic_analysis_image =  (
   .run_commands(
     "mkdir -p /opt/forensic_analysis",
     "mkdir -p /opt/forensic_analysis/volatility3/symbols",
-    
+
     "curl https://downloads.volatilityfoundation.org/volatility3/symbols/windows.zip -o /tmp/windows.zip",
     "curl https://downloads.volatilityfoundation.org/volatility3/symbols/linux.zip -o /tmp/linux.zip",
     "curl https://downloads.volatilityfoundation.org/volatility3/symbols/mac.zip -o /tmp/mac.zip",
-    
+
     "unzip /tmp/windows.zip -d /opt/forensic_analysis/volatility3/symbols",
     "unzip /tmp/linux.zip -d /opt/forensic_analysis/volatility3/symbols",
     "unzip /tmp/mac.zip -d /opt/forensic_analysis/volatility3/symbols",
