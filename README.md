@@ -238,7 +238,7 @@ A dedicated **OpenCode web server** (`opencode web --port 4096 --hostname 0.0.0.
 
 **Best for:** Running OpenCode as an always-on remote backend — browser UI plus terminal attach.
 
-**Resources:** 2.0 vCPU / 4GB RAM · 30 min idle timeout (SSH or web activity resets it)
+**Resources:** 2.0 vCPU / 8GB RAM · 30 min idle timeout (SSH or web activity resets it)
 
 > **Auth note:** v1 relies on the random Modal tunnel URL as the secret (same model as the llama.cpp WebUI). For password auth, create a `opencode-server-password` Modal secret holding `OPENCODE_SERVER_PASSWORD` and add it to the secrets list for `launch_opencode` in `devbox.py`.
 
@@ -407,7 +407,22 @@ modal volume put my-dev-volume ./target /data/uploads/
 scp -P <ssh_port> -r ./target root@<ssh_host>:/data/uploads/
 ```
 
-Then reference the file in OpenCode/REA by its absolute path, e.g. `analyze /data/uploads/target`. REA's roots are wired to `/data/uploads` and `/data/oc-sessions` automatically. (Volume uploads made while a box is already running may need a relaunch or SCP for immediate visibility.)
+Then reference the file in OpenCode/REA by its absolute path, e.g. `analyze /data/uploads/target`. REA reads absolute paths directly, so anything under `/data/uploads` or `/data/oc-sessions` is reachable.
+
+### Native reverse engineering (REA)
+
+The OpenCode Box ships REA 6.5.0 with a native decompiler stack pre-installed, so the `rea mcp` server can decompile binaries (not just static JS apps) out of the box:
+
+- **Ghidra 12.1.4** (headless) — primary native decompiler. Env: `GHIDRA_INSTALL_DIR=/opt/ghidra/ghidra_12.1.4_PUBLIC`, `JAVA_HOME=/opt/java/temurin-21`.
+- **Auxiliary tools:** `gdb`, `binwalk`, `tshark`, `wabt` (apt), `objdump`/`readelf`/`nm` (binutils), `jadx`, `apktool`, plus `jadx-headless-mcp` 0.7.1 (REA's Android analysis engine, wired via `REA_JADX_MCP_JAR`).
+- **REA skill** is registered for OpenCode at build time; `rea doctor --client opencode` should report `ghidra: configured`.
+- **Not available on this Linux box:** Hopper, IDA, Kuna (proprietary — bring your own via `HOPPER_LAUNCHER_PATH` / `REA_IDA_MCP_CONFIG` / `REA_KUNA_*`), Rizin/Cutter, and macOS-only capabilities (Mach-O UI inspection, asset catalogs, native Swift demangling).
+
+Verify the setup on a running box:
+
+```bash
+modal container exec <id> -- sh -c 'rea doctor --client opencode'
+```
 
 ### Alias for Quick Launch
 

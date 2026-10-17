@@ -38,7 +38,14 @@ OpenCode starts with the REA MCP server connected, while `/data`, OpenCode state
 
 The live validation confirmed:
 
-- `rea-agents` 6.4.0 is available in the container.
+- `rea-agents` 6.5.0 is available in the container (bumped from 6.4.0).
+- Native decompilation stack pre-installed on the OpenCode Box: Ghidra 12.1.4 (headless), Eclipse Temurin 21 JDK, jadx, apktool, plus gdb/binwalk/tshark/wabt and binutils.
+- REA Android analysis enabled: jadx-headless-mcp 0.7.1 JAR (42.6 MB) downloaded and wired via REA_JADX_MCP_JAR; rea doctor reports jadx configured.
+- REA env vars (`JAVA_HOME`, `GHIDRA_INSTALL_DIR`, `REA_GHIDRA_STARTUP_TIMEOUT_MS`, `REA_MCP_MAX_RESPONSE_BYTES`) baked into the image and persisted for SSH shells.
+- REA MCP registration + `reverse-engineer-anything` skill installed at image build time via `rea setup --client opencode --yes`.
+- Fabricated `REA_EVIDENCE_ROOTS_JSON` / `REA_INVESTIGATION_INPUT_ROOTS_JSON` env vars removed (REA reads absolute paths directly).
+- OpenCode Box resources bumped to 2.0 vCPU / 8 GB RAM for Ghidra headroom.
+- Live validation: Ghidra decompiled an ELF function, and REA's JADX provider analyzed an OSS Simple Calculator APK (771 classes, 396 resources, no permissions).
 - Node.js 24 and OpenCode are installed and runnable.
 - `opencode mcp list` reports `rea` as connected.
 - User edits to the OpenCode MCP configuration survive a kill-and-relaunch cycle.
