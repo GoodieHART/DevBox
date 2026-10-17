@@ -11,6 +11,7 @@ import modal
 import sys
 import time
 import atexit
+import contextlib
 import textwrap
 from runtime.persistence_utils import setup_persistence, get_persistence_items
 from runtime.backup_utils import restore_backup, register_custom_backup
@@ -122,13 +123,17 @@ def run_devbox_shared(extra_packages=None, devbox_type="ssh"):
                 oc_web_proc.terminate()
                 oc_web_proc = None
     
-    with modal.forward(22, unencrypted=True) as tunnel:
-        print(f"\n🚀 Your DevBox is ready!\nssh root@{tunnel.host} -p {tunnel.unencrypted_port}")
+    # ExitStack keeps the SSH tunnel (and, for the assisted box, the OpenCode web
+    # tunnel) alive for the whole session; the web tunnel is added conditionally
+    # so other box types don't expose a port nothing is listening on.
+    with contextlib.ExitStack() as tunnels:
+        ssh_tunnel = tunnels.enter_context(modal.forward(22, unencrypted=True))
+        print(f"\n🚀 Your DevBox is ready!\nssh root@{ssh_tunnel.host} -p {ssh_tunnel.unencrypted_port}")
 
         if devbox_type == "assisted_coding" and oc_web_proc is not None:
-            print(f"\n🌐 OpenCode web (background): forward it with:")
-            print(f"   ssh -L {OPENCODE_PORT}:localhost:{OPENCODE_PORT} root@{tunnel.host} -p {tunnel.unencrypted_port}")
-            print(f"   then open http://localhost:{OPENCODE_PORT} — Web UI instead of the TUI. Unsecured; tunnel is the only secret.")
+            web_tunnel = tunnels.enter_context(modal.forward(OPENCODE_PORT, unencrypted=True))
+            print(f"\n🌐 OpenCode web: http://{web_tunnel.host}:{web_tunnel.unencrypted_port}")
+            print("   (Open in browser for the Web UI; unsecured — the tunnel URL is the only secret.)")
         
         idle_time = 0
         check_interval = 15
@@ -253,7 +258,7 @@ def run_opencode_shared(extra_packages=None):
     Keeps the exact same provisioning primitives as the SSH boxes
     (backup restore, persistence symlinks, SSH key injection, atexit backup)
     then starts sshd AND `opencode web --port 4096 --hostname 0.0.0.0` with
-    workdir /data. Both ports are forwarded; idle shutdown resets on either
+    workdir /data/oc-sessions. Both ports are forwarded; idle shutdown resets on either
     SSH activity or HTTP activity against the OpenCode server.
     """
     import os
@@ -264,7 +269,7 @@ def run_opencode_shared(extra_packages=None):
         OPENCODE_HOSTNAME,
         OPENCODE_IDLE_TIMEOUT_SECONDS,
         OPENCODE_PORT,
-        OPENCODE_WORKDIR,
+        OPENCODE_SESSIONS_DIR,
     )
 
     restore_backup()
@@ -299,7 +304,20 @@ def run_opencode_shared(extra_packages=None):
         subprocess.run(["apt-get", "update"], check=True)
         subprocess.run(["apt-get", "install", "-y"] + extra_packages, check=True)
 
-    os.makedirs(OPENCODE_WORKDIR, exist_ok=True)
+    # Root OpenCode in a dedicated persistent dir on the volume (created if
+    # missing) and seed a git repo with an initial commit so OpenCode resolves
+    # a real project id instead of falling back to "global" (worktree "/").
+    os.makedirs(OPENCODE_SESSIONS_DIR, exist_ok=True)
+    if not os.path.isdir(os.path.join(OPENCODE_SESSIONS_DIR, ".git")):
+        subprocess.run(["git", "init", "-q", OPENCODE_SESSIONS_DIR], check=False)
+        subprocess.run(
+            [
+                "git", "-C", OPENCODE_SESSIONS_DIR,
+                "-c", "user.email=devbox@localhost", "-c", "user.name=devbox",
+                "commit", "-q", "--allow-empty", "-m", "init oc-sessions",
+            ],
+            check=False,
+        )
 
     password = os.environ.get("OPENCODE_SERVER_PASSWORD", "")
     auth_note = "🔒 Password auth: enabled" if password else "⚠️ No OPENCODE_SERVER_PASSWORD set — tunnel URL is the only secret"
@@ -316,7 +334,7 @@ def run_opencode_shared(extra_packages=None):
     try:
         server_proc = subprocess.Popen(
             server_cmd,
-            cwd=OPENCODE_WORKDIR,
+            cwd=OPENCODE_SESSIONS_DIR,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
         )
@@ -377,7 +395,7 @@ def run_opencode_shared(extra_packages=None):
             print(f"\n🌐 OpenCode web: {web_url}")
             print("   (Open in browser; attach TUI via SSH with `opencode attach http://127.0.0.1:4096`)")
             print(f"\n🔐 SSH: {ssh_cmd}")
-            print(f"📁 Workdir: {OPENCODE_WORKDIR} (persistent)")
+            print(f"📁 Workdir: {OPENCODE_SESSIONS_DIR} (persistent)")
             print(f"⏰ Idle timeout: {OPENCODE_IDLE_TIMEOUT_SECONDS // 60} minutes (SSH or web activity resets it)")
             print(f"{auth_note}")
             print("\n" + "=" * 60)

@@ -82,14 +82,17 @@ LLAMACPP_IDLE_TIMEOUT = 3600  # 1 hour idle
 OPENCODE_PORT = 4096  # Default `opencode web` port
 OPENCODE_HOSTNAME = "0.0.0.0"  # Bind so Modal tunnel can reach it
 OPENCODE_IDLE_TIMEOUT_SECONDS = 1800  # 30 minutes idle (longer than SSH boxes, shorter than llamacpp)
-OPENCODE_WORKDIR = "/data"  # All OpenCode sessions run here so work persists
+OPENCODE_WORKDIR = "/data"  # Volume root — general OpenCode working dir
+# Dedicated persistent dir for the OpenCode box (created if missing). Seeded as a
+# git repo so OpenCode treats it as a project instead of its "global" fallback.
+OPENCODE_SESSIONS_DIR = "/data/oc-sessions"
 
 # OpenCode DevBox resource arguments (CPU-only, headroom for web server + TUI attach)
 OPENCODE_DEVBOX_ARGS = {
     "secrets": None,
     "volumes": None,
-    "cpu": 1.0,
-    "memory": 2048,
+    "cpu": 2.0,
+    "memory": 4096,
     "timeout": 10800,  # 3 hours max runtime
 }
 

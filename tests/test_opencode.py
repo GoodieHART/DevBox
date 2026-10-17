@@ -44,6 +44,15 @@ def test_opencode_port_and_workdir():
     assert config.OPENCODE_WORKDIR == "/data"
 
 
+def test_opencode_box_roots_in_persistent_git_seeded_sessions_dir():
+    assert config.OPENCODE_SESSIONS_DIR == "/data/oc-sessions"
+    src = _source("runtime/shared_runtime.py")
+    assert "OPENCODE_SESSIONS_DIR" in src
+    assert 'cwd=OPENCODE_SESSIONS_DIR' in src
+    assert '"git", "init"' in src
+    assert '"--allow-empty"' in src
+
+
 def test_opencode_resource_envelope_sane():
     args = config.OPENCODE_DEVBOX_ARGS
     assert args["cpu"] >= 0.5
@@ -168,6 +177,15 @@ def test_run_opencode_shared_serves_and_forwards():
     ssh_idx = src.index("def run_opencode_shared")
     tail = src[ssh_idx:]
     assert tail.index("modal.forward(22") < tail.index("modal.forward(OPENCODE_PORT")
+
+
+def test_assisted_box_forwards_opencode_web_tunnel():
+    src = _source("runtime/shared_runtime.py")
+    block = src.split("def run_devbox_shared")[1].split("def run_rdp_devbox_shared")[0]
+    assert "ExitStack" in block
+    assert "modal.forward(22" in block
+    assert "modal.forward(OPENCODE_PORT" in block
+    assert block.index("modal.forward(22") < block.index("modal.forward(OPENCODE_PORT")
 
 
 def test_runtime_seeds_baseline_without_overwriting_config():
