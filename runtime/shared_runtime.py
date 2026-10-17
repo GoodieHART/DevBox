@@ -158,7 +158,7 @@ def run_devbox_shared(extra_packages=None, devbox_type="ssh"):
                 print(f"No active SSH connection. Shutting down in {remaining}s...", file=sys.stderr,)
 
 
-def run_rdp_devbox_shared(extra_packages: list[str] | None = None):
+def run_rdp_devbox_shared(extra_packages=None):
     """
     Shared logic for launching an RDP desktop development environment.
     Sets up public key, persistent dotfiles, installs packages, and runs RDP server.
@@ -271,6 +271,8 @@ def run_opencode_shared(extra_packages=None):
         OPENCODE_PORT,
         OPENCODE_SESSIONS_DIR,
         OPENCODE_UPLOADS_DIR,
+        GHIDRA_VERSION,
+        JADX_HEADLESS_MCP_VERSION,
     )
     restore_backup()
 
@@ -334,10 +336,10 @@ def run_opencode_shared(extra_packages=None):
             with open(_profile, "a") as _f:
                 _f.write("\n" + _rea_marker + "\n")
                 _f.write("export JAVA_HOME=/opt/java/temurin-21\n")
-                _f.write("export GHIDRA_INSTALL_DIR=/opt/ghidra/ghidra_12.1.4_PUBLIC\n")
+                _f.write(f"export GHIDRA_INSTALL_DIR=/opt/ghidra/ghidra_{GHIDRA_VERSION}_PUBLIC\n")
                 _f.write("export REA_GHIDRA_STARTUP_TIMEOUT_MS=120000\n")
                 _f.write("export REA_MCP_MAX_RESPONSE_BYTES=52428800\n")
-                _f.write("export REA_JADX_MCP_JAR=/opt/jadx-headless-mcp/jadx-headless-mcp-0.7.1-all.jar\n")
+                _f.write(f"export REA_JADX_MCP_JAR=/opt/jadx-headless-mcp/jadx-headless-mcp-{JADX_HEADLESS_MCP_VERSION}-all.jar\n")
                 _f.write("export PATH=/opt/java/temurin-21/bin:/opt/jadx/bin:$PATH\n")
     except Exception:
         pass
@@ -345,10 +347,10 @@ def run_opencode_shared(extra_packages=None):
     # Ensure the `rea mcp` child (inherited env) sees the same values even
     # when /etc/profile.d/rea.sh was not sourced by this process.
     os.environ.setdefault("JAVA_HOME", "/opt/java/temurin-21")
-    os.environ.setdefault("GHIDRA_INSTALL_DIR", "/opt/ghidra/ghidra_12.1.4_PUBLIC")
+    os.environ.setdefault("GHIDRA_INSTALL_DIR", f"/opt/ghidra/ghidra_{GHIDRA_VERSION}_PUBLIC")
     os.environ.setdefault("REA_GHIDRA_STARTUP_TIMEOUT_MS", "120000")
     os.environ.setdefault("REA_MCP_MAX_RESPONSE_BYTES", "52428800")
-    os.environ.setdefault("REA_JADX_MCP_JAR", "/opt/jadx-headless-mcp/jadx-headless-mcp-0.7.1-all.jar")
+    os.environ.setdefault("REA_JADX_MCP_JAR", f"/opt/jadx-headless-mcp/jadx-headless-mcp-{JADX_HEADLESS_MCP_VERSION}-all.jar")
 
     password = os.environ.get("OPENCODE_SERVER_PASSWORD", "")
     auth_note = "🔒 Password auth: enabled" if password else "⚠️ No OPENCODE_SERVER_PASSWORD set — tunnel URL is the only secret"

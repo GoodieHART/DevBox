@@ -18,6 +18,11 @@ from devbox_core.config import (
     NODE_MAJOR_VERSION,
     REA_AGENTS_VERSION,
     JADX_HEADLESS_MCP_VERSION,
+    GHIDRA_VERSION,
+    GHIDRA_BUILD,
+    TEMURIN_JDK_VERSION,
+    JADX_VERSION,
+    APKTOOL_VERSION,
     OPENCODE_VERSION,
 )
 
@@ -174,7 +179,7 @@ assisted_coding_image = (
 
 opencode_image = (
     create_base_minimal_image()
-    .apt_install("git", "gdb", "binwalk", "tshark", "wabt", "openjdk-17-jdk-headless", "unzip")
+    .apt_install("git", "gdb", "binwalk", "tshark", "wabt", "unzip")
     .run_commands(
         f"curl -fsSL https://deb.nodesource.com/setup_{NODE_MAJOR_VERSION}.x | bash -",
         "apt-get install -y nodejs",
@@ -184,20 +189,22 @@ opencode_image = (
         "curl -fsSL https://opencode.ai/install | bash",
         "ln -sf /root/.opencode/bin/opencode /usr/local/bin/opencode",
         "mkdir -p /opt/java",
-        "curl -fsSL -o /tmp/temurin21.tar.gz https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jdk_x64_linux_hotspot_21.0.12.1_1.tar.gz",
+        f"curl -fsSL -o /tmp/temurin21.tar.gz https://github.com/adoptium/temurin21-binaries/releases/download/jdk-{TEMURIN_JDK_VERSION.replace('+', '%2B')}/OpenJDK21U-jdk_x64_linux_hotspot_{TEMURIN_JDK_VERSION.split('+')[0]}_{TEMURIN_JDK_VERSION.split('+')[1]}.tar.gz",
         "tar -xzf /tmp/temurin21.tar.gz -C /opt/java",
-        "ln -sfn /opt/java/jdk-21.0.12.1+1 /opt/java/temurin-21",
+        f"ln -sfn /opt/java/jdk-{TEMURIN_JDK_VERSION} /opt/java/temurin-21",
         "rm -f /tmp/temurin21.tar.gz",
         "mkdir -p /opt/ghidra",
-        "curl -fsSL -o /tmp/ghidra.zip https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_12.1.4_build/ghidra_12.1.4_PUBLIC_20260921.zip",
+        f"curl -fsSL -o /tmp/ghidra.zip https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_{GHIDRA_VERSION}_build/ghidra_{GHIDRA_VERSION}_PUBLIC_{GHIDRA_BUILD}.zip",
         "unzip -q /tmp/ghidra.zip -d /opt/ghidra",
         "rm -f /tmp/ghidra.zip",
-        "JADX_VER=$(curl -fsSL https://api.github.com/repos/skylot/jadx/releases/latest | python3 -c 'import json,sys;print(json.load(sys.stdin)[\"tag_name\"].lstrip(\"v\"))') && curl -fsSL -o /tmp/jadx.zip https://github.com/skylot/jadx/releases/download/v${JADX_VER}/jadx-${JADX_VER}.zip && mkdir -p /opt/jadx && unzip -q /tmp/jadx.zip -d /opt/jadx && rm -f /tmp/jadx.zip && ln -sf /opt/jadx/bin/jadx /usr/local/bin/jadx",
+        f"curl -fsSL -o /tmp/jadx.zip https://github.com/skylot/jadx/releases/download/v{JADX_VERSION}/jadx-{JADX_VERSION}.zip",
+        "mkdir -p /opt/jadx && unzip -q /tmp/jadx.zip -d /opt/jadx && rm -f /tmp/jadx.zip && ln -sf /opt/jadx/bin/jadx /usr/local/bin/jadx",
         f"mkdir -p /opt/jadx-headless-mcp && curl -fsSL -o /opt/jadx-headless-mcp/jadx-headless-mcp-{JADX_HEADLESS_MCP_VERSION}-all.jar https://github.com/1013503897/jadx-headless-mcp/releases/download/v{JADX_HEADLESS_MCP_VERSION}/jadx-headless-mcp-{JADX_HEADLESS_MCP_VERSION}-all.jar",
-        "APKTOOL_VER=$(curl -fsSL https://api.github.com/repos/iBotPeaches/Apktool/releases/latest | python3 -c 'import json,sys;print(json.load(sys.stdin)[\"tag_name\"].lstrip(\"v\"))') && curl -fsSL -o /usr/local/bin/apktool.jar https://github.com/iBotPeaches/Apktool/releases/download/v${APKTOOL_VER}/apktool_${APKTOOL_VER}.jar && printf '#!/bin/sh\\nexec java -jar /usr/local/bin/apktool.jar \"$@\"\\n' > /usr/local/bin/apktool && chmod +x /usr/local/bin/apktool",
-        f"cat > /etc/profile.d/rea.sh << 'REA_EOF'\nexport JAVA_HOME=/opt/java/temurin-21\nexport GHIDRA_INSTALL_DIR=/opt/ghidra/ghidra_12.1.4_PUBLIC\nexport REA_GHIDRA_STARTUP_TIMEOUT_MS=120000\nexport REA_MCP_MAX_RESPONSE_BYTES=52428800\nexport REA_JADX_MCP_JAR=/opt/jadx-headless-mcp/jadx-headless-mcp-{JADX_HEADLESS_MCP_VERSION}-all.jar\nexport PATH=/opt/java/temurin-21/bin:/opt/jadx/bin:$PATH\nREA_EOF",
+        f"curl -fsSL -o /usr/local/bin/apktool.jar https://github.com/iBotPeaches/Apktool/releases/download/v{APKTOOL_VERSION}/apktool_{APKTOOL_VERSION}.jar",
+        "printf '#!/bin/sh\\nexec java -jar /usr/local/bin/apktool.jar \"$@\"\\n' > /usr/local/bin/apktool && chmod +x /usr/local/bin/apktool",
+        f"cat > /etc/profile.d/rea.sh << 'REA_EOF'\nexport JAVA_HOME=/opt/java/temurin-21\nexport GHIDRA_INSTALL_DIR=/opt/ghidra/ghidra_{GHIDRA_VERSION}_PUBLIC\nexport REA_GHIDRA_STARTUP_TIMEOUT_MS=120000\nexport REA_MCP_MAX_RESPONSE_BYTES=52428800\nexport REA_JADX_MCP_JAR=/opt/jadx-headless-mcp/jadx-headless-mcp-{JADX_HEADLESS_MCP_VERSION}-all.jar\nexport PATH=/opt/java/temurin-21/bin:/opt/jadx/bin:$PATH\nREA_EOF",
         "chmod 644 /etc/profile.d/rea.sh",
-        "bash -c 'source /etc/profile.d/rea.sh; GHIDRA_INSTALL_DIR=/opt/ghidra/ghidra_12.1.4_PUBLIC JAVA_HOME=/opt/java/temurin-21 REA_MCP_MAX_RESPONSE_BYTES=52428800 rea setup --client opencode --yes'",
+        "bash -c 'source /etc/profile.d/rea.sh; rea setup --client opencode --yes'",
         *get_ssh_setup_commands()
     )
     .add_local_python_source(

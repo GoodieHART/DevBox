@@ -63,6 +63,11 @@ def test_opencode_resource_envelope_sane():
 
 def test_rea_version_is_centralized():
     assert config.REA_AGENTS_VERSION == "6.5.0"
+    assert config.JADX_HEADLESS_MCP_VERSION == "0.7.1"
+    assert config.GHIDRA_VERSION == "12.1.4"
+    assert config.TEMURIN_JDK_VERSION == "21.0.12.1+1"
+    assert config.JADX_VERSION == "1.5.6"
+    assert config.APKTOOL_VERSION == "3.0.3"
     assert config.NODE_MAJOR_VERSION == "24"
 
 
@@ -158,10 +163,14 @@ def test_opencode_image_installs_opencode_and_ssh():
 def test_opencode_image_installs_ghidra_and_java21():
     src = _source("devbox_core/images.py")
     block = src.split("opencode_image")[1].split("llamacpp_cpu_image")[0]
-    assert "ghidra_12.1.4_PUBLIC" in block
+    assert "GHIDRA_VERSION" in block
+    assert "GHIDRA_BUILD" in block
+    assert "TEMURIN_JDK_VERSION" in block
     assert "temurin-21" in block
     assert "GHIDRA_INSTALL_DIR" in block
     assert "JAVA_HOME" in block
+    assert "JADX_VERSION" in block
+    assert "APKTOOL_VERSION" in block
     assert "jadx" in block
     assert "apktool" in block
     assert "JADX_HEADLESS_MCP_VERSION" in block
@@ -312,6 +321,8 @@ def test_run_opencode_shared_creates_uploads_and_wires_rea_env():
     assert "GHIDRA_INSTALL_DIR" in block
     assert "JAVA_HOME" in block
     assert "REA_JADX_MCP_JAR" in block
+    assert "GHIDRA_VERSION" in block
+    assert "JADX_HEADLESS_MCP_VERSION" in block
     # uploads dir is created before the opencode web server is launched
     assert block.index("OPENCODE_UPLOADS_DIR") < block.index("subprocess.Popen")
 
