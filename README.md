@@ -393,7 +393,7 @@ Open the URL for the browser UI. From SSH you can attach a terminal TUI to the s
 
 ### Uploading files for the REA MCP
 
-The OpenCode Box ships the REA MCP server (`rea mcp`). REA operates on absolute paths on the box, so targets must live inside an approved root. The box uses `/data/uploads` (persistent) as that root.
+The OpenCode Box ships the REA MCP server (`rea mcp`). Targets should be placed under `/data/uploads` (persistent) so they remain available across relaunches.
 
 **Before launch (pre-launch prompt):** when you pick option 9, the launcher asks for an optional local file/directory to upload to `/data/uploads`. Press Enter to skip. In detached/non-interactive runs it skips automatically.
 
@@ -613,4 +613,4 @@ The project is open to contributions and optimizations. No formal guidelines yet
 - Using Google's Colaboratory as a VPS - [Ragug/colab-as-Vps](https://github.com/Ragug/colab-as-Vps)
 - OpenCode and Oh-My-Opencode for programming assistance for tough concepts - [anomalyco/opencode](https://github.com/anomalyco/opencode) | [code-yeongyu/oh-my-opencode](https://github.com/code-yeongyu/oh-my-opencode)
 
-## The Project Is Open To Your Contributions And Or Optimizations 🙏
+## The Project Is Open To Your Contributions And Or Optimizations 🙏

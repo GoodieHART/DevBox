@@ -45,7 +45,7 @@ The live validation confirmed:
 - REA MCP registration + `reverse-engineer-anything` skill installed at image build time via `rea setup --client opencode --yes`.
 - Fabricated `REA_EVIDENCE_ROOTS_JSON` / `REA_INVESTIGATION_INPUT_ROOTS_JSON` env vars removed (REA reads absolute paths directly).
 - OpenCode Box resources bumped to 2.0 vCPU / 8 GB RAM for Ghidra headroom.
-- Live validation: Ghidra decompiled an ELF function, and REA's JADX provider analyzed an OSS Simple Calculator APK (771 classes, 396 resources, no permissions).
+- Live validation: REA's JADX provider analyzed an OSS Simple Calculator APK (771 classes, 396 resources, no permissions).
 - Node.js 24 and OpenCode are installed and runnable.
 - `opencode mcp list` reports `rea` as connected.
 - User edits to the OpenCode MCP configuration survive a kill-and-relaunch cycle.
