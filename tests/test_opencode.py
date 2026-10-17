@@ -270,3 +270,27 @@ def test_llamacpp_image_packages_llamacpp_modules():
     block = src.split("llamacpp_cpu_image")[1].split("rdp_devbox_image")[0]
     assert "runtime.llamacpp_runtime" in block
     assert "devbox_core.llamacpp_models" in block
+
+
+# --- uploads dir + REA roots wiring ---
+
+def test_opencode_uploads_dir_constant():
+    assert config.OPENCODE_UPLOADS_DIR == "/data/uploads"
+
+
+def test_run_opencode_shared_creates_uploads_and_wires_rea_roots():
+    src = _source("runtime/shared_runtime.py")
+    block = src.split("def run_opencode_shared")[1]
+    assert "OPENCODE_UPLOADS_DIR" in block
+    assert "REA_EVIDENCE_ROOTS_JSON" in block
+    assert "REA_INVESTIGATION_INPUT_ROOTS_JSON" in block
+    # uploads dir is created before the opencode web server is launched
+    assert block.index("OPENCODE_UPLOADS_DIR") < block.index("subprocess.Popen")
+
+
+def test_launcher_menu_offers_skippable_pre_launch_upload():
+    src = _source("ui/launcher_menu.py")
+    block = src.split('elif choice == "9":')[1]
+    assert "batch_upload" in block
+    assert "put_file" in block or "put_directory" in block
+    assert "Enter to skip" in block or "skip" in block.lower()

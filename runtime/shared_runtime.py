@@ -270,7 +270,9 @@ def run_opencode_shared(extra_packages=None):
         OPENCODE_IDLE_TIMEOUT_SECONDS,
         OPENCODE_PORT,
         OPENCODE_SESSIONS_DIR,
+        OPENCODE_UPLOADS_DIR,
     )
+    import json
 
     restore_backup()
 
@@ -318,6 +320,30 @@ def run_opencode_shared(extra_packages=None):
             ],
             check=False,
         )
+
+    # Dedicated persistent uploads dir for user-supplied files (e.g. targets for
+    # the REA MCP). Lives on the volume, so it survives relaunches.
+    os.makedirs(OPENCODE_UPLOADS_DIR, exist_ok=True)
+
+    # Wire REA's filesystem roots to the uploads + sessions dirs so the
+    # `rea mcp` child (inherited env) can actually read uploaded targets.
+    # REA disables file/evidence tools until these roots are approved.
+    rea_roots = [OPENCODE_UPLOADS_DIR, OPENCODE_SESSIONS_DIR]
+    os.environ["REA_EVIDENCE_ROOTS_JSON"] = json.dumps(rea_roots)
+    os.environ["REA_INVESTIGATION_INPUT_ROOTS_JSON"] = json.dumps(rea_roots)
+
+    # Persist the roots for interactive SSH shells (profile is persisted).
+    _rea_marker = "# devbox rea roots"
+    try:
+        _profile = "/root/.bashrc"
+        _existing = open(_profile).read() if os.path.exists(_profile) else ""
+        if _rea_marker not in _existing:
+            with open(_profile, "a") as _f:
+                _f.write("\n" + _rea_marker + "\n")
+                _f.write("export REA_EVIDENCE_ROOTS_JSON=" + json.dumps(rea_roots) + "\n")
+                _f.write("export REA_INVESTIGATION_INPUT_ROOTS_JSON=" + json.dumps(rea_roots) + "\n")
+    except Exception:
+        pass
 
     password = os.environ.get("OPENCODE_SERVER_PASSWORD", "")
     auth_note = "🔒 Password auth: enabled" if password else "⚠️ No OPENCODE_SERVER_PASSWORD set — tunnel URL is the only secret"

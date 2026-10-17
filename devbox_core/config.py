@@ -86,6 +86,9 @@ OPENCODE_WORKDIR = "/data"  # Volume root — general OpenCode working dir
 # Dedicated persistent dir for the OpenCode box (created if missing). Seeded as a
 # git repo so OpenCode treats it as a project instead of its "global" fallback.
 OPENCODE_SESSIONS_DIR = "/data/oc-sessions"
+# Dedicated persistent dir for user-supplied files to be analyzed by REA MCP
+# (and any other tool). Lives on the volume, so uploads survive relaunches.
+OPENCODE_UPLOADS_DIR = "/data/uploads"
 
 # OpenCode DevBox resource arguments (CPU-only, headroom for web server + TUI attach)
 OPENCODE_DEVBOX_ARGS = {

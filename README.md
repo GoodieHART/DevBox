@@ -238,7 +238,7 @@ A dedicated **OpenCode web server** (`opencode web --port 4096 --hostname 0.0.0.
 
 **Best for:** Running OpenCode as an always-on remote backend — browser UI plus terminal attach.
 
-**Resources:** 1.0 vCPU / 2GB RAM · 30 min idle timeout (SSH or web activity resets it)
+**Resources:** 2.0 vCPU / 4GB RAM · 30 min idle timeout (SSH or web activity resets it)
 
 > **Auth note:** v1 relies on the random Modal tunnel URL as the secret (same model as the llama.cpp WebUI). For password auth, create a `opencode-server-password` Modal secret holding `OPENCODE_SERVER_PASSWORD` and add it to the secrets list for `launch_opencode` in `devbox.py`.
 
@@ -390,6 +390,24 @@ The OpenCode Box prints a web URL alongside the SSH command:
 ```
 
 Open the URL for the browser UI. From SSH you can attach a terminal TUI to the same backend with `opencode attach http://127.0.0.1:4096`, or run `opencode` directly for a local TUI session rooted at `/data`.
+
+### Uploading files for the REA MCP
+
+The OpenCode Box ships the REA MCP server (`rea mcp`). REA operates on absolute paths on the box, so targets must live inside an approved root. The box uses `/data/uploads` (persistent) as that root.
+
+**Before launch (pre-launch prompt):** when you pick option 9, the launcher asks for an optional local file/directory to upload to `/data/uploads`. Press Enter to skip. In detached/non-interactive runs it skips automatically.
+
+**Before launch (manual):**
+```bash
+modal volume put my-dev-volume ./target /data/uploads/
+```
+
+**During runtime (immediate):**
+```bash
+scp -P <ssh_port> -r ./target root@<ssh_host>:/data/uploads/
+```
+
+Then reference the file in OpenCode/REA by its absolute path, e.g. `analyze /data/uploads/target`. REA's roots are wired to `/data/uploads` and `/data/oc-sessions` automatically. (Volume uploads made while a box is already running may need a relaunch or SCP for immediate visibility.)
 
 ### Alias for Quick Launch
 
@@ -580,4 +598,4 @@ The project is open to contributions and optimizations. No formal guidelines yet
 - Using Google's Colaboratory as a VPS - [Ragug/colab-as-Vps](https://github.com/Ragug/colab-as-Vps)
 - OpenCode and Oh-My-Opencode for programming assistance for tough concepts - [anomalyco/opencode](https://github.com/anomalyco/opencode) | [code-yeongyu/oh-my-opencode](https://github.com/code-yeongyu/oh-my-opencode)
 
-## The Project Is Open To Your Contributions And Or Optimizations 🙏
+## The Project Is Open To Your Contributions And Or Optimizations 🙏
