@@ -8,6 +8,7 @@ Author: GoodieHART
 """
 
 from collections.abc import Iterable
+from typing import Any
 
 # Container will shut down if no one is connected via SSH for this many seconds.
 # All Time Values are in seconds
@@ -301,7 +302,7 @@ def validate_prohibited_packages(packages: Iterable[str] | None) -> None:
     )
 
 
-def get_resource_config(config_type="cpu", is_rdp=False, secrets=None, volume=None):
+def get_resource_config(config_type="cpu", is_rdp=False, secrets=None, volume=None) -> dict[str, Any]:
   """
     Get complete resource configuration for DevBox type.
     
@@ -319,13 +320,13 @@ def get_resource_config(config_type="cpu", is_rdp=False, secrets=None, volume=No
   else:
     raise ValueError(f"Unknown config_type: {config_type}")
 
-  config = base_config.copy()
+  config: dict[str, Any] = dict(base_config)
   config["secrets"] = secrets
   config["volumes"] = {"/data": volume}
   return config
 
 
-def build_devbox_args(secrets, volume):
+def build_devbox_args(secrets, volume) -> dict[str, dict[str, Any]]:
   """
     Build all eight Modal function arg dicts from live handles.
 
@@ -344,19 +345,19 @@ def build_devbox_args(secrets, volume):
 
   gpu_devbox_args_rdp = get_resource_config("gpu", secrets=secrets, volume=volume, is_rdp=True)
 
-  opencode_devbox_args = OPENCODE_DEVBOX_ARGS.copy()
+  opencode_devbox_args: dict[str, Any] = dict(OPENCODE_DEVBOX_ARGS)
   opencode_devbox_args["secrets"] = secrets
   opencode_devbox_args["volumes"] = {"/data": volume}
 
-  assisted_devbox_args = ASSISTED_DEVBOX_ARGS.copy()
+  assisted_devbox_args: dict[str, Any] = dict(ASSISTED_DEVBOX_ARGS)
   assisted_devbox_args["secrets"] = secrets
   assisted_devbox_args["volumes"] = {"/data": volume}
 
-  llamacpp_devbox_args = LLAMACPP_DEVBOX_ARGS.copy()
+  llamacpp_devbox_args: dict[str, Any] = dict(LLAMACPP_DEVBOX_ARGS)
   llamacpp_devbox_args["secrets"] = secrets
   llamacpp_devbox_args["volumes"] = {"/data": volume}
 
-  llamacpp_gpu_devbox_args = LLAMACPP_GPU_DEVBOX_ARGS.copy()
+  llamacpp_gpu_devbox_args: dict[str, Any] = dict(LLAMACPP_GPU_DEVBOX_ARGS)
   llamacpp_gpu_devbox_args["secrets"] = secrets
   llamacpp_gpu_devbox_args["volumes"] = {"/data": volume}
 
