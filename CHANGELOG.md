@@ -1,5 +1,33 @@
 # DevBox Changelog
 
+## Security and GPU Hardening
+
+### Added
+
+- Added separate package denylists for cryptocurrency-mining tools and credential-cracking tools, including `hashcat` and John the Ripper variants.
+- Added L40S GPU support to the standard and RDP launchers. L40S is documented with 48 GB of VRAM.
+- Added structural coverage for prohibited-package enforcement and GPU launcher wiring.
+
+### Changed
+
+- Image package installation now validates packages before image construction.
+- Runtime `extra_packages` validation now runs before `apt-get update`, preventing refused packages from being downloaded.
+- Resource configuration dictionaries are explicitly typed to eliminate Modal function argument type errors.
+- Standardized tracked text files on LF line endings and added `.gitattributes` enforcement.
+
+### Fixed
+
+- Removed stale REA root exports from persisted shell configuration. Valid REA environment variables remain available, and new SSH sessions no longer emit shell identifier errors.
+
+### Validation
+
+- Verified that `xmrig` and `hashcat=6.2.6-1` are rejected before package installation.
+- Verified successful installation and execution of permitted packages in a live Modal container.
+- Verified SSH access and denylist availability in a live container.
+- Verified that Modal recognizes `L40S` as a valid GPU type; availability remains subject to account billing configuration.
+- Test suite: 72 tests passed.
+- Static analysis: zero basedpyright errors across the modified Python files.
+
 ## REA-Powered OpenCode Boxes
 
 DevBox can now launch an OpenCode environment with Morluto's REA reverse-engineering tools connected from the first session.
