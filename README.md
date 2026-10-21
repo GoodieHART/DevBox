@@ -83,8 +83,12 @@ I plead with all users of this project to refrain from any illegal activities on
 - **DDoS attacks** — Do not use this project to launch distributed denial-of-service attacks
 - **Hosting illegal content** — Do not store or distribute illegal material
 - **Spam & botnets** — Do not run spam operations or botnet infrastructure
-- **Password cracking** — Do not use DevBox for unauthorized credential attacks
+- **Password cracking** — DevBox ships no credential-cracking tools, and installing them is refused
 - **Any activity that violates Modal's Terms of Service**
+
+This is not just a request, it is enforced in code. `devbox_core/config.py` keeps a denylist — `MINING_PACKAGES_DENYLIST` and `CREDENTIAL_CRACKING_PACKAGES_DENYLIST` — that is checked every time an image is built and again before any `apt-get install` runs for the extra packages you pass at launch. A refused package aborts the launch before anything is installed.
+
+And know what happens if you find a way around it anyway. [Modal's Terms of Service](https://modal.com/legal/terms) (§1.5) name cryptocurrency mining as a Prohibited Purpose, and Modal's runtime analyses the programs running inside your container to catch exactly this. When it matches, the container is killed and the workspace is banned — Modal wrote about how that detection works in their own [engineering post](https://modal.com/blog/catching-cryptominers). The ban lands on the workspace running DevBox, not only on the person who triggered it, so one bad launch can take the whole project down for everyone else.
 
 It's common for people to try and abuse free or generous cloud platforms, which ultimately hurts legitimate experimenters, researchers, and developers who are just trying to learn, build, and create awesome stuff. Don't be that person.
 
@@ -585,7 +589,7 @@ The codebase is organized into domain packages. Entrypoints stay at the root so 
 |------|---------|
 | `devbox.py` | Main launcher — interactive menu, Modal function definitions, entry point |
 | `hermes_app.py` | Hermes gateway + dashboard app (separate Modal App, own schedule and URL) |
-| `devbox_core/config.py` | Resource allocations (CPU, memory, timeouts), package lists, GPU configs |
+| `devbox_core/config.py` | Resource allocations (CPU, memory, timeouts), package lists, GPU configs, prohibited-package denylist |
 | `devbox_core/images.py` | Container image definitions for all DevBox types |
 | `runtime/shared_runtime.py` | Shared runtime logic — SSH/RDP idle monitoring, auto-shutdown, connection output |
 | `runtime/utils.py` | SSH key injection utility (+ system info) |

@@ -24,10 +24,19 @@ from devbox_core.config import (
     JADX_VERSION,
     APKTOOL_VERSION,
     OPENCODE_VERSION,
+    validate_prohibited_packages,
 )
 
 # Absolute path to the directory containing this file (for add_local_file references)
 _IMAGES_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def _apt_install(image: modal.Image, *packages: str) -> modal.Image:
+    """apt_install with a denylist guard, so a prohibited package is never
+    baked into a published DevBox image."""
+    validate_prohibited_packages(packages)
+    return image.apt_install(*packages)
+
 
 def get_ssh_setup_commands():
     """
@@ -60,8 +69,10 @@ def create_base_devbox_image(python_version="3.10"):
         modal.Image: Base DevBox image with SSH and core tools
     """
     return (
-        modal.Image.debian_slim(python_version=python_version)
-        .apt_install(*CORE_DEV_PACKAGES, *EXTENDED_DEV_PACKAGES, *DOWNLOAD_APT_PACKAGES)
+        _apt_install(
+            modal.Image.debian_slim(python_version=python_version),
+            *CORE_DEV_PACKAGES, *EXTENDED_DEV_PACKAGES, *DOWNLOAD_APT_PACKAGES,
+        )
         .pip_install(*DOWNLOAD_PIP_PACKAGES)
         .run_commands(
             *get_ssh_setup_commands(),
@@ -94,8 +105,10 @@ def create_base_minimal_image(python_version="3.10"):
         modal.Image: Minimal base image with SSH only
     """
     return (
-        modal.Image.debian_slim(python_version=python_version)
-        .apt_install(*CORE_DEV_PACKAGES, *DOWNLOAD_APT_PACKAGES)
+        _apt_install(
+            modal.Image.debian_slim(python_version=python_version),
+            *CORE_DEV_PACKAGES, *DOWNLOAD_APT_PACKAGES,
+        )
         .pip_install(*DOWNLOAD_PIP_PACKAGES)
         .run_commands(
             *get_ssh_setup_commands(),
@@ -127,11 +140,11 @@ standard_devbox_image = (
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "ui", "quotes.json"), "/etc/quotes.json")
 )
 cuda_devbox_image = (
-    modal.Image.from_registry(
-        "nvidia/cuda:12.1.1-devel-ubuntu22.04",
-        add_python="3.11"
-    )
-    .apt_install(
+    _apt_install(
+        modal.Image.from_registry(
+            "nvidia/cuda:12.1.1-devel-ubuntu22.04",
+            add_python="3.11"
+        ),
         *CORE_DEV_PACKAGES,
         "nano",
         "libcudnn9-cuda-12",
@@ -147,8 +160,7 @@ cuda_devbox_image = (
 )
 
 doc_processing_image = (
-    create_base_minimal_image()
-    .apt_install("pandoc", "texlive-full")
+    _apt_install(create_base_minimal_image(), "pandoc", "texlive-full")
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
         "runtime.persistence_utils", "runtime.backup_utils", "ui.quotes_loader"
@@ -178,8 +190,7 @@ assisted_coding_image = (
 )
 
 opencode_image = (
-    create_base_minimal_image()
-    .apt_install("git", "gdb", "binwalk", "tshark", "wabt", "unzip")
+    _apt_install(create_base_minimal_image(), "git", "gdb", "binwalk", "tshark", "wabt", "unzip")
     .run_commands(
         f"curl -fsSL https://deb.nodesource.com/setup_{NODE_MAJOR_VERSION}.x | bash -",
         "apt-get install -y nodejs",
@@ -216,8 +227,8 @@ opencode_image = (
 )
 
 llm_playroom_image = (
-    create_base_minimal_image()
-    .apt_install(
+    _apt_install(
+        create_base_minimal_image(),
         "pciutils",
         "lshw",
         "zstd",
@@ -235,8 +246,8 @@ llm_playroom_image = (
 )
 
 llamacpp_cpu_image = (
-    create_base_minimal_image()
-    .apt_install(
+    _apt_install(
+        create_base_minimal_image(),
         "libssl3",
         "libcurl4",
         "zlib1g",
@@ -273,8 +284,8 @@ llamacpp_cpu_image = (
 )
 
 rdp_devbox_image = (
-    create_base_devbox_image()
-    .apt_install(
+    _apt_install(
+        create_base_devbox_image(),
         "xrdp",
         "xfce4",
         "xfce4-goodies",

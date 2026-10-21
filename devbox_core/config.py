@@ -7,6 +7,8 @@ and global settings used across DevBox
 Author: GoodieHART
 """
 
+from collections.abc import Iterable
+
 # Container will shut down if no one is connected via SSH for this many seconds.
 # All Time Values are in seconds
 IDLE_TIMEOUT_SECONDS = 300  # 5 minutes
@@ -147,6 +149,157 @@ DOWNLOAD_PIP_PACKAGES = [
     "tgdl",
     "terabox-downloader",
 ]
+
+# ---------------------------------------------------------------------------
+# Prohibited package denylist
+# ---------------------------------------------------------------------------
+# Modal's Terms of Service (https://modal.com/legal/terms, §1.5) make
+# "cryptocurrency mining or related blockchain related activities" a
+# Prohibited Purpose, and Modal's runtime detects offending programs by
+# syscall analysis and bans the workspace (https://modal.com/blog/catching-cryptominers).
+# Refused at image-build time and before every runtime `apt-get install`.
+#
+# Scope: a denylist, not a sandbox — it stops `apt-get install xmrig` but
+# cannot stop a binary fetched from a URL at runtime.
+
+# Cryptocurrency mining / GPU-abuse tooling.
+MINING_PACKAGES_DENYLIST = frozenset({
+    # Monero / CryptoNight family
+    "xmrig",
+    "xmrig-proxy",
+    "xmr-stak",
+    "xmr-stak-amd",
+    "xmr-stak-nvidia",
+    "kdevtmpfsi",
+    "tprminer",
+    "tprminers",
+    "cpuminer",
+    "cpuminer-multi",
+    "cpuminer-opt",
+    "ccminer",
+    "ckbminer",
+    "nheqminer",
+    "nanominer",
+    "verusminer",
+    "minerd",
+    # OpenCL / CUDA GPU miners
+    "cgminer",
+    "bfgminer",
+    "bfminer",
+    "ethminer",
+    "eth-miner",
+    "phoenixminer",
+    "lolminer",
+    "teamredminer",
+    "srdeminer",
+    "wildrig",
+    "nbminer",
+    "gminer",
+    "trex",
+    "trexminer",
+    "kryptex",
+    "spaceminer",
+    "confluxminer",
+    "bitcoin-miner",
+    "ethereum-miner",
+})
+
+# Credential-cracking tooling. DevBox ships analysis tools (Ghidra, binwalk,
+# tshark, volatility3) but no password crackers.
+CREDENTIAL_CRACKING_PACKAGES_DENYLIST = frozenset({
+    "hashcat",
+    "hashcat-utils",
+    "hashcat-opencl",
+    "hashcat-data",
+    "john",
+    "john-data",
+})
+
+# Everything refused by the two denylists above.
+PROHIBITED_PACKAGES_DENYLIST = (
+    MINING_PACKAGES_DENYLIST | CREDENTIAL_CRACKING_PACKAGES_DENYLIST
+)
+
+
+def _package_name_candidates(spec: str) -> list[str]:
+    """
+    Every bare name an apt spec could refer to.
+
+    apt accepts several forms for the same package, and a denied package must
+    not slip through by wearing a different hat:
+        "hashcat"            -> "hashcat"
+        "hashcat=6.2.6-1"    -> "hashcat"   (version pin)
+        "hashcat/stable"     -> "hashcat"   (release qualifier)
+        "hashcat:amd64"      -> "hashcat"   (architecture qualifier)
+        "./xmrig.deb"        -> "xmrig"     (local package file)
+    """
+    raw = spec.strip().lower()
+    if not raw:
+        return []
+
+    candidates: list[str] = []
+    for candidate in (raw, raw.rsplit("/", 1)[-1]):
+        for separator in ("=", ":", "/"):
+            candidate = candidate.split(separator, 1)[0]
+        candidate = candidate.strip()
+        if candidate.endswith(".deb"):
+            candidate = candidate[: -len(".deb")]
+        if candidate and candidate not in candidates:
+            candidates.append(candidate)
+    return candidates
+
+
+def _matches_denylist(name: str, denylist: frozenset[str]) -> bool:
+    """True if `name` is denied, either outright or as a variant of a denied name."""
+    if name in denylist:
+        return True
+    # "xmrig-custom" is the same tool as "xmrig"; "john-data" is the same tool
+    # as "john". The boundary check keeps unrelated names ("johnny") allowed.
+    for entry in denylist:
+        if name.startswith(entry) and not name[len(entry)].isalnum():
+            return True
+    return False
+
+
+def find_prohibited_packages(packages: Iterable[str] | None) -> list[str]:
+    """
+    Return the entries of `packages` that are on the denylist, in input order.
+
+    Args:
+        packages: iterable of apt package specs
+
+    Returns:
+        list: the offending specs, as they were given
+    """
+    denied: list[str] = []
+    for spec in packages or []:
+        for candidate in _package_name_candidates(spec):
+            if _matches_denylist(candidate, PROHIBITED_PACKAGES_DENYLIST):
+                denied.append(spec)
+                break
+    return denied
+
+
+def validate_prohibited_packages(packages: Iterable[str] | None) -> None:
+    """
+    Raise ValueError if any of `packages` is on the denylist.
+
+    Called when every image is built and again before any runtime
+    `apt-get install`, so a prohibited package is refused before Modal's
+    runtime ever sees it.
+    """
+    denied = find_prohibited_packages(packages)
+    if not denied:
+        return
+    raise ValueError(
+        "Refusing to install prohibited package(s): "
+        + ", ".join(sorted(set(denied)))
+        + ". Cryptocurrency mining and credential-cracking tools are prohibited "
+        + "by Modal's Terms of Service (https://modal.com/legal/terms) and are "
+        + "blocked by DevBox. See the 'Warnings & Open Letter' section of the "
+        + "README for the full policy."
+    )
+
 
 def get_resource_config(config_type="cpu", is_rdp=False, secrets=None, volume=None):
   """

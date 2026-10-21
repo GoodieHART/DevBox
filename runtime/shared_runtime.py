@@ -16,8 +16,27 @@ import textwrap
 from runtime.persistence_utils import setup_persistence, get_persistence_items
 from runtime.backup_utils import restore_backup, register_custom_backup
 from runtime.utils import inject_ssh_key
-from devbox_core.config import IDLE_TIMEOUT_SECONDS
+from devbox_core.config import IDLE_TIMEOUT_SECONDS, validate_prohibited_packages
 from ui.quotes_loader import get_random_quote
+
+
+def install_extra_packages(extra_packages: list[str] | None) -> None:
+    """Install user-requested apt packages, after a denylist check.
+
+    `extra_packages` arrives straight from the launcher, so it is the one path a
+    prohibited package can take into a running DevBox. The check runs before
+    `apt-get update` so a refused request fetches nothing.
+    """
+    import subprocess
+
+    if not extra_packages:
+        return
+
+    validate_prohibited_packages(extra_packages)
+
+    print(f"Installing extra packages: {', '.join(extra_packages)}...", file=sys.stderr)
+    subprocess.run(["apt-get", "update"], check=True)
+    subprocess.run(["apt-get", "install", "-y"] + extra_packages, check=True)
 
 
 def seed_opencode_config(source_path="/etc/devbox/opencode.json"):
@@ -79,10 +98,7 @@ def run_devbox_shared(extra_packages=None, devbox_type="ssh"):
     with open("/etc/devbox-banner", "w") as f:
         f.write(banner)
 
-    if extra_packages:
-        print(f"Installing extra packages: {', '.join(extra_packages)}...", file=sys.stderr)
-        subprocess.run(["apt-get", "update"], check=True)
-        subprocess.run(["apt-get", "install", "-y"] + extra_packages, check=True)
+    install_extra_packages(extra_packages)
     
     # Start SSH and monitor
     subprocess.run(["/usr/sbin/sshd"])
@@ -186,10 +202,7 @@ def run_rdp_devbox_shared(extra_packages=None):
     
     register_custom_backup("/root", "/data/root_full_backup.tar.gz")
     
-    if extra_packages:
-        print(f"Installing extra packages: {', '.join(extra_packages)}...", file=sys.stderr)
-        subprocess.run(["apt-get", "update"], check=True)
-        subprocess.run(["apt-get", "install", "-y"] + extra_packages, check=True)
+    install_extra_packages(extra_packages)
     
     # Setup XFCE environment
     # Start D-Bus daemon for xfconfd
@@ -301,10 +314,7 @@ def run_opencode_shared(extra_packages=None):
     with open("/etc/devbox-banner", "w") as f:
         f.write(banner)
 
-    if extra_packages:
-        print(f"Installing extra packages: {', '.join(extra_packages)}...", file=sys.stderr)
-        subprocess.run(["apt-get", "update"], check=True)
-        subprocess.run(["apt-get", "install", "-y"] + extra_packages, check=True)
+    install_extra_packages(extra_packages)
 
     # Root OpenCode in a dedicated persistent dir on the volume (created if
     # missing) and seed a git repo with an initial commit so OpenCode resolves
