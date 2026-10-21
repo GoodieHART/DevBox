@@ -31,3 +31,7 @@ Planned improvements and future work for DevBox.
 - [x] Install `p7zip-full` for 7z files
 - [ ] Add notes of file verification tools present
 - [x] Rearrange file structures (done: devbox_core/runtime/integrations/ui packages)
+- [ ] Fix `build_devbox_args`: `gpu_devbox_args` passes `is_rdp=True`, so `GPU_DEVBOX_ARGS` is dead and every GPU box gets the RDP profile (1.5 vCPU / 4096 MB) — the RDP/non-RDP split for GPU boxes currently does nothing
+- [ ] Reconcile GPU configuration: `runtime/gpu_utils.py` is 100% unreferenced and non-functional as written (`BASE_GPU_ARGS["secrets"]` is a *string* of Python source, not a `Secret` object). Either delete it, or make it the single source of truth for GPU type + resources + menu names — the live path is currently split across `config.py` + `devbox.py` + `ui/launcher_menu.py` + `shared_runtime.py`
+- [ ] Add per-GPU resource profiles: all four GPUs share one profile today, so L40S (48 GB VRAM) gets the same 1.5 vCPU / 4096 MB host RAM as a T4. The richer per-GPU model only exists in the dead `gpu_utils` module
+- [ ] Make `runtime/shared_runtime.py` write its REA env block to a dedicated `/root/.config/devbox/env.sh` (fully rewritten each launch) instead of appending to the persisted `/root/.bashrc` — the current marker check prevents duplicates but can never remove a stale block
