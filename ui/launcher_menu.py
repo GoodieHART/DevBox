@@ -5,7 +5,7 @@ parameters — never importing devbox (circular).
 """
 
 
-def handle_standard_choice(launch_devbox, launch_devbox_t4, launch_devbox_l4, launch_devbox_a10g, cpu_only):
+def handle_standard_choice(launch_devbox, launch_devbox_t4, launch_devbox_l4, launch_devbox_a10g, launch_devbox_l40s, cpu_only):
     """Choice 1: Standard DevBox with optional extra packages + GPU dispatch."""
     from ui.gpu_picker import prompt_gpu_dispatch
     from ui.ui_utils import create_box, show_spinner
@@ -33,6 +33,7 @@ def handle_standard_choice(launch_devbox, launch_devbox_t4, launch_devbox_l4, la
     • T4: Cost-effective, good for inference
     • L4: More Performant than T4
     • A10G: Higher performance, more VRAM
+    • L40S: High-end AI workload, 48 GB VRAM
     (Enter 'y' To Attach a GPU, anything else for CPU-only)
 
     ⚠️  GPU usage incurs charges on your Modal account.
@@ -53,6 +54,7 @@ def handle_standard_choice(launch_devbox, launch_devbox_t4, launch_devbox_l4, la
             "1": ("T4", launch_devbox_t4),
             "2": ("L4", launch_devbox_l4),
             "3": ("A10G", launch_devbox_a10g),
+            "4": ("L40S", launch_devbox_l40s),
         }
         prompt_gpu_dispatch(gpu_types, package_list, "standard")
     else:
@@ -64,7 +66,7 @@ def handle_standard_choice(launch_devbox, launch_devbox_t4, launch_devbox_l4, la
         launch_devbox.remote(extra_packages=package_list)
 
 
-def handle_rdp_choice(launch_rdp_devbox, launch_rdp_devbox_t4, launch_rdp_devbox_l4, launch_rdp_devbox_a10g, cpu_only):
+def handle_rdp_choice(launch_rdp_devbox, launch_rdp_devbox_t4, launch_rdp_devbox_l4, launch_rdp_devbox_a10g, launch_rdp_devbox_l40s, cpu_only):
     """Choice 5: RDP Desktop Box with optional extra packages + GPU dispatch."""
     from ui.gpu_picker import prompt_gpu_dispatch
     from ui.ui_utils import create_box, show_spinner
@@ -98,6 +100,7 @@ def handle_rdp_choice(launch_rdp_devbox, launch_rdp_devbox_t4, launch_rdp_devbox
     • T4: Cost-effective, good for graphics
     • L4: Newer, more performant than T4
     • A10G: Higher performance, more VRAM
+    • L40S: High-end AI workload, 48 GB VRAM
     (Enter 'y' for GPU options, anything else for CPU-only)
 
     ⚠️  GPU usage incurs charges on your Modal account.
@@ -118,6 +121,7 @@ def handle_rdp_choice(launch_rdp_devbox, launch_rdp_devbox_t4, launch_rdp_devbox
             "1": ("T4", launch_rdp_devbox_t4),
             "2": ("L4", launch_rdp_devbox_l4),
             "3": ("A10G", launch_rdp_devbox_a10g),
+            "4": ("L40S", launch_rdp_devbox_l40s),
         }
         prompt_gpu_dispatch(gpu_types, package_list, "rdp")
     else:

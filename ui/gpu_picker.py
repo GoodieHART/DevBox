@@ -7,7 +7,7 @@ def prompt_gpu_dispatch(launch_map, extra_packages, label=""):
     """Prompt for a GPU type and dispatch to the chosen launcher.
 
     Args:
-        launch_map: maps "1"/"2"/"3" to (name, callable).
+        launch_map: maps "1"/"2"/"3"/"4" to (name, callable).
         extra_packages: package list forwarded to the launcher.
         label: "standard" or "rdp" — selects the menu/launch copy.
     """
@@ -17,16 +17,18 @@ def prompt_gpu_dispatch(launch_map, extra_packages, label=""):
         1. 🎯 T4 GPU (Cost-effective, good for graphics)
         2. 🚀 L4 GPU (Newer, more performant than T4)
         3. 💪 A10G GPU (Higher performance, more VRAM)
+        4. 🔥 L40S GPU (High-end AI workload, 48 GB VRAM)
         """
     else:
         gpu_menu = """
         1. 🎯 T4 GPU (Cost-effective, good for inference)
         2. 🚀 L4 GPU (More Performant than T4)
         3. 💪 A10G GPU (Higher performance, more VRAM)
+        4. 🔥 L40S GPU (High-end AI workload, 48 GB VRAM)
         """
     create_box(gpu_menu, "🎮 SELECT GPU TYPE")
     try:
-        gpu_type_choice = input("Choose GPU (1-3): ").strip()
+        gpu_type_choice = input("Choose GPU (1-4): ").strip()
     except EOFError:
         print("\nNo input received. Exiting.")
         return

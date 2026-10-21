@@ -146,7 +146,7 @@ The script launches a general-purpose DevBox, a Debian environment with essentia
 
 ## Features
 
--   **Standard DevBox**: A general-purpose Debian environment with essential development tools (`git`, `vim`, `curl`, `build-essential`, etc.). Supports optional GPU acceleration (T4, L4, A10G). Allows dynamic installation of extra `apt` packages at launch time.
+-   **Standard DevBox**: A general-purpose Debian environment with essential development tools (`git`, `vim`, `curl`, `build-essential`, etc.). Supports optional GPU acceleration (T4, L4, A10G, L40S). Allows dynamic installation of extra `apt` packages at launch time.
 -   **Persistent Storage**: Uses a `modal.Volume` to provide a persistent `/data` directory, ensuring your work is saved between sessions.
 -   **Secure SSH Access**: Automatically injects your public SSH key for secure, passwordless access.
 -   **Auto-Shutdown**: Includes an idle timer that automatically shuts down the container after 5 minutes of inactivity to save costs.
@@ -159,7 +159,7 @@ When you run `modal run devbox.py`, you'll be presented with 7 DevBox configurat
 
 ### 1. 🛠️ Standard DevBox
 
-A general-purpose Debian environment with essential dev tools — `git`, `nano`, `neovim`, `curl`, `build-essential`, `clang`, `cmake`, `htop`, and more. You can optionally attach a GPU (T4, L4, or A10G) at launch. Install extra `apt` packages on the fly.
+A general-purpose Debian environment with essential dev tools — `git`, `nano`, `neovim`, `curl`, `build-essential`, `clang`, `cmake`, `htop`, and more. You can optionally attach a GPU (T4, L4, A10G, or L40S) at launch. Install extra `apt` packages on the fly.
 
 **Best for:** Everyday coding, scripting, compiling, general Linux work.
 
@@ -255,6 +255,7 @@ Several DevBox types support optional GPU acceleration. Here's a quick compariso
 | **T4** | Cost-effective inference, light workloads | 16 GB |
 | **L4** | Newer architecture, better performance than T4 | 24 GB |
 | **A10G** | Heavy workloads, more VRAM, highest performance | 24 GB |
+| **L40S** | High-end AI workloads, largest VRAM | 48 GB |
 
 > ⚠️ GPU usage incurs charges on your Modal account. See [modal.com/pricing](https://modal.com/pricing) for current rates.
 

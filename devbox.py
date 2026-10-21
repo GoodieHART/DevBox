@@ -75,24 +75,36 @@ def launch_devbox_a10g(extra_packages: list[str] | None = None):
     """Launches an A10G GPU-powered personal development environment."""
     run_devbox_shared(extra_packages, devbox_type="cuda_devbox_a10g")
 
+
+@_unless_cpu_only(app.function(image=cuda_devbox_image, gpu="L40S", **gpu_devbox_args))
+def launch_devbox_l40s(extra_packages: list[str] | None = None):
+    """Launches an L40S GPU-powered personal development environment."""
+    run_devbox_shared(extra_packages, devbox_type="cuda_devbox_l40s")
+
 @app.function(image=rdp_devbox_image, **cpu_devbox_args_rdp)
-def launch_rdp_devbox(extra_packages: list[str] = None):
+def launch_rdp_devbox(extra_packages: list[str] | None = None):
     """Launches an RDP desktop development environment."""
     run_rdp_devbox_shared(extra_packages)
 
 @_unless_cpu_only(app.function(image=rdp_devbox_image, gpu="t4", **gpu_devbox_args_rdp))
-def launch_rdp_devbox_t4(extra_packages: list[str] = None):
+def launch_rdp_devbox_t4(extra_packages: list[str] | None = None):
     """Launches an RDP desktop with T4 GPU."""
     run_rdp_devbox_shared(extra_packages)
 
 @_unless_cpu_only(app.function(image=rdp_devbox_image, gpu="l4", **gpu_devbox_args_rdp))
-def launch_rdp_devbox_l4(extra_packages: list[str] = None):
+def launch_rdp_devbox_l4(extra_packages: list[str] | None = None):
     """Launches an RDP desktop with L4 GPU."""
     run_rdp_devbox_shared(extra_packages)
 
 @_unless_cpu_only(app.function(image=rdp_devbox_image, gpu="a10g", **gpu_devbox_args_rdp))
-def launch_rdp_devbox_a10g(extra_packages: list[str] = None):
+def launch_rdp_devbox_a10g(extra_packages: list[str] | None = None):
     """Launches an RDP desktop with A10G GPU."""
+    run_rdp_devbox_shared(extra_packages)
+
+
+@_unless_cpu_only(app.function(image=rdp_devbox_image, gpu="L40S", **gpu_devbox_args_rdp))
+def launch_rdp_devbox_l40s(extra_packages: list[str] | None = None):
+    """Launches an RDP desktop with L40S GPU."""
     run_rdp_devbox_shared(extra_packages)
 
 @app.function(image=doc_processing_image, **gpu_devbox_args)
@@ -144,7 +156,6 @@ def main():
     from ui.quotes_loader import get_random_quote, format_quote
     from runtime.utils import inject_ssh_key, display_system_info
     from devbox_core.config import IDLE_TIMEOUT_SECONDS
-    from runtime.gpu_utils import get_gpu_config, get_available_gpus
 
     banner = """
 ╔══════════════════════════════════════════════════════════╗
@@ -200,7 +211,7 @@ def main():
     print(choice)
     if choice == "1":
       from ui.launcher_menu import handle_standard_choice
-      handle_standard_choice(launch_devbox, launch_devbox_t4, launch_devbox_l4, launch_devbox_a10g, CPU_ONLY)
+      handle_standard_choice(launch_devbox, launch_devbox_t4, launch_devbox_l4, launch_devbox_a10g, launch_devbox_l40s, CPU_ONLY)
 
     elif choice == "2":
         doc_box = """
@@ -233,7 +244,7 @@ def main():
 
     elif choice == "5":
       from ui.launcher_menu import handle_rdp_choice
-      handle_rdp_choice(launch_rdp_devbox, launch_rdp_devbox_t4, launch_rdp_devbox_l4, launch_rdp_devbox_a10g, CPU_ONLY)
+      handle_rdp_choice(launch_rdp_devbox, launch_rdp_devbox_t4, launch_rdp_devbox_l4, launch_rdp_devbox_a10g, launch_rdp_devbox_l40s, CPU_ONLY)
 
     else:
       from ui.launcher_menu import handle_simple_choice
