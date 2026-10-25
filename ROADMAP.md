@@ -17,7 +17,7 @@ Planned improvements and future work for DevBox.
 - [ ] Preinstall necessary programs for LLM playgrounds
 - [x] Support for multiple SSH key storage with unified access (done: PUBKEYS one-per-line in ssh-public-key secret)
 - [ ] Session restore/backup function
-- [ ] Allow for `tmux` sessions
+- [x] Allow for `tmux` sessions (done: every box starts a detached `devbox` tmux session with 3 windows; printed SSH command bundles `tmux attach -t devbox`)
 - [ ] Dynamically select llama-cpp version (currently hardcoded)
 - [ ] Setup forensics image with welcome banner
 - [ ] Add support for VS Code Server

@@ -67,6 +67,55 @@ DEVBOX_BANNERS = {
 }
 
 
+
+def start_tmux_session(session_name="devbox", windows=3):
+    """Launch a detached tmux session with `windows` windows.
+
+    Best-effort: if tmux is missing or fails to start, the DevBox still
+    works over plain SSH. The session is created so users can attach with
+    `tmux attach -t <session_name>`.
+    """
+    import os
+    import shutil
+    import subprocess
+    import sys
+
+    # Re-apply the Oh My Tmux styling if a previous session backup wiped
+    # /root (restore_backup clears /root before extracting). /opt is not
+    # wiped, so the clone survives every launch.
+    try:
+        if not os.path.exists("/root/.tmux.conf") and os.path.exists("/opt/oh-my-tmux/.tmux.conf"):
+            os.symlink("/opt/oh-my-tmux/.tmux.conf", "/root/.tmux.conf")
+        if not os.path.exists("/root/.tmux.conf.local") and os.path.exists("/opt/oh-my-tmux/.tmux.conf.local"):
+            shutil.copyfile("/opt/oh-my-tmux/.tmux.conf.local", "/root/.tmux.conf.local")
+    except Exception:
+        pass
+
+    try:
+        subprocess.run(
+            ["tmux", "kill-session", "-t", session_name],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        subprocess.run(
+            ["tmux", "new-session", "-d", "-s", session_name, "-n", "window-1"],
+            check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        for i in range(2, windows + 1):
+            subprocess.run(
+                ["tmux", "new-window", "-t", session_name, "-n", f"window-{i}"],
+                check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+        subprocess.run(
+            ["tmux", "select-window", "-t", f"{session_name}:0"],
+            check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        print(f"✅ tmux session '{session_name}' ready ({windows} windows)", file=sys.stderr)
+    except FileNotFoundError:
+        print("⚠️ 'tmux' binary not found — skipping tmux session.", file=sys.stderr)
+    except Exception as e:
+        print(f"⚠️ tmux session setup failed: {e}", file=sys.stderr)
+
+
 def run_devbox_shared(extra_packages=None, devbox_type="ssh", resources=None):
     """Single consolidated function for all SSH DevBoxes."""
     import os
@@ -112,6 +161,9 @@ def run_devbox_shared(extra_packages=None, devbox_type="ssh", resources=None):
     # Start SSH and monitor
     subprocess.run(["/usr/sbin/sshd"])
 
+    # Launch a tmux session (3 windows) users can attach to.
+    start_tmux_session()
+
     # Assisted box: background `opencode web` so users get the Web UI
     # instead of the TUI (which stalls on minimal terminals). Non-fatal:
     # the SSH box must still work if the web server fails.
@@ -153,7 +205,7 @@ def run_devbox_shared(extra_packages=None, devbox_type="ssh", resources=None):
     # so other box types don't expose a port nothing is listening on.
     with contextlib.ExitStack() as tunnels:
         ssh_tunnel = tunnels.enter_context(modal.forward(22, unencrypted=True))
-        print(f"\n🚀 Your DevBox is ready!\nssh root@{ssh_tunnel.host} -p {ssh_tunnel.unencrypted_port}")
+        print(f"\n🚀 Your DevBox is ready!\nssh root@{ssh_tunnel.host} -p {ssh_tunnel.unencrypted_port} -t \"tmux attach -t devbox\"")
 
         if devbox_type == "assisted_coding" and oc_web_proc is not None:
             web_tunnel = tunnels.enter_context(modal.forward(OPENCODE_PORT, unencrypted=True))
@@ -401,6 +453,9 @@ def run_opencode_shared(extra_packages=None, resources=None, forensic=False):
     # Start SSH (same as SSH boxes)
     subprocess.run(["/usr/sbin/sshd"])
 
+    # Launch a tmux session (3 windows) users can attach to.
+    start_tmux_session()
+
     # Start OpenCode web server in background, rooted at /data so sessions persist
     server_cmd = [
         "opencode", "web",
@@ -463,7 +518,7 @@ def run_opencode_shared(extra_packages=None, resources=None, forensic=False):
     # block closes that tunnel — see llamacpp pattern which drops SSH early)
     with modal.forward(22, unencrypted=True) as ssh_tunnel:
         with modal.forward(OPENCODE_PORT, unencrypted=True) as web_tunnel:
-            ssh_cmd = f"ssh root@{ssh_tunnel.host} -p {ssh_tunnel.unencrypted_port}"
+            ssh_cmd = f"ssh root@{ssh_tunnel.host} -p {ssh_tunnel.unencrypted_port} -t \"tmux attach -t devbox\""
             web_url = f"http://{web_tunnel.host}:{web_tunnel.unencrypted_port}"
             print("\n" + "=" * 60)
             print("🤖 Your OpenCode Box is ready!")

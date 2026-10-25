@@ -131,6 +131,7 @@ CORE_DEV_PACKAGES = [
     "wget",
     "unzip",
     "procps",
+    "tmux",
 ]
 
 EXTENDED_DEV_PACKAGES = [
@@ -147,6 +148,7 @@ EXTENDED_DEV_PACKAGES = [
 DOWNLOAD_APT_PACKAGES = [
     "megatools",
     "p7zip-full",
+    "perl",
 ]
 
 DOWNLOAD_PIP_PACKAGES = [

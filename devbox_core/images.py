@@ -82,6 +82,11 @@ def create_base_devbox_image(python_version="3.10"):
             "rm starship-x86_64-unknown-linux-gnu.tar.gz",
             # Create starship init script (interactive only)
             "printf '%s\\n' 'if command -v starship &> /dev/null && [ -t 0 ]; then' '  eval \"$(starship init bash)\"' 'fi' > /etc/profile.d/starship.sh",
+            # Install Oh My Tmux (self-contained, pretty powerline config) into /opt
+            # so it survives /root wipes performed by restore_backup at runtime.
+            "git clone --single-branch https://github.com/gpakosz/.tmux.git /opt/oh-my-tmux",
+            "ln -sfn /opt/oh-my-tmux/.tmux.conf /root/.tmux.conf",
+            "cp -n /opt/oh-my-tmux/.tmux.conf.local /root/.tmux.conf.local",
             # Create devbox-banner display script
             "cat > /etc/profile.d/devbox-banner.sh << 'BANNER_EOF'\n"
             "if [ -t 0 ] && [ -f /etc/devbox-banner ]; then\n"
@@ -118,6 +123,11 @@ def create_base_minimal_image(python_version="3.10"):
             "rm starship-x86_64-unknown-linux-gnu.tar.gz",
             # Create starship init script (interactive only)
             "printf '%s\\n' 'if command -v starship &> /dev/null && [ -t 0 ]; then' '  eval \"$(starship init bash)\"' 'fi' > /etc/profile.d/starship.sh",
+            # Install Oh My Tmux (self-contained, pretty powerline config) into /opt
+            # so it survives /root wipes performed by restore_backup at runtime.
+            "git clone --single-branch https://github.com/gpakosz/.tmux.git /opt/oh-my-tmux",
+            "ln -sfn /opt/oh-my-tmux/.tmux.conf /root/.tmux.conf",
+            "cp -n /opt/oh-my-tmux/.tmux.conf.local /root/.tmux.conf.local",
             # Create devbox-banner display script
             "cat > /etc/profile.d/devbox-banner.sh << 'BANNER_EOF'\n"
             "if [ -t 0 ] && [ -f /etc/devbox-banner ]; then\n"
@@ -151,6 +161,11 @@ cuda_devbox_image = (
         "libcudnn9-dev-cuda-12",
     )
     .run_commands(*get_ssh_setup_commands())
+    .run_commands(
+        "git clone --single-branch https://github.com/gpakosz/.tmux.git /opt/oh-my-tmux",
+        "ln -sfn /opt/oh-my-tmux/.tmux.conf /root/.tmux.conf",
+        "cp -n /opt/oh-my-tmux/.tmux.conf.local /root/.tmux.conf.local",
+    )
     .pip_install(*DOWNLOAD_PIP_PACKAGES)
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",

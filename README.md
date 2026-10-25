@@ -130,7 +130,7 @@ After a bit (first run takes 30-45 mins to build the image), you'll see somethin
 ```
 🚀 Your DevBox is ready!
 Paste this command into your terminal:
-ssh root@<host> -p <port>
+ssh root@<host> -p <port> -t "tmux attach -t devbox"
 ```
 
 Paste that SSH command into a new terminal and you're in. That's it.
@@ -339,7 +339,7 @@ Every DevBox supports SSH access. Once ready, you'll see:
 ```
 🚀 Your DevBox is ready!
 Paste this command into your terminal:
-ssh root@<host> -p <port>
+ssh root@<host> -p <port> -t "tmux attach -t devbox"
 ```
 
 Just copy and paste that command into a new terminal window and you're in.
@@ -387,7 +387,7 @@ The AI Coding Box and Forensics & Reverse Engineering Box print a web URL alongs
 ```
 🤖 Your OpenCode environment is ready!
 🌐 OpenCode web: http://<host>:<port>
-🔐 SSH: ssh root@<host> -p <port>
+🔐 SSH: ssh root@<host> -p <port> -t "tmux attach -t devbox"
 ```
 
 Open the URL for the browser UI. From SSH you can attach a terminal TUI to the same backend with `opencode attach <printed OpenCode web URL>`, or run `opencode` directly for a local TUI session rooted at `/data`.

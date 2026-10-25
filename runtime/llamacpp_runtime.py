@@ -247,9 +247,17 @@ def run_llamacpp_playroom(mode, resources=None):
     inject_ssh_key()
     subprocess.run(["/usr/sbin/sshd"])
 
+    # Launch a tmux session (3 windows) users can attach to.
+    try:
+        from runtime.shared_runtime import start_tmux_session
+        start_tmux_session()
+    except Exception as e:
+        import sys
+        print(f"\u26a0\ufe0f tmux session setup failed: {e}", file=sys.stderr)
+
     # --- Port Forwarding ---
     with modal.forward(22, unencrypted=True) as ssh_tunnel:
-        ssh_command = f"ssh root@{ssh_tunnel.host} -p {ssh_tunnel.unencrypted_port}"
+        ssh_command = f"ssh root@{ssh_tunnel.host} -p {ssh_tunnel.unencrypted_port} -t \"tmux attach -t devbox\""
 
     with modal.forward(web_port, unencrypted=True) as web_tunnel:
         web_url = f"http://{web_tunnel.host}:{web_tunnel.unencrypted_port}"
