@@ -53,57 +53,57 @@ llamacpp_devbox_args = _wiring["llamacpp_devbox_args"]
 llamacpp_gpu_devbox_args = _wiring["llamacpp_gpu_devbox_args"]
 
 @app.function(image=standard_devbox_image, **cpu_devbox_args)
-def launch_devbox(extra_packages: list[str] | None = None):
+def launch_devbox(extra_packages=None):
     """Launches a non-GPU personal development environment."""
     run_devbox_shared(extra_packages, devbox_type="standard_devbox", resources=cpu_devbox_args)
 
 
 @_unless_cpu_only(app.function(image=cuda_devbox_image, gpu="t4", **gpu_devbox_args))
-def launch_devbox_t4(extra_packages: list[str] | None = None):
+def launch_devbox_t4(extra_packages=None):
     """Launches a T4 GPU-powered personal development environment."""
     run_devbox_shared(extra_packages, devbox_type="cuda_devbox_t4", resources={**gpu_devbox_args, "gpu": "t4"})
 
 
 @_unless_cpu_only(app.function(image=cuda_devbox_image, gpu="l4", **gpu_devbox_args))
-def launch_devbox_l4(extra_packages: list[str] | None = None):
+def launch_devbox_l4(extra_packages=None):
     """Launches an L4 GPU-powered personal development environment."""
     run_devbox_shared(extra_packages, devbox_type="cuda_devbox_l4", resources={**gpu_devbox_args, "gpu": "l4"})
 
 
 @_unless_cpu_only(app.function(image=cuda_devbox_image, gpu="a10g", **gpu_devbox_args))
-def launch_devbox_a10g(extra_packages: list[str] | None = None):
+def launch_devbox_a10g(extra_packages=None):
     """Launches an A10G GPU-powered personal development environment."""
     run_devbox_shared(extra_packages, devbox_type="cuda_devbox_a10g", resources={**gpu_devbox_args, "gpu": "a10g"})
 
 
 @_unless_cpu_only(app.function(image=cuda_devbox_image, gpu="L40S", **gpu_devbox_args))
-def launch_devbox_l40s(extra_packages: list[str] | None = None):
+def launch_devbox_l40s(extra_packages=None):
     """Launches an L40S GPU-powered personal development environment."""
     run_devbox_shared(extra_packages, devbox_type="cuda_devbox_l40s", resources={**gpu_devbox_args, "gpu": "L40S"})
 
 @app.function(image=rdp_devbox_image, **cpu_devbox_args_rdp)
-def launch_rdp_devbox(extra_packages: list[str] | None = None):
+def launch_rdp_devbox(extra_packages=None):
     """Launches an RDP desktop development environment."""
     run_rdp_devbox_shared(extra_packages, devbox_type="rdp_devbox", resources=cpu_devbox_args_rdp)
 
 @_unless_cpu_only(app.function(image=rdp_devbox_image, gpu="t4", **gpu_devbox_args_rdp))
-def launch_rdp_devbox_t4(extra_packages: list[str] | None = None):
+def launch_rdp_devbox_t4(extra_packages=None):
     """Launches an RDP desktop with T4 GPU."""
     run_rdp_devbox_shared(extra_packages, devbox_type="rdp_devbox_t4", resources={**gpu_devbox_args_rdp, "gpu": "t4"})
 
 @_unless_cpu_only(app.function(image=rdp_devbox_image, gpu="l4", **gpu_devbox_args_rdp))
-def launch_rdp_devbox_l4(extra_packages: list[str] | None = None):
+def launch_rdp_devbox_l4(extra_packages=None):
     """Launches an RDP desktop with L4 GPU."""
     run_rdp_devbox_shared(extra_packages, devbox_type="rdp_devbox_l4", resources={**gpu_devbox_args_rdp, "gpu": "l4"})
 
 @_unless_cpu_only(app.function(image=rdp_devbox_image, gpu="a10g", **gpu_devbox_args_rdp))
-def launch_rdp_devbox_a10g(extra_packages: list[str] | None = None):
+def launch_rdp_devbox_a10g(extra_packages=None):
     """Launches an RDP desktop with A10G GPU."""
     run_rdp_devbox_shared(extra_packages, devbox_type="rdp_devbox_a10g", resources={**gpu_devbox_args_rdp, "gpu": "a10g"})
 
 
 @_unless_cpu_only(app.function(image=rdp_devbox_image, gpu="L40S", **gpu_devbox_args_rdp))
-def launch_rdp_devbox_l40s(extra_packages: list[str] | None = None):
+def launch_rdp_devbox_l40s(extra_packages=None):
     """Launches an RDP desktop with L40S GPU."""
     run_rdp_devbox_shared(extra_packages, devbox_type="rdp_devbox_l40s", resources={**gpu_devbox_args_rdp, "gpu": "L40S"})
 
