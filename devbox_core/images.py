@@ -91,7 +91,6 @@ def create_base_devbox_image(python_version="3.10"):
             "fi\n"
             "BANNER_EOF",
         )
-        .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "tmux.conf"), "/etc/devbox/tmux.conf")
     )
 
 
@@ -128,7 +127,6 @@ def create_base_minimal_image(python_version="3.10"):
             "fi\n"
             "BANNER_EOF",
         )
-        .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "tmux.conf"), "/etc/devbox/tmux.conf")
     )
 
 
@@ -140,6 +138,7 @@ standard_devbox_image = (
         "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "ui.quotes_loader"
     )
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "ui", "quotes.json"), "/etc/quotes.json")
+    .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "tmux.conf"), "/etc/devbox/tmux.conf")
 )
 cuda_devbox_image = (
     _apt_install(
@@ -169,6 +168,7 @@ doc_processing_image = (
         "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "ui.quotes_loader"
     )
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "ui", "quotes.json"), "/etc/quotes.json")
+    .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "tmux.conf"), "/etc/devbox/tmux.conf")
 )
 
 assisted_coding_image = (
@@ -190,6 +190,7 @@ assisted_coding_image = (
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "ui", "quotes.json"), "/etc/quotes.json")
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "opencode-coding.json"), "/etc/devbox/opencode.json")
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "opencode-coding.json"), "/etc/devbox/opencode-coding.json")
+    .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "tmux.conf"), "/etc/devbox/tmux.conf")
 )
 
 forensic_analysis_image = (
@@ -235,6 +236,7 @@ forensic_analysis_image = (
     )
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "ui", "quotes.json"), "/etc/quotes.json")
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "opencode.json"), "/etc/devbox/opencode.json")
+    .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "tmux.conf"), "/etc/devbox/tmux.conf")
 )
 
 llm_playroom_image = (
@@ -254,6 +256,7 @@ llm_playroom_image = (
         "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "ui.quotes_loader"
     )
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "ui", "quotes.json"), "/etc/quotes.json")
+    .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "tmux.conf"), "/etc/devbox/tmux.conf")
 )
 
 llamacpp_cpu_image = (
@@ -292,6 +295,7 @@ llamacpp_cpu_image = (
         "runtime.llamacpp_runtime", "devbox_core.llamacpp_models"
     )
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "ui", "quotes.json"), "/etc/quotes.json")
+    .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "tmux.conf"), "/etc/devbox/tmux.conf")
 )
 
 rdp_devbox_image = (
@@ -337,4 +341,5 @@ rdp_devbox_image = (
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
         "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker"
     )
+    .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "tmux.conf"), "/etc/devbox/tmux.conf")
 )

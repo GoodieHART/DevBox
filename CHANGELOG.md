@@ -1,3 +1,17 @@
+## Tmux Styling and Image Builds (2026-10-25)
+
+### Added
+
+- Added the Catppuccin Mocha tmux configuration to every DevBox image, with a top status header, styled window tabs, mouse support, true-color settings, pane borders, and a `Crafted by GoodieHART` marker.
+
+### Fixed
+
+- Moved the local tmux configuration file additions to the final step of each concrete image definition so Modal no longer rejects image builds that continue after `add_local_*` operations.
+
+### Validation
+
+- Test suite: 83 tests passed.
+
 ## Cost Tracking
 
 ### Added
