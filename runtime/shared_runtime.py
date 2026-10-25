@@ -88,6 +88,19 @@ def start_tmux_session(session_name="devbox", windows=3):
             os.symlink("/opt/oh-my-tmux/.tmux.conf", "/root/.tmux.conf")
         if not os.path.exists("/root/.tmux.conf.local") and os.path.exists("/opt/oh-my-tmux/.tmux.conf.local"):
             shutil.copyfile("/opt/oh-my-tmux/.tmux.conf.local", "/root/.tmux.conf.local")
+        # Ensure mouse support is enabled (oh-my-tmux ships it commented out).
+        local_conf = "/root/.tmux.conf.local"
+        if os.path.exists(local_conf):
+            try:
+                content = open(local_conf).read()
+                if "set -g mouse" not in content and "set-option -g mouse" not in content:
+                    with open(local_conf, "a") as f:
+                        f.write("\n# DevBox: enable mouse (window tabs, scrolling, resize)\nset -g mouse on\n")
+                elif "set -g mouse off" in content or "set-option -g mouse off" in content:
+                    content = content.replace("set -g mouse off", "set -g mouse on").replace("set-option -g mouse off", "set-option -g mouse on")
+                    open(local_conf, "w").write(content)
+            except Exception:
+                pass
     except Exception:
         pass
 
@@ -105,6 +118,11 @@ def start_tmux_session(session_name="devbox", windows=3):
                 ["tmux", "new-window", "-t", session_name, "-n", f"window-{i}"],
                 check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )
+        # Enable mouse on the live session (window tabs, pane resize, scroll).
+        subprocess.run(
+            ["tmux", "set-option", "-g", "mouse", "on"],
+            check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
         subprocess.run(
             ["tmux", "select-window", "-t", f"{session_name}:0"],
             check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
