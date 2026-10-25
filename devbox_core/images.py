@@ -173,7 +173,6 @@ assisted_coding_image = (
     .run_commands(
         f"curl -fsSL https://deb.nodesource.com/setup_{NODE_MAJOR_VERSION}.x | bash -",
         "apt-get install -y nodejs",
-        f"npm install -g rea-agents@{REA_AGENTS_VERSION}",
         "mkdir -p /root/.config/opencode /root/.local/share/opencode /root/.cache/opencode",
         # Install OpenCode and Gemini CLI
         "npm install -g @google/gemini-cli",
@@ -186,17 +185,18 @@ assisted_coding_image = (
         "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "ui.quotes_loader"
     )
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "ui", "quotes.json"), "/etc/quotes.json")
-    .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "opencode.json"), "/etc/devbox/opencode.json")
+    .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "opencode-coding.json"), "/etc/devbox/opencode.json")
+    .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "opencode-coding.json"), "/etc/devbox/opencode-coding.json")
 )
 
-opencode_image = (
-    _apt_install(create_base_minimal_image(), "git", "gdb", "binwalk", "tshark", "wabt", "unzip")
+forensic_analysis_image = (
+    _apt_install(create_base_minimal_image(), "git", "gdb", "binwalk", "tshark", "wabt", "unzip", "binutils")
+    .pip_install(*DOWNLOAD_PIP_PACKAGES, "volatility3")
     .run_commands(
         f"curl -fsSL https://deb.nodesource.com/setup_{NODE_MAJOR_VERSION}.x | bash -",
         "apt-get install -y nodejs",
         f"npm install -g rea-agents@{REA_AGENTS_VERSION}",
         "mkdir -p /root/.config/opencode /root/.local/share/opencode /root/.cache/opencode",
-        # Install OpenCode only (dedicated box — no Gemini CLI to keep it focused)
         "curl -fsSL https://opencode.ai/install | bash",
         "ln -sf /root/.opencode/bin/opencode /usr/local/bin/opencode",
         "mkdir -p /opt/java",
@@ -214,8 +214,16 @@ opencode_image = (
         f"curl -fsSL -o /usr/local/bin/apktool.jar https://github.com/iBotPeaches/Apktool/releases/download/v{APKTOOL_VERSION}/apktool_{APKTOOL_VERSION}.jar",
         "printf '#!/bin/sh\\nexec java -jar /usr/local/bin/apktool.jar \"$@\"\\n' > /usr/local/bin/apktool && chmod +x /usr/local/bin/apktool",
         f"cat > /etc/profile.d/rea.sh << 'REA_EOF'\nexport JAVA_HOME=/opt/java/temurin-21\nexport GHIDRA_INSTALL_DIR=/opt/ghidra/ghidra_{GHIDRA_VERSION}_PUBLIC\nexport REA_GHIDRA_STARTUP_TIMEOUT_MS=120000\nexport REA_MCP_MAX_RESPONSE_BYTES=52428800\nexport REA_JADX_MCP_JAR=/opt/jadx-headless-mcp/jadx-headless-mcp-{JADX_HEADLESS_MCP_VERSION}-all.jar\nexport PATH=/opt/java/temurin-21/bin:/opt/jadx/bin:$PATH\nREA_EOF",
-        "chmod 644 /etc/profile.d/rea.sh",
-        "bash -c 'source /etc/profile.d/rea.sh; rea setup --client opencode --yes'",
+         "chmod 644 /etc/profile.d/rea.sh",
+         "bash -c 'source /etc/profile.d/rea.sh; rea setup --client opencode --yes'",
+         "mkdir -p /opt/forensic_analysis/volatility3/symbols",
+         "curl -fsSL https://downloads.volatilityfoundation.org/volatility3/symbols/windows.zip -o /tmp/windows.zip",
+         "curl -fsSL https://downloads.volatilityfoundation.org/volatility3/symbols/linux.zip -o /tmp/linux.zip",
+         "curl -fsSL https://downloads.volatilityfoundation.org/volatility3/symbols/mac.zip -o /tmp/mac.zip",
+         "unzip -q /tmp/windows.zip -d /opt/forensic_analysis/volatility3/symbols",
+         "unzip -q /tmp/linux.zip -d /opt/forensic_analysis/volatility3/symbols",
+         "unzip -q /tmp/mac.zip -d /opt/forensic_analysis/volatility3/symbols",
+         "rm -f /tmp/windows.zip /tmp/linux.zip /tmp/mac.zip",
         *get_ssh_setup_commands()
     )
     .add_local_python_source(
@@ -326,28 +334,4 @@ rdp_devbox_image = (
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
         "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker"
     )
-)
-
-forensic_analysis_image =  (
-   create_base_minimal_image()
-  .pip_install(*DOWNLOAD_PIP_PACKAGES, "volatility3")
-  .run_commands(
-    "mkdir -p /opt/forensic_analysis",
-    "mkdir -p /opt/forensic_analysis/volatility3/symbols",
-
-    "curl https://downloads.volatilityfoundation.org/volatility3/symbols/windows.zip -o /tmp/windows.zip",
-    "curl https://downloads.volatilityfoundation.org/volatility3/symbols/linux.zip -o /tmp/linux.zip",
-    "curl https://downloads.volatilityfoundation.org/volatility3/symbols/mac.zip -o /tmp/mac.zip",
-
-    "unzip /tmp/windows.zip -d /opt/forensic_analysis/volatility3/symbols",
-    "unzip /tmp/linux.zip -d /opt/forensic_analysis/volatility3/symbols",
-    "unzip /tmp/mac.zip -d /opt/forensic_analysis/volatility3/symbols",
-    # symbols ought to be moved to volatility's execution directory
-    *get_ssh_setup_commands()
-    )
-    .add_local_python_source(
-        "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
-        "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "ui.quotes_loader"
-    )
-    .add_local_file(os.path.join(_IMAGES_DIR, "..", "ui", "quotes.json"), "/etc/quotes.json")
 )

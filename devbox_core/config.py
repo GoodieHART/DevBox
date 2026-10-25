@@ -87,17 +87,14 @@ LLAMACPP_GPU_DEVBOX_ARGS = {
 # llama.cpp idle timeout (separate from container timeout)
 LLAMACPP_IDLE_TIMEOUT = 3600  # 1 hour idle
 
-# OpenCode instance settings (dedicated OpenCode server box)
 OPENCODE_PORT = 4096  # Default `opencode web` port
 OPENCODE_HOSTNAME = "0.0.0.0"  # Bind so Modal tunnel can reach it
 OPENCODE_IDLE_TIMEOUT_SECONDS = 1800  # 30 minutes idle (longer than SSH boxes, shorter than llamacpp)
-OPENCODE_WORKDIR = "/data"  # Volume root — general OpenCode working dir
-# Dedicated persistent dir for the OpenCode box (created if missing). Seeded as a
-# git repo so OpenCode treats it as a project instead of its "global" fallback.
-OPENCODE_SESSIONS_DIR = "/data/oc-sessions"
-# Dedicated persistent dir for user-supplied files to be analyzed by REA MCP
-# (and any other tool). Lives on the volume, so uploads survive relaunches.
+OPENCODE_WORKDIR = "/data/projects"
+OPENCODE_SESSIONS_DIR = "/data/projects"
 OPENCODE_UPLOADS_DIR = "/data/uploads"
+FORENSICS_WORKDIR = "/data/forensics"
+FORENSICS_UPLOADS_DIR = "/data/forensics/uploads"
 
 # OpenCode DevBox resource arguments (CPU-only, headroom for web server + TUI attach)
 OPENCODE_DEVBOX_ARGS = {
@@ -108,13 +105,20 @@ OPENCODE_DEVBOX_ARGS = {
     "timeout": 10800,  # 3 hours max runtime
 }
 
-# Assisted coding box: opencode TUI + rea mcp measured ~1.6GB RSS + 326MB child
 ASSISTED_DEVBOX_ARGS = {
     "secrets": None,
     "volumes": None,
     "cpu": 1.0,
     "memory": 4096,
     "timeout": 10800,  # 3 hours max runtime
+}
+
+FORENSICS_DEVBOX_ARGS = {
+    "secrets": None,
+    "volumes": None,
+    "cpu": 2.0,
+    "memory": 8192,
+    "timeout": 10800,
 }
 
 # Package groups for reusable configurations
@@ -326,7 +330,7 @@ def get_resource_config(config_type="cpu", is_rdp=False, secrets=None, volume=No
   return config
 
 
-def build_devbox_args(secrets, volume) -> dict[str, dict[str, Any]]:
+def build_devbox_args(secrets, volume, *, secret_sets=None) -> dict[str, dict[str, Any]]:
   """
     Build all eight Modal function arg dicts from live handles.
 
@@ -337,28 +341,38 @@ def build_devbox_args(secrets, volume) -> dict[str, dict[str, Any]]:
     Returns:
         dict: all seven arg dicts keyed by their devbox.py names.
   """
-  cpu_devbox_args = get_resource_config("cpu", secrets=secrets, volume=volume)
+  secret_sets = secret_sets or {}
+  ssh_secrets = secret_sets.get("ssh", secrets)
+  coding_secrets = secret_sets.get("coding", ssh_secrets)
+  forensic_secrets = secret_sets.get("forensics", ssh_secrets)
+  exa_secrets = secret_sets.get("exa", ssh_secrets)
 
-  cpu_devbox_args_rdp = get_resource_config("cpu", secrets=secrets, volume=volume, is_rdp=True)
+  cpu_devbox_args = get_resource_config("cpu", secrets=ssh_secrets, volume=volume)
 
-  gpu_devbox_args = get_resource_config("gpu", secrets=secrets, volume=volume, is_rdp=True)
+  cpu_devbox_args_rdp = get_resource_config("cpu", secrets=ssh_secrets, volume=volume, is_rdp=True)
 
-  gpu_devbox_args_rdp = get_resource_config("gpu", secrets=secrets, volume=volume, is_rdp=True)
+  gpu_devbox_args = get_resource_config("gpu", secrets=ssh_secrets, volume=volume, is_rdp=True)
 
-  opencode_devbox_args: dict[str, Any] = dict(OPENCODE_DEVBOX_ARGS)
-  opencode_devbox_args["secrets"] = secrets
+  gpu_devbox_args_rdp = get_resource_config("gpu", secrets=ssh_secrets, volume=volume, is_rdp=True)
+
+  opencode_devbox_args: dict[str, Any] = dict(ASSISTED_DEVBOX_ARGS)
+  opencode_devbox_args["secrets"] = coding_secrets
   opencode_devbox_args["volumes"] = {"/data": volume}
 
   assisted_devbox_args: dict[str, Any] = dict(ASSISTED_DEVBOX_ARGS)
-  assisted_devbox_args["secrets"] = secrets
+  assisted_devbox_args["secrets"] = coding_secrets
   assisted_devbox_args["volumes"] = {"/data": volume}
 
+  forensics_devbox_args: dict[str, Any] = dict(FORENSICS_DEVBOX_ARGS)
+  forensics_devbox_args["secrets"] = forensic_secrets
+  forensics_devbox_args["volumes"] = {"/data": volume}
+
   llamacpp_devbox_args: dict[str, Any] = dict(LLAMACPP_DEVBOX_ARGS)
-  llamacpp_devbox_args["secrets"] = secrets
+  llamacpp_devbox_args["secrets"] = exa_secrets
   llamacpp_devbox_args["volumes"] = {"/data": volume}
 
   llamacpp_gpu_devbox_args: dict[str, Any] = dict(LLAMACPP_GPU_DEVBOX_ARGS)
-  llamacpp_gpu_devbox_args["secrets"] = secrets
+  llamacpp_gpu_devbox_args["secrets"] = exa_secrets
   llamacpp_gpu_devbox_args["volumes"] = {"/data": volume}
 
   return {
@@ -368,6 +382,7 @@ def build_devbox_args(secrets, volume) -> dict[str, dict[str, Any]]:
     "gpu_devbox_args_rdp": gpu_devbox_args_rdp,
     "opencode_devbox_args": opencode_devbox_args,
     "assisted_devbox_args": assisted_devbox_args,
+    "forensics_devbox_args": forensics_devbox_args,
     "llamacpp_devbox_args": llamacpp_devbox_args,
     "llamacpp_gpu_devbox_args": llamacpp_gpu_devbox_args,
   }
