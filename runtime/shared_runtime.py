@@ -76,29 +76,19 @@ def start_tmux_session(session_name="devbox", windows=3):
     `tmux attach -t <session_name>`.
     """
     import os
-    import shutil
     import subprocess
     import sys
 
-    # Re-apply the Oh My Tmux styling if a previous session backup wiped
-    # /root (restore_backup clears /root before extracting). /opt is not
-    # wiped, so the clone survives every launch.
+    # Ensure the DevBox tmux config is in place after restore_backup may have
+    # wiped /root. /etc/devbox is image-baked and survives the wipe.
     try:
-        if not os.path.exists("/root/.tmux.conf") and os.path.exists("/opt/oh-my-tmux/.tmux.conf"):
-            os.symlink("/opt/oh-my-tmux/.tmux.conf", "/root/.tmux.conf")
-        if not os.path.exists("/root/.tmux.conf.local") and os.path.exists("/opt/oh-my-tmux/.tmux.conf.local"):
-            shutil.copyfile("/opt/oh-my-tmux/.tmux.conf.local", "/root/.tmux.conf.local")
-        # Ensure mouse support is enabled (oh-my-tmux ships it commented out).
-        local_conf = "/root/.tmux.conf.local"
-        if os.path.exists(local_conf):
+        if not os.path.exists("/root/.tmux.conf") and os.path.exists("/etc/devbox/tmux.conf"):
+            os.symlink("/etc/devbox/tmux.conf", "/root/.tmux.conf")
+        elif os.path.exists("/root/.tmux.conf") and not os.path.islink("/root/.tmux.conf"):
+            # Replace a stale/restored config with the image-baked one.
             try:
-                content = open(local_conf).read()
-                if "set -g mouse" not in content and "set-option -g mouse" not in content:
-                    with open(local_conf, "a") as f:
-                        f.write("\n# DevBox: enable mouse (window tabs, scrolling, resize)\nset -g mouse on\n")
-                elif "set -g mouse off" in content or "set-option -g mouse off" in content:
-                    content = content.replace("set -g mouse off", "set -g mouse on").replace("set-option -g mouse off", "set-option -g mouse on")
-                    open(local_conf, "w").write(content)
+                os.remove("/root/.tmux.conf")
+                os.symlink("/etc/devbox/tmux.conf", "/root/.tmux.conf")
             except Exception:
                 pass
     except Exception:
