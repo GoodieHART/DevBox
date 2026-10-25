@@ -124,6 +124,8 @@ OPENCODE_PERSISTENCE_ITEMS = SSH_PERSISTENCE_ITEMS + [
     ".cache/opencode",
 ]
 
+FORENSICS_PERSISTENCE_ITEMS = OPENCODE_PERSISTENCE_ITEMS
+
 DIRECTORY_PERSISTENCE_ITEMS = frozenset([
     ".config/opencode",
     ".local/share/opencode",
@@ -155,6 +157,7 @@ def get_persistence_items(devbox_type="ssh"):
         "llm": LLM_PERSISTENCE_ITEMS,
         "unsloth": UNSLOTH_PERSISTENCE_ITEMS,
         "opencode": OPENCODE_PERSISTENCE_ITEMS,
+        "forensic_analysis": FORENSICS_PERSISTENCE_ITEMS,
     }
 
     return persistence_configs.get(devbox_type, SSH_PERSISTENCE_ITEMS)

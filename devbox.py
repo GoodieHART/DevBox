@@ -1,9 +1,10 @@
 import modal
 import os
+from datetime import datetime, timedelta, timezone
 
 from devbox_core.images import (
     standard_devbox_image, cuda_devbox_image, doc_processing_image,
-    assisted_coding_image, opencode_image, llm_playroom_image, llamacpp_cpu_image, rdp_devbox_image, forensic_analysis_image
+    assisted_coding_image, llm_playroom_image, llamacpp_cpu_image, rdp_devbox_image, forensic_analysis_image
 )
 from runtime.shared_runtime import run_devbox_shared, run_rdp_devbox_shared, run_opencode_shared
 from devbox_core.config import build_devbox_args
@@ -33,9 +34,19 @@ app = modal.App(
 
 dev_volume = modal.Volume.from_name("my-dev-volume", create_if_missing=True)
 
-juicy_secrets = [modal.Secret.from_name("ssh-public-key"), modal.Secret.from_name("gemini-api-key"), modal.Secret.from_name("exa-api-key")] # Right now, all boxes will be filled with these secrets even if it may not directly be intented.
+ssh_secret = modal.Secret.from_name("ssh-public-key")
+gemini_secret = modal.Secret.from_name("gemini-api-key")
+exa_secret = modal.Secret.from_name("exa-api-key")
 
-_wiring = build_devbox_args(juicy_secrets, dev_volume)
+_wiring = build_devbox_args(
+    [ssh_secret],
+    dev_volume,
+    secret_sets={
+        "coding": [ssh_secret, gemini_secret],
+        "forensics": [ssh_secret],
+        "exa": [ssh_secret, exa_secret],
+    },
+)
 cpu_devbox_args = _wiring["cpu_devbox_args"]
 
 cpu_devbox_args_rdp = _wiring["cpu_devbox_args_rdp"]
@@ -44,9 +55,8 @@ gpu_devbox_args = _wiring["gpu_devbox_args"]
 
 gpu_devbox_args_rdp = _wiring["gpu_devbox_args_rdp"]
 
-opencode_devbox_args = _wiring["opencode_devbox_args"]
-
 assisted_devbox_args = _wiring["assisted_devbox_args"]
+forensics_devbox_args = _wiring["forensics_devbox_args"]
 
 llamacpp_devbox_args = _wiring["llamacpp_devbox_args"]
 
@@ -115,22 +125,17 @@ def launch_doc_processor():
 @app.function(image=assisted_coding_image, **assisted_devbox_args)
 def launch_assisted_coding():
     """Launches a development environment with Gemini CLI & OpenCode pre-installed."""
-    run_devbox_shared(extra_packages=None, devbox_type="assisted_coding", resources=assisted_devbox_args)
-
-@app.function(image=opencode_image, **opencode_devbox_args)
-def launch_opencode(extra_packages=None):
-    """Launches a dedicated OpenCode server box (browser web UI + SSH)."""
-    run_opencode_shared(extra_packages, resources=opencode_devbox_args)
+    run_opencode_shared(extra_packages=None, resources=assisted_devbox_args)
 
 @app.function(image=llm_playroom_image, **gpu_devbox_args_rdp)
 def launch_llm_playroom():
     """Launches an LLM Playroom environment with Ollama and preloaded models."""
     run_devbox_shared(extra_packages=None, devbox_type="llm_playroom", resources=gpu_devbox_args_rdp)
 
-@app.function(image=forensic_analysis_image, **cpu_devbox_args)
+@app.function(image=forensic_analysis_image, **forensics_devbox_args)
 def launch_forensics_image():
-  """ Launches A Forensic Analysis Machine With Volatilty3 pre-installed. """
-  run_devbox_shared(extra_packages=None, devbox_type="forensic_analysis", resources=cpu_devbox_args)
+  """Launches the forensic and reverse-engineering environment."""
+  run_opencode_shared(extra_packages=None, resources=forensics_devbox_args, forensic=True)
 
 # llama.cpp Research Center - Curated Model Catalog lives in
 # devbox_core/llamacpp_models.py (imported function-locally below).
@@ -180,8 +185,8 @@ def main():
     2. 📄 Document Processing Box
     Pandoc + Full TeX Live for document work
     
-    3. 🤖 AI Assistants Box
-    Includes OpenCode and Gemini CLI
+    3. 🤖 AI Coding Box
+    OpenCode web UI, SSH, and Gemini CLI
     
     4. 🧠 LLM Playroom 
     Ollama for AI experimentation
@@ -197,8 +202,6 @@ def main():
     8. 🚀 llama.cpp Research Center (GPU)
     GPU-accelerated inference + 32K context + T4 GPU
 
-    9. 🤖 OpenCode Box
-    Dedicated OpenCode web server (browser UI + SSH, workdir /data)
     """
     create_box(menu_box, "🚀 LAUNCH OPTIONS")
     
@@ -224,7 +227,7 @@ def main():
 
     elif choice == "3":
         assistants_box = """
-        🤖 Launching AI Assistants Box...
+        🤖 Launching AI Coding Box...
         🧠 Includes OpenCode and Gemini CLI
         🚀 Let's build something amazing together!
         """
@@ -248,7 +251,7 @@ def main():
 
     else:
       from ui.launcher_menu import handle_simple_choice
-      handle_simple_choice(choice, launch_llamacpp_playroom, launch_forensics_image, launch_llamacpp_playroom_gpu, launch_opencode, CPU_ONLY)
+      handle_simple_choice(choice, launch_llamacpp_playroom, launch_forensics_image, launch_llamacpp_playroom_gpu, CPU_ONLY)
 
 
 @app.function(image=standard_devbox_image, **cpu_devbox_args)
@@ -281,10 +284,9 @@ def show_costs(reconcile: bool = False):
             import modal
 
             ws = modal.Workspace()
-            report = ws.billing.report(
-                resolution="d",
-                tag_names=["*"],
-            )
+            end = datetime.now(timezone.utc)
+            start = end - timedelta(days=30)
+            report = ws.billing.report(start=start, end=end, resolution="d", tag_names=["*"])
             print("Reconciliation (Modal billing report):")
             for item in report:
                 print(f"  {item.object_id}: ${item.cost} ({item.cost_by_resource})")

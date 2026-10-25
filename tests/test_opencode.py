@@ -41,24 +41,33 @@ def _top_level_names(name):
 def test_opencode_port_and_workdir():
     assert config.OPENCODE_PORT == 4096
     assert config.OPENCODE_HOSTNAME == "0.0.0.0"
-    assert config.OPENCODE_WORKDIR == "/data"
+    assert config.OPENCODE_WORKDIR == "/data/projects"
 
 
 def test_opencode_box_roots_in_persistent_git_seeded_sessions_dir():
-    assert config.OPENCODE_SESSIONS_DIR == "/data/oc-sessions"
+    assert config.OPENCODE_SESSIONS_DIR == "/data/projects"
     src = _source("runtime/shared_runtime.py")
     assert "OPENCODE_SESSIONS_DIR" in src
-    assert 'cwd=OPENCODE_SESSIONS_DIR' in src
+    assert "cwd=workdir" in src
     assert '"git", "init"' in src
     assert '"--allow-empty"' in src
 
 
 def test_opencode_resource_envelope_sane():
     args = config.OPENCODE_DEVBOX_ARGS
+    assert isinstance(args["cpu"], (int, float))
+    assert isinstance(args["memory"], (int, float))
+    assert isinstance(args["timeout"], (int, float))
     assert args["cpu"] >= 0.5
     assert args["memory"] >= 1024
     assert args["timeout"] > 0
     assert args["timeout"] >= config.OPENCODE_IDLE_TIMEOUT_SECONDS
+
+
+def test_forensics_paths_and_resources():
+    assert config.FORENSICS_WORKDIR == "/data/forensics"
+    assert config.FORENSICS_UPLOADS_DIR == "/data/forensics/uploads"
+    assert config.FORENSICS_DEVBOX_ARGS["memory"] == 8192
 
 
 def test_rea_version_is_centralized():
@@ -142,7 +151,7 @@ def test_assisted_coding_mapping_preserved():
 
 
 def test_opencode_image_defined():
-    assert "opencode_image" in _top_level_names("devbox_core/images.py")
+    assert "forensic_analysis_image" in _top_level_names("devbox_core/images.py")
 
 
 def test_opencode_image_installs_opencode_and_ssh():
@@ -152,17 +161,20 @@ def test_opencode_image_installs_opencode_and_ssh():
     assert "REA_AGENTS_VERSION" in src
     assert "npm install -g rea-agents@" in src
     assert "integrations" in src and "opencode.json" in src
-    assisted_block = src.split("assisted_coding_image")[1].split("opencode_image")[0]
+    assisted_block = src.split("assisted_coding_image")[1].split("forensic_analysis_image")[0]
+    forensic_block = src.split("forensic_analysis_image")[1].split("llm_playroom_image")[0]
     assert "ln -sf /root/.opencode/bin/opencode /usr/local/bin/opencode" in assisted_block
+    assert "rea-agents@" not in assisted_block
+    assert "rea-agents@" in forensic_block
     assert "mkdir -p /root/.config/opencode" in src
     # Dedicated box: must not bundle Gemini CLI (that's the assisted box's job)
-    block = src.split("opencode_image")[1].split("llamacpp_cpu_image")[0]
+    block = src.split("forensic_analysis_image")[1].split("llm_playroom_image")[0]
     assert "gemini-cli" not in block
 
 
 def test_opencode_image_installs_ghidra_and_java21():
     src = _source("devbox_core/images.py")
-    block = src.split("opencode_image")[1].split("llamacpp_cpu_image")[0]
+    block = src.split("forensic_analysis_image")[1].split("llm_playroom_image")[0]
     assert "GHIDRA_VERSION" in block
     assert "GHIDRA_BUILD" in block
     assert "TEMURIN_JDK_VERSION" in block
@@ -179,14 +191,15 @@ def test_opencode_image_installs_ghidra_and_java21():
 
 def test_opencode_image_runs_rea_setup_at_build():
     src = _source("devbox_core/images.py")
-    block = src.split("opencode_image")[1].split("llamacpp_cpu_image")[0]
+    block = src.split("forensic_analysis_image")[1].split("llm_playroom_image")[0]
     assert "rea setup" in block
     assert "--client opencode" in block
     assert "--yes" in block
 
 
 def test_opencode_resource_envelope_has_headroom_for_ghidra():
-    assert config.OPENCODE_DEVBOX_ARGS["memory"] >= 8192
+    assert isinstance(config.FORENSICS_DEVBOX_ARGS["memory"], (int, float))
+    assert config.FORENSICS_DEVBOX_ARGS["memory"] >= 8192
 
 
 def test_existing_images_still_defined():
@@ -215,8 +228,7 @@ def test_run_opencode_shared_serves_and_forwards():
 
 def test_assisted_box_forwards_opencode_web_tunnel():
     src = _source("runtime/shared_runtime.py")
-    block = src.split("def run_devbox_shared")[1].split("def run_rdp_devbox_shared")[0]
-    assert "ExitStack" in block
+    block = src.split("def run_opencode_shared")[1]
     assert "modal.forward(22" in block
     assert "modal.forward(OPENCODE_PORT" in block
     assert block.index("modal.forward(22") < block.index("modal.forward(OPENCODE_PORT")
@@ -241,19 +253,18 @@ def test_run_devbox_shared_still_defined():
 # --- devbox.py (AST + source, no import) ---
 
 
-def test_launch_opencode_defined_and_uses_opencode_image():
+def test_launch_assisted_coding_uses_coding_image():
     names = _top_level_names("devbox.py")
-    assert "launch_opencode" in names
+    assert "launch_assisted_coding" in names
     src = _source("devbox.py")
-    assert "opencode_image" in src
-    block_start = src.index("def launch_opencode")
+    block_start = src.index("def launch_assisted_coding")
     assert "run_opencode_shared" in src[block_start : block_start + 500]
 
 
-def test_menu_exposes_opencode_option():
+def test_menu_exposes_consolidated_coding_option():
     src = _source("ui/launcher_menu.py")
-    assert 'choice == "9"' in src
-    assert "launch_opencode.remote()" in src
+    assert 'choice == "9"' not in src
+    assert "launch_assisted_coding.remote()" in _source("devbox.py")
 
 
 def test_existing_launchers_still_defined():
@@ -332,9 +343,7 @@ def test_run_opencode_shared_creates_uploads_and_wires_rea_env():
     assert block.index("OPENCODE_UPLOADS_DIR") < block.index("subprocess.Popen")
 
 
-def test_launcher_menu_offers_skippable_pre_launch_upload():
+def test_forensic_launcher_owns_rea_uploads():
     src = _source("ui/launcher_menu.py")
-    block = src.split('elif choice == "9":')[1]
-    assert "batch_upload" in block
-    assert "put_file" in block or "put_directory" in block
-    assert "Enter to skip" in block or "skip" in block.lower()
+    assert "batch_upload" not in src
+    assert "FORENSICS_UPLOADS_DIR" in _source("runtime/shared_runtime.py")

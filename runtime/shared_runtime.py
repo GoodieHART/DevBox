@@ -289,7 +289,7 @@ def run_rdp_devbox_shared(extra_packages=None, devbox_type="rdp_devbox", resourc
         print("\nIdle timeout reached. Shutting down RDP Desktop.", file=sys.stderr)
 
 
-def run_opencode_shared(extra_packages=None, resources=None):
+def run_opencode_shared(extra_packages=None, resources=None, forensic=False):
     """Lifecycle for the dedicated OpenCode box: SSH + `opencode web` server.
 
     Keeps the exact same provisioning primitives as the SSH boxes
@@ -313,7 +313,7 @@ def run_opencode_shared(extra_packages=None, resources=None):
     )
     restore_backup()
 
-    setup_persistence(get_persistence_items("opencode"))
+    setup_persistence(get_persistence_items("forensic_analysis" if forensic else "opencode"))
     seed_opencode_config()
 
     # Register backup on exit (same target as SSH boxes)
@@ -321,7 +321,7 @@ def run_opencode_shared(extra_packages=None, resources=None):
 
     # Cost tracking: one record per launch (best-effort)
     try:
-        _ct_session = start_session("opencode", resources)
+        _ct_session = start_session("forensic_analysis" if forensic else "assisted_coding", resources)
         register_cost_flush(_ct_session)
     except Exception as _e:
         print(f"[cost_tracker] init failed: {_e}", file=sys.stderr)
@@ -329,7 +329,7 @@ def run_opencode_shared(extra_packages=None, resources=None):
     inject_ssh_key()
 
     # Write devbox banner (same mechanism as run_devbox_shared)
-    icon, name = DEVBOX_BANNERS.get("opencode", ("🚀", "DevBox"))
+    icon, name = DEVBOX_BANNERS.get("forensic_analysis" if forensic else "assisted_coding", ("🚀", "DevBox"))
     banner = textwrap.dedent(f"""\
     ╔══════════════════════════════════════╗
     ║  {icon} {name:<30} ║
@@ -350,12 +350,18 @@ def run_opencode_shared(extra_packages=None, resources=None):
     # Root OpenCode in a dedicated persistent dir on the volume (created if
     # missing) and seed a git repo with an initial commit so OpenCode resolves
     # a real project id instead of falling back to "global" (worktree "/").
-    os.makedirs(OPENCODE_SESSIONS_DIR, exist_ok=True)
-    if not os.path.isdir(os.path.join(OPENCODE_SESSIONS_DIR, ".git")):
-        subprocess.run(["git", "init", "-q", OPENCODE_SESSIONS_DIR], check=False)
+    workdir = OPENCODE_SESSIONS_DIR
+    uploads_dir = OPENCODE_UPLOADS_DIR
+    if forensic:
+        from devbox_core.config import FORENSICS_WORKDIR, FORENSICS_UPLOADS_DIR
+        workdir = FORENSICS_WORKDIR
+        uploads_dir = FORENSICS_UPLOADS_DIR
+    os.makedirs(workdir, exist_ok=True)
+    if not os.path.isdir(os.path.join(workdir, ".git")):
+        subprocess.run(["git", "init", "-q", workdir], check=False)
         subprocess.run(
             [
-                "git", "-C", OPENCODE_SESSIONS_DIR,
+                "git", "-C", workdir,
                 "-c", "user.email=devbox@localhost", "-c", "user.name=devbox",
                 "commit", "-q", "--allow-empty", "-m", "init oc-sessions",
             ],
@@ -364,13 +370,11 @@ def run_opencode_shared(extra_packages=None, resources=None):
 
     # Dedicated persistent uploads dir for user-supplied files (e.g. targets for
     # the REA MCP). Lives on the volume, so it survives relaunches.
-    os.makedirs(OPENCODE_UPLOADS_DIR, exist_ok=True)
+    os.makedirs(uploads_dir, exist_ok=True)
 
-    # REA reads absolute paths directly (there is no "roots approval" env
-    # var), so /data/uploads and /data/oc-sessions are already reachable by
-    # the `rea mcp` child. Persist REA's real env vars for SSH shells.
     _rea_marker = "# devbox rea env"
-    try:
+    if forensic:
+      try:
         _profile = "/root/.bashrc"
         _existing = open(_profile).read() if os.path.exists(_profile) else ""
         if _rea_marker not in _existing:
@@ -382,16 +386,14 @@ def run_opencode_shared(extra_packages=None, resources=None):
                 _f.write("export REA_MCP_MAX_RESPONSE_BYTES=52428800\n")
                 _f.write(f"export REA_JADX_MCP_JAR=/opt/jadx-headless-mcp/jadx-headless-mcp-{JADX_HEADLESS_MCP_VERSION}-all.jar\n")
                 _f.write("export PATH=/opt/java/temurin-21/bin:/opt/jadx/bin:$PATH\n")
-    except Exception:
-        pass
+      except Exception:
+          pass
 
-    # Ensure the `rea mcp` child (inherited env) sees the same values even
-    # when /etc/profile.d/rea.sh was not sourced by this process.
-    os.environ.setdefault("JAVA_HOME", "/opt/java/temurin-21")
-    os.environ.setdefault("GHIDRA_INSTALL_DIR", f"/opt/ghidra/ghidra_{GHIDRA_VERSION}_PUBLIC")
-    os.environ.setdefault("REA_GHIDRA_STARTUP_TIMEOUT_MS", "120000")
-    os.environ.setdefault("REA_MCP_MAX_RESPONSE_BYTES", "52428800")
-    os.environ.setdefault("REA_JADX_MCP_JAR", f"/opt/jadx-headless-mcp/jadx-headless-mcp-{JADX_HEADLESS_MCP_VERSION}-all.jar")
+      os.environ.setdefault("JAVA_HOME", "/opt/java/temurin-21")
+      os.environ.setdefault("GHIDRA_INSTALL_DIR", f"/opt/ghidra/ghidra_{GHIDRA_VERSION}_PUBLIC")
+      os.environ.setdefault("REA_GHIDRA_STARTUP_TIMEOUT_MS", "120000")
+      os.environ.setdefault("REA_MCP_MAX_RESPONSE_BYTES", "52428800")
+      os.environ.setdefault("REA_JADX_MCP_JAR", f"/opt/jadx-headless-mcp/jadx-headless-mcp-{JADX_HEADLESS_MCP_VERSION}-all.jar")
 
     password = os.environ.get("OPENCODE_SERVER_PASSWORD", "")
     auth_note = "🔒 Password auth: enabled" if password else "⚠️ No OPENCODE_SERVER_PASSWORD set — tunnel URL is the only secret"
@@ -408,7 +410,7 @@ def run_opencode_shared(extra_packages=None, resources=None):
     try:
         server_proc = subprocess.Popen(
             server_cmd,
-            cwd=OPENCODE_SESSIONS_DIR,
+            cwd=workdir,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
         )
@@ -467,9 +469,9 @@ def run_opencode_shared(extra_packages=None, resources=None):
             print("🤖 Your OpenCode Box is ready!")
             print("=" * 60)
             print(f"\n🌐 OpenCode web: {web_url}")
-            print("   (Open in browser; attach TUI via SSH with `opencode attach http://127.0.0.1:4096`)")
+            print(f"   (Open in browser; attach TUI via SSH with `opencode attach {web_url}`)")
             print(f"\n🔐 SSH: {ssh_cmd}")
-            print(f"📁 Workdir: {OPENCODE_SESSIONS_DIR} (persistent)")
+            print(f"📁 Workdir: {workdir} (persistent)")
             print(f"⏰ Idle timeout: {OPENCODE_IDLE_TIMEOUT_SECONDS // 60} minutes (SSH or web activity resets it)")
             print(f"{auth_note}")
             print("\n" + "=" * 60)
@@ -478,10 +480,10 @@ def run_opencode_shared(extra_packages=None, resources=None):
             check_interval = 15
             while idle_time < OPENCODE_IDLE_TIMEOUT_SECONDS:
                 time.sleep(check_interval)
-            try:
-                checkpoint()
-            except Exception:
-                pass
+                try:
+                    checkpoint()
+                except Exception:
+                    pass
                 ssh_result = subprocess.run(
                     "ps -ef | grep 'sshd: root@' | grep -v grep",
                     shell=True, capture_output=True,
@@ -503,5 +505,5 @@ def run_opencode_shared(extra_packages=None, resources=None):
                     remaining = OPENCODE_IDLE_TIMEOUT_SECONDS - idle_time
                     print(f"No activity. Shutting down in {remaining}s...", file=sys.stderr)
 
-            print("\nIdle timeout reached. Shutting down OpenCode Box.", file=sys.stderr)
+            print("\nIdle timeout reached. Shutting down.", file=sys.stderr)
     server_proc.terminate()

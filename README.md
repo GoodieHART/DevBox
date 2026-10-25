@@ -177,9 +177,9 @@ Comes with **Pandoc** and a full **TeX Live** distribution pre-installed. Conver
 
 ---
 
-### 3. 🤖 AI Assistants Box
+### 3. 🤖 AI Coding Box
 
-Pre-installed with **OpenCode** and **Gemini CLI** for AI-assisted coding sessions right out of the box.
+Pre-installed with **OpenCode** and **Gemini CLI** for AI-assisted coding sessions right out of the box. OpenCode sessions persist under `/data/projects`; the box does not include REA or reverse-engineering tools.
 
 **Best for:** AI-powered pair programming, code review, and development assistance.
 
@@ -226,9 +226,9 @@ The most feature-rich box. Comes with a curated catalog of **7 pre-configured GG
 
 ---
 
-### 7. 🔍 Forensics Analysis Box
+### 7. 🔍 Forensics & Reverse Engineering Box
 
-Comes with **Volatility3** and symbol files for Windows, Linux, and macOS pre-installed. Memory forensics is a branch of digital forensics that involves extracting evidence and artifacts from a RAM image or dump of a running computer. This lets you analyze running processes, environment variables, active network connections, loaded kernel modules, and much more.
+Comes with **Volatility3**, symbol files for Windows/Linux/macOS, OpenCode web + SSH, REA MCP, Ghidra, JADX, Apktool, GDB, Binwalk, Tshark, WABT, and the Java/native analysis stack. Forensic projects persist under `/data/forensics`, with analysis uploads under `/data/forensics/uploads`.
 
 **Best for:** CTF challenges, incident response, malware analysis, digital forensics investigations.
 
@@ -236,15 +236,11 @@ Comes with **Volatility3** and symbol files for Windows, Linux, and macOS pre-in
 
 ---
 
-### 8. 🤖 OpenCode Box
+### OpenCode access
 
-A dedicated **OpenCode web server** (`opencode web --port 4096 --hostname 0.0.0.0`) with SSH access on the side. Open the printed URL in a browser for the web UI, or SSH in and run `opencode attach http://127.0.0.1:4096` to drive the same sessions from the terminal. Workdir is `/data`, so sessions and files persist between launches. OpenCode auth/config (`~/.config/opencode`, `~/.local/share/opencode`) is symlinked to the persistent volume.
+The AI Coding Box and Forensics & Reverse Engineering Box both run `opencode web --port 4096 --hostname 0.0.0.0` with SSH access. Coding sessions use `/data/projects`; forensic sessions use `/data/forensics`. Attach from SSH with `opencode attach <printed OpenCode web URL>`.
 
-**Best for:** Running OpenCode as an always-on remote backend — browser UI plus terminal attach.
-
-**Resources:** 2.0 vCPU / 8GB RAM · 30 min idle timeout (SSH or web activity resets it)
-
-> **Auth note:** v1 relies on the random Modal tunnel URL as the secret (same model as the llama.cpp WebUI). For password auth, create a `opencode-server-password` Modal secret holding `OPENCODE_SERVER_PASSWORD` and add it to the secrets list for `launch_opencode` in `devbox.py`.
+The Forensics box is the only box that includes REA and native reverse-engineering tooling. The optional `opencode-server-password` Modal Secret enables password authentication for both OpenCode-enabled boxes; otherwise the private tunnel URL is the access credential.
 
 ## GPU Options
 
@@ -314,7 +310,7 @@ modal secret create ssh-public-key PUBKEY="$(cat ~/.ssh/id_rsa.pub)"
 
 ### Optional: Gemini API Key
 
-Only needed if you plan to use the **AI Assistants Box** (OpenCode + Gemini CLI). If missing, Gemini CLI will prompt you for the key on first use — no hard crash.
+Only needed if you plan to use the **AI Coding Box** (OpenCode + Gemini CLI). If missing, Gemini CLI will prompt you for the key on first use — no hard crash.
 
 Get your key from [Google AI Studio](https://aistudio.google.com/apikey), then:
 
@@ -384,23 +380,23 @@ The llama.cpp Research Center includes a built-in **WebUI** — a browser-based 
 
 Just paste that URL into any modern browser (Chrome, Firefox, Safari, Edge) and you'll get a full chat interface with your selected model. No additional setup needed.
 
-### OpenCode Web (OpenCode Box)
+### OpenCode Web
 
-The OpenCode Box prints a web URL alongside the SSH command:
+The AI Coding Box and Forensics & Reverse Engineering Box print a web URL alongside the SSH command:
 
 ```
-🤖 Your OpenCode Box is ready!
+🤖 Your OpenCode environment is ready!
 🌐 OpenCode web: http://<host>:<port>
 🔐 SSH: ssh root@<host> -p <port>
 ```
 
-Open the URL for the browser UI. From SSH you can attach a terminal TUI to the same backend with `opencode attach http://127.0.0.1:4096`, or run `opencode` directly for a local TUI session rooted at `/data`.
+Open the URL for the browser UI. From SSH you can attach a terminal TUI to the same backend with `opencode attach <printed OpenCode web URL>`, or run `opencode` directly for a local TUI session rooted at `/data`.
 
 ### Uploading files for the REA MCP
 
-The OpenCode Box ships the REA MCP server (`rea mcp`). Targets should be placed under `/data/uploads` (persistent) so they remain available across relaunches.
+The Forensics & Reverse Engineering Box ships the REA MCP server (`rea mcp`). Targets should be placed under `/data/forensics/uploads` (persistent) so they remain available across relaunches.
 
-**Before launch (pre-launch prompt):** when you pick option 9, the launcher asks for an optional local file/directory to upload to `/data/uploads`. Press Enter to skip. In detached/non-interactive runs it skips automatically.
+Forensic targets can be copied into `/data/forensics/uploads` over SSH or through the Modal volume before launch.
 
 **Before launch (manual):**
 ```bash
@@ -412,11 +408,11 @@ modal volume put my-dev-volume ./target /data/uploads/
 scp -P <ssh_port> -r ./target root@<ssh_host>:/data/uploads/
 ```
 
-Then reference the file in OpenCode/REA by its absolute path, e.g. `analyze /data/uploads/target`. REA reads absolute paths directly, so anything under `/data/uploads` or `/data/oc-sessions` is reachable.
+Then reference the file in OpenCode/REA by its absolute path, e.g. `analyze /data/forensics/uploads/target`. REA reads absolute paths directly, so anything under `/data/forensics` is reachable.
 
 ### Native reverse engineering (REA)
 
-The OpenCode Box ships REA 6.5.0 with a native decompiler stack pre-installed, so the `rea mcp` server can decompile binaries (not just static JS apps) out of the box:
+The Forensics & Reverse Engineering Box ships REA 6.5.0 with a native decompiler stack pre-installed, so the `rea mcp` server can decompile binaries (not just static JS apps) out of the box:
 
 - **Ghidra 12.1.4** (headless) — primary native decompiler. Env: `GHIDRA_INSTALL_DIR=/opt/ghidra/ghidra_12.1.4_PUBLIC`, `JAVA_HOME=/opt/java/temurin-21`.
 - **Auxiliary tools:** `gdb`, `binwalk`, `tshark`, `wabt` (apt), `objdump`/`readelf`/`nm` (binutils), `jadx`, `apktool`, plus `jadx-headless-mcp` 0.7.1 (REA's Android analysis engine, wired via `REA_JADX_MCP_JAR`).
@@ -472,7 +468,7 @@ Remember to replace `C:\path\to\your\DevBox\devbox.py` with the actual path to y
 ### Idle Timeouts
 
 - **Standard boxes**: Auto-shutdown after **5 minutes** of no active SSH connection.
-- **OpenCode Box**: Auto-shutdown after **30 minutes** with no SSH or web activity.
+- **AI Coding and Forensics boxes**: Auto-shutdown after **30 minutes** with no SSH or web activity.
 - **llama.cpp Research Center**: Extended timeout of **1 hour** to accommodate long-running inference sessions.
 - A countdown warning will appear in the terminal where you ran `modal run` before shutdown.
 
@@ -542,9 +538,9 @@ DevBox uses Modal Secrets to securely pass credentials into containers at runtim
 | Secret | Env Var | Required For | If Missing |
 |--------|---------|-------------|------------|
 | `ssh-public-key` | `PUBKEY` | All boxes | Container starts, but you can't SSH in |
-| `gemini-api-key` | `GEMINI_API_KEY` | AI Assistants Box | Gemini CLI prompts for key on first use |
+| `gemini-api-key` | `GEMINI_API_KEY` | AI Coding Box | Gemini CLI prompts for key on first use |
 | `exa-api-key` | `EXA_API_KEY` | llama.cpp Research Center | EXA Search disabled, everything else works |
-| `opencode-server-password` | `OPENCODE_SERVER_PASSWORD` | OpenCode Box (optional) | No password auth; tunnel URL is the only secret |
+| `opencode-server-password` | `OPENCODE_SERVER_PASSWORD` | AI Coding and Forensics boxes (optional) | No password auth; tunnel URL is the only secret |
 
 ### Understanding GGUF Model Names
 
