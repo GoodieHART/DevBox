@@ -94,13 +94,20 @@ def start_tmux_session(session_name="devbox", windows=3):
     except Exception:
         pass
 
+    # Prefer the image-baked config; fall back to tmux defaults if absent.
+    tmux_conf = "/etc/devbox/tmux.conf" if os.path.exists("/etc/devbox/tmux.conf") else None
+
     try:
         subprocess.run(
             ["tmux", "kill-session", "-t", session_name],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
+        new_session_cmd = ["tmux"]
+        if tmux_conf:
+            new_session_cmd += ["-f", tmux_conf]
+        new_session_cmd += ["new-session", "-d", "-s", session_name, "-n", "window-1"]
         subprocess.run(
-            ["tmux", "new-session", "-d", "-s", session_name, "-n", "window-1"],
+            new_session_cmd,
             check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
         for i in range(2, windows + 1):
