@@ -18,6 +18,7 @@ from runtime.backup_utils import restore_backup, register_custom_backup
 from runtime.utils import inject_ssh_key
 from devbox_core.config import IDLE_TIMEOUT_SECONDS, validate_prohibited_packages
 from ui.quotes_loader import get_random_quote
+from runtime.cost_tracker import start_session, register_cost_flush, checkpoint
 
 
 def install_extra_packages(extra_packages: list[str] | None) -> None:
@@ -66,7 +67,7 @@ DEVBOX_BANNERS = {
 }
 
 
-def run_devbox_shared(extra_packages=None, devbox_type="ssh"):
+def run_devbox_shared(extra_packages=None, devbox_type="ssh", resources=None):
     """Single consolidated function for all SSH DevBoxes."""
     import os
     import subprocess
@@ -80,7 +81,14 @@ def run_devbox_shared(extra_packages=None, devbox_type="ssh"):
     
     # Register backup on exit
     register_custom_backup("/root", "/data/root_full_backup.tar.gz")
-    
+
+    # Cost tracking: one record per launch (best-effort, never blocks startup)
+    try:
+        _ct_session = start_session(devbox_type, resources)
+        register_cost_flush(_ct_session)
+    except Exception as _e:
+        print(f"[cost_tracker] init failed: {_e}", file=sys.stderr)
+
     inject_ssh_key()
 
     # Write devbox banner with quote
@@ -156,6 +164,10 @@ def run_devbox_shared(extra_packages=None, devbox_type="ssh"):
         check_interval = 15
         while idle_time < IDLE_TIMEOUT_SECONDS:
             time.sleep(check_interval)
+            try:
+                checkpoint()
+            except Exception:
+                pass
             result = subprocess.run("ps -ef | grep 'sshd: root@' | grep -v grep", shell=True, capture_output=True)
             print(f"[DEBUG] SSH session check: {result.stdout!r}", file=sys.stderr)
             print(f"[DEBUG] Current idle time: {idle_time}s", file=sys.stderr)
@@ -175,7 +187,7 @@ def run_devbox_shared(extra_packages=None, devbox_type="ssh"):
                 print(f"No active SSH connection. Shutting down in {remaining}s...", file=sys.stderr,)
 
 
-def run_rdp_devbox_shared(extra_packages=None):
+def run_rdp_devbox_shared(extra_packages=None, devbox_type="rdp_devbox", resources=None):
     """
     Shared logic for launching an RDP desktop development environment.
     Sets up public key, persistent dotfiles, installs packages, and runs RDP server.
@@ -202,7 +214,14 @@ def run_rdp_devbox_shared(extra_packages=None):
     setup_persistence(rdp_items)
     
     register_custom_backup("/root", "/data/root_full_backup.tar.gz")
-    
+
+    # Cost tracking: one record per launch (best-effort)
+    try:
+        _ct_session = start_session(devbox_type, resources)
+        register_cost_flush(_ct_session)
+    except Exception as _e:
+        print(f"[cost_tracker] init failed: {_e}", file=sys.stderr)
+
     install_extra_packages(extra_packages)
     
     # Setup XFCE environment
@@ -245,6 +264,10 @@ def run_rdp_devbox_shared(extra_packages=None):
         
         while idle_time < IDLE_TIMEOUT_SECONDS:
             time.sleep(check_interval)
+            try:
+                checkpoint()
+            except Exception:
+                pass
             
             # Check for active RDP sessions
             result = subprocess.run(
@@ -266,7 +289,7 @@ def run_rdp_devbox_shared(extra_packages=None):
         print("\nIdle timeout reached. Shutting down RDP Desktop.", file=sys.stderr)
 
 
-def run_opencode_shared(extra_packages=None):
+def run_opencode_shared(extra_packages=None, resources=None):
     """Lifecycle for the dedicated OpenCode box: SSH + `opencode web` server.
 
     Keeps the exact same provisioning primitives as the SSH boxes
@@ -295,6 +318,13 @@ def run_opencode_shared(extra_packages=None):
 
     # Register backup on exit (same target as SSH boxes)
     register_custom_backup("/root", "/data/root_full_backup.tar.gz")
+
+    # Cost tracking: one record per launch (best-effort)
+    try:
+        _ct_session = start_session("opencode", resources)
+        register_cost_flush(_ct_session)
+    except Exception as _e:
+        print(f"[cost_tracker] init failed: {_e}", file=sys.stderr)
 
     inject_ssh_key()
 
@@ -448,6 +478,10 @@ def run_opencode_shared(extra_packages=None):
             check_interval = 15
             while idle_time < OPENCODE_IDLE_TIMEOUT_SECONDS:
                 time.sleep(check_interval)
+            try:
+                checkpoint()
+            except Exception:
+                pass
                 ssh_result = subprocess.run(
                     "ps -ef | grep 'sshd: root@' | grep -v grep",
                     shell=True, capture_output=True,

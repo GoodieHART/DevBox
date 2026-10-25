@@ -55,82 +55,82 @@ llamacpp_gpu_devbox_args = _wiring["llamacpp_gpu_devbox_args"]
 @app.function(image=standard_devbox_image, **cpu_devbox_args)
 def launch_devbox(extra_packages: list[str] | None = None):
     """Launches a non-GPU personal development environment."""
-    run_devbox_shared(extra_packages, devbox_type="standard_devbox")
+    run_devbox_shared(extra_packages, devbox_type="standard_devbox", resources=cpu_devbox_args)
 
 
 @_unless_cpu_only(app.function(image=cuda_devbox_image, gpu="t4", **gpu_devbox_args))
 def launch_devbox_t4(extra_packages: list[str] | None = None):
     """Launches a T4 GPU-powered personal development environment."""
-    run_devbox_shared(extra_packages, devbox_type="cuda_devbox_t4")
+    run_devbox_shared(extra_packages, devbox_type="cuda_devbox_t4", resources={**gpu_devbox_args, "gpu": "t4"})
 
 
 @_unless_cpu_only(app.function(image=cuda_devbox_image, gpu="l4", **gpu_devbox_args))
 def launch_devbox_l4(extra_packages: list[str] | None = None):
     """Launches an L4 GPU-powered personal development environment."""
-    run_devbox_shared(extra_packages, devbox_type="cuda_devbox_l4")
+    run_devbox_shared(extra_packages, devbox_type="cuda_devbox_l4", resources={**gpu_devbox_args, "gpu": "l4"})
 
 
 @_unless_cpu_only(app.function(image=cuda_devbox_image, gpu="a10g", **gpu_devbox_args))
 def launch_devbox_a10g(extra_packages: list[str] | None = None):
     """Launches an A10G GPU-powered personal development environment."""
-    run_devbox_shared(extra_packages, devbox_type="cuda_devbox_a10g")
+    run_devbox_shared(extra_packages, devbox_type="cuda_devbox_a10g", resources={**gpu_devbox_args, "gpu": "a10g"})
 
 
 @_unless_cpu_only(app.function(image=cuda_devbox_image, gpu="L40S", **gpu_devbox_args))
 def launch_devbox_l40s(extra_packages: list[str] | None = None):
     """Launches an L40S GPU-powered personal development environment."""
-    run_devbox_shared(extra_packages, devbox_type="cuda_devbox_l40s")
+    run_devbox_shared(extra_packages, devbox_type="cuda_devbox_l40s", resources={**gpu_devbox_args, "gpu": "L40S"})
 
 @app.function(image=rdp_devbox_image, **cpu_devbox_args_rdp)
 def launch_rdp_devbox(extra_packages: list[str] | None = None):
     """Launches an RDP desktop development environment."""
-    run_rdp_devbox_shared(extra_packages)
+    run_rdp_devbox_shared(extra_packages, devbox_type="rdp_devbox", resources=cpu_devbox_args_rdp)
 
 @_unless_cpu_only(app.function(image=rdp_devbox_image, gpu="t4", **gpu_devbox_args_rdp))
 def launch_rdp_devbox_t4(extra_packages: list[str] | None = None):
     """Launches an RDP desktop with T4 GPU."""
-    run_rdp_devbox_shared(extra_packages)
+    run_rdp_devbox_shared(extra_packages, devbox_type="rdp_devbox_t4", resources={**gpu_devbox_args_rdp, "gpu": "t4"})
 
 @_unless_cpu_only(app.function(image=rdp_devbox_image, gpu="l4", **gpu_devbox_args_rdp))
 def launch_rdp_devbox_l4(extra_packages: list[str] | None = None):
     """Launches an RDP desktop with L4 GPU."""
-    run_rdp_devbox_shared(extra_packages)
+    run_rdp_devbox_shared(extra_packages, devbox_type="rdp_devbox_l4", resources={**gpu_devbox_args_rdp, "gpu": "l4"})
 
 @_unless_cpu_only(app.function(image=rdp_devbox_image, gpu="a10g", **gpu_devbox_args_rdp))
 def launch_rdp_devbox_a10g(extra_packages: list[str] | None = None):
     """Launches an RDP desktop with A10G GPU."""
-    run_rdp_devbox_shared(extra_packages)
+    run_rdp_devbox_shared(extra_packages, devbox_type="rdp_devbox_a10g", resources={**gpu_devbox_args_rdp, "gpu": "a10g"})
 
 
 @_unless_cpu_only(app.function(image=rdp_devbox_image, gpu="L40S", **gpu_devbox_args_rdp))
 def launch_rdp_devbox_l40s(extra_packages: list[str] | None = None):
     """Launches an RDP desktop with L40S GPU."""
-    run_rdp_devbox_shared(extra_packages)
+    run_rdp_devbox_shared(extra_packages, devbox_type="rdp_devbox_l40s", resources={**gpu_devbox_args_rdp, "gpu": "L40S"})
 
 @app.function(image=doc_processing_image, **gpu_devbox_args)
 def launch_doc_processor():
     """Launches a document processing environment with Pandoc and TeX Live."""
-    run_devbox_shared(extra_packages=None, devbox_type="doc_processing")
+    run_devbox_shared(extra_packages=None, devbox_type="doc_processing", resources=gpu_devbox_args)
 
 @app.function(image=assisted_coding_image, **assisted_devbox_args)
 def launch_assisted_coding():
     """Launches a development environment with Gemini CLI & OpenCode pre-installed."""
-    run_devbox_shared(extra_packages=None, devbox_type="assisted_coding")
+    run_devbox_shared(extra_packages=None, devbox_type="assisted_coding", resources=assisted_devbox_args)
 
 @app.function(image=opencode_image, **opencode_devbox_args)
 def launch_opencode(extra_packages=None):
     """Launches a dedicated OpenCode server box (browser web UI + SSH)."""
-    run_opencode_shared(extra_packages)
+    run_opencode_shared(extra_packages, resources=opencode_devbox_args)
 
 @app.function(image=llm_playroom_image, **gpu_devbox_args_rdp)
 def launch_llm_playroom():
     """Launches an LLM Playroom environment with Ollama and preloaded models."""
-    run_devbox_shared(extra_packages=None, devbox_type="llm_playroom")
+    run_devbox_shared(extra_packages=None, devbox_type="llm_playroom", resources=gpu_devbox_args_rdp)
 
 @app.function(image=forensic_analysis_image, **cpu_devbox_args)
 def launch_forensics_image():
   """ Launches A Forensic Analysis Machine With Volatilty3 pre-installed. """
-  run_devbox_shared(extra_packages=None, devbox_type="forensic_analysis")
+  run_devbox_shared(extra_packages=None, devbox_type="forensic_analysis", resources=cpu_devbox_args)
 
 # llama.cpp Research Center - Curated Model Catalog lives in
 # devbox_core/llamacpp_models.py (imported function-locally below).
@@ -138,14 +138,14 @@ def launch_forensics_image():
 def launch_llamacpp_playroom():
     """llama.cpp Research Center with curated models, WebUI, and EXA Search."""
     from runtime.llamacpp_runtime import run_llamacpp_playroom
-    run_llamacpp_playroom("cpu")
+    run_llamacpp_playroom("cpu", resources=llamacpp_devbox_args)
 
 
 @_unless_cpu_only(app.function(image=llamacpp_cpu_image, **llamacpp_gpu_devbox_args))
 def launch_llamacpp_playroom_gpu():
     """GPU-accelerated llama.cpp Research Center with curated models, WebUI, and EXA Search."""
     from runtime.llamacpp_runtime import run_llamacpp_playroom
-    run_llamacpp_playroom("gpu")
+    run_llamacpp_playroom("gpu", resources=llamacpp_gpu_devbox_args)
 
 
 # Menu-driven local entrypoint.
@@ -249,3 +249,50 @@ def main():
     else:
       from ui.launcher_menu import handle_simple_choice
       handle_simple_choice(choice, launch_llamacpp_playroom, launch_forensics_image, launch_llamacpp_playroom_gpu, launch_opencode, CPU_ONLY)
+
+
+@app.function(image=standard_devbox_image, **cpu_devbox_args)
+def show_costs(reconcile: bool = False):
+    """Print accumulated DevBox cost ledger from /data/.cost."""
+    from runtime.cost_tracker import list_sessions, summarize
+
+    sessions = list_sessions()
+    summary = summarize(sessions)
+    print("=" * 60)
+    print("DevBox Cost Report")
+    print("=" * 60)
+    print(f"Sessions: {summary['sessions']}")
+    print(f"Total elapsed: {summary['total_elapsed_s']}s ({summary['total_elapsed_s'] / 3600:.2f}h)")
+    print(f"Total estimated cost: ${summary['total_estimated_cost_usd']:.4f} USD")
+    print("-" * 60)
+    print("By box type:")
+    for box, info in sorted(summary["by_type"].items()):
+        print(f"  {box}: {info['sessions']} sessions, {info['elapsed_s']:.0f}s, ${info['cost']:.4f}")
+    print("-" * 60)
+    print("Recent sessions:")
+    for s in sessions[-10:]:
+        print(
+            f"  {s.get('started_at')}  {s.get('devbox_type'):24s}  "
+            f"{s.get('elapsed_s', 0):8.0f}s  ${s.get('estimated_cost_usd', 0):.4f}  {s.get('status')}"
+        )
+    print("=" * 60)
+    if reconcile:
+        try:
+            import modal
+
+            ws = modal.Workspace()
+            report = ws.billing.report(
+                resolution="d",
+                tag_names=["*"],
+            )
+            print("Reconciliation (Modal billing report):")
+            for item in report:
+                print(f"  {item.object_id}: ${item.cost} ({item.cost_by_resource})")
+        except Exception as e:
+            print(f"Reconciliation failed: {e}")
+
+
+@app.local_entrypoint()
+def cost_report(reconcile: bool = False):
+    """Local entrypoint: modal run devbox.py::cost_report"""
+    show_costs.remote(reconcile=reconcile)

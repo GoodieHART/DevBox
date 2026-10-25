@@ -484,6 +484,29 @@ The first run will take **30-45 minutes** to build the container image. Subseque
 
 Running a Standard DevBox for 1 hour costs approximately **$0.20**. GPU usage incurs additional charges — see [modal.com/pricing](https://modal.com/pricing) for current rates.
 
+### Cost Tracking
+
+Every DevBox launch now records its resource allocation, wall-clock runtime, and an
+estimated USD cost to the persistent volume:
+
+```
+/data/.cost/sessions/<timestamp>_<box>_<id>.json
+```
+
+View accumulated costs at any time:
+
+```bash
+modal run devbox.py::cost_report
+# optional authoritative reconciliation against Modal's billing API:
+modal run devbox.py::cost_report --reconcile
+```
+
+Estimates are based on Modal's published per-second rates (see
+`devbox_core/config.py`: `MODAL_PRICING_VERSION`, `get_pricing()`,
+`estimate_cost_usd()`). They are estimates only — Modal bills on
+max(requested, used) resources plus a default 60 s scaledown window. Use
+`--reconcile` (or `modal billing report`) for authoritative numbers.
+
 ### Modal Platform Constraints
 
 Modal containers run in a sandboxed environment. Here are some things to be aware of:

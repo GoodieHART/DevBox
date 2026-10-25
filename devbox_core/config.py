@@ -371,3 +371,75 @@ def build_devbox_args(secrets, volume) -> dict[str, dict[str, Any]]:
     "llamacpp_devbox_args": llamacpp_devbox_args,
     "llamacpp_gpu_devbox_args": llamacpp_gpu_devbox_args,
   }
+
+
+# ---------------------------------------------------------------------------
+# Cost tracking — Modal published per-second rates (estimate only).
+# Source: https://modal.com/pricing  (per-second billing, no minimums;
+# charged on max(requested, used); 0.125 core / 128 MiB minimums).
+# Reconcile estimates against `modal billing report` for authoritative numbers.
+# ---------------------------------------------------------------------------
+MODAL_PRICING_VERSION = "2026-10"
+
+# CPU is priced per physical core; Modal exposes 1 physical core = 2 vCPU.
+CPU_USD_PER_PHYSICAL_CORE_S = 0.0000131
+# Memory priced per GiB.
+MEM_USD_PER_GIB_S = 0.00000222
+# GPU rates (USD per second while attached). Keys are Modal gpu= strings (lower-cased
+# for lookup); None means CPU-only.
+GPU_USD_PER_S = {
+    None: 0.0,
+    "t4": 0.000164,
+    "l4": 0.000222,
+    "a10g": 0.000306,
+    "l40s": 0.000542,
+    "a100-40gb": 0.000583,
+    "a100-80gb": 0.000694,
+    "rtx-pro-6000": 0.000842,
+    "h100": 0.001097,
+    "h200": 0.001261,
+    "b200": 0.001736,
+    "b300": 0.001972,
+}
+
+# Modal's default scaledown window after the last input (seconds). Used by the
+# reporter to approximate billed wall-clock; in-container tracker bills raw
+# elapsed (conservative-ish; actual includes this window).
+SCALEDOWN_WINDOW_S = 60
+
+# Minimum billable resources per container (Modal enforced).
+MIN_BILLABLE_CORES = 0.125
+MIN_BILLABLE_MEM_GIB = 128 / 1024.0
+
+
+def get_pricing(cpu: float, memory_mb: int | float, gpu: str | None) -> dict[str, float]:
+    """Return the per-second rate breakdown for a resource profile.
+
+    Args:
+        cpu: Modal cpu= value (vCPU-ish; converted to physical cores internally).
+        memory_mb: memory in MiB.
+        gpu: Modal gpu= string or None.
+
+    Returns:
+        dict with keys: cpu_rate, mem_rate, gpu_rate, total_rate (USD/sec).
+    """
+    physical_cores = max(MIN_BILLABLE_CORES, float(cpu) / 2.0)
+    mem_gib = max(MIN_BILLABLE_MEM_GIB, float(memory_mb) / 1024.0)
+    gpu_key = None if gpu is None else str(gpu).lower()
+    gpu_rate = GPU_USD_PER_S.get(gpu_key, 0.0)
+    cpu_rate = physical_cores * CPU_USD_PER_PHYSICAL_CORE_S
+    mem_rate = mem_gib * MEM_USD_PER_GIB_S
+    return {
+        "cpu_rate": cpu_rate,
+        "mem_rate": mem_rate,
+        "gpu_rate": gpu_rate,
+        "total_rate": cpu_rate + mem_rate + gpu_rate,
+    }
+
+
+def estimate_cost_usd(cpu: float, memory_mb: int | float, gpu: str | None, elapsed_s: float) -> float:
+    """Estimate USD cost for `elapsed_s` seconds at the given resource profile."""
+    if elapsed_s < 0:
+        elapsed_s = 0.0
+    rate = get_pricing(cpu, memory_mb, gpu)["total_rate"]
+    return round(rate * float(elapsed_s), 6)

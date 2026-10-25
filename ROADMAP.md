@@ -4,6 +4,8 @@ Planned improvements and future work for DevBox.
 
 ## Planned Improvements
 
+- [x] Per-launch cost tracking (estimated USD, persisted to `/data/.cost`)
+
 - [ ] Better shell welcome with oh-my-zsh/starship
 - [ ] Startup banner
 - [ ] Move into the `/data` directory on login

@@ -106,6 +106,12 @@ def run_idle_monitor(server_process, idle_timeout):
     while idle_time < idle_timeout:
         time.sleep(check_interval)
 
+        try:
+            from runtime.cost_tracker import checkpoint
+            checkpoint()
+        except Exception:
+            pass
+
         ssh_result = subprocess.run(
             "ps -ef | grep 'sshd: root@' | grep -v grep",
             shell=True,
@@ -130,7 +136,7 @@ def run_idle_monitor(server_process, idle_timeout):
     server_process.terminate()
 
 
-def run_llamacpp_playroom(mode):
+def run_llamacpp_playroom(mode, resources=None):
     """Orchestrator shared by the cpu/gpu launchers. mode is "cpu"|"gpu"."""
     import subprocess
     import modal
@@ -151,6 +157,20 @@ def run_llamacpp_playroom(mode):
     print("🌐 Built-in WebUI")
 
     setup_persistence(get_persistence_items("ssh"))
+
+    # Cost tracking: one record per launch (best-effort)
+    try:
+        from runtime.cost_tracker import start_session, register_cost_flush
+        if resources:
+            _resources = dict(resources)
+        else:
+            _gpu = "t4" if mode == "gpu" else None
+            _resources = {"cpu": 2.0, "memory": 16384 if mode == "gpu" else 8192, "gpu": _gpu, "timeout": 14400}
+        _ct_session = start_session("llamacpp_playroom", _resources)
+        register_cost_flush(_ct_session)
+    except Exception as _e:
+        import sys
+        print(f"[cost_tracker] init failed: {_e}", file=sys.stderr)
 
     # --- Model Selection ---
     print("\n📦 Model Selection:")

@@ -1,3 +1,18 @@
+## Cost Tracking
+
+### Added
+
+- Added per-launch cost tracking: every DevBox launch now records resource allocation, wall-clock runtime, and an estimated USD cost to `/data/.cost/sessions/<session>.json` on the persistent volume.
+- Added `runtime/cost_tracker.py` (start_session, checkpoint, register_cost_flush, summarize) mirroring the existing atexit backup pattern.
+- Added `MODAL_PRICING_VERSION`, `get_pricing()`, and `estimate_cost_usd()` to `devbox_core/config.py` using Modal's published per-second rates.
+- Added `show_costs` Modal function and `cost_report` local entrypoint (`modal run devbox.py::cost_report`, optional `--reconcile`).
+- Added `tests/test_cost_tracker.py` (9 tests) and a structural packaging test for `runtime.cost_tracker`.
+
+### Changed
+
+- Threaded a `resources` dict and `devbox_type` through all `run_*` shared functions (including RDP, which previously had neither) so cost records distinguish CPU vs GPU boxes.
+- Added periodic `checkpoint()` calls in every idle loop for crash safety.
+
 # DevBox Changelog
 
 ## Security and GPU Hardening

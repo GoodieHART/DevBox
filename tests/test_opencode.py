@@ -299,6 +299,11 @@ def test_devbox_top_level_imports_are_packaged():
             assert mod in packaged, f"{mod} imported at devbox.py top level but never packaged"
 
 
+def test_cost_tracker_is_packaged():
+    packaged = _packaged_modules()
+    assert "runtime.cost_tracker" in packaged, "runtime.cost_tracker must be packaged in every image"
+
+
 def test_llamacpp_image_packages_llamacpp_modules():
     src = _source("devbox_core/images.py")
     block = src.split("llamacpp_cpu_image")[1].split("rdp_devbox_image")[0]
