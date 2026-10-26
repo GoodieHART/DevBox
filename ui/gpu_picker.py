@@ -3,7 +3,7 @@
 from ui.ui_utils import create_box, show_spinner
 
 
-def prompt_gpu_dispatch(launch_map, extra_packages, label=""):
+def prompt_gpu_dispatch(launch_map, extra_packages, label="", rdp_quality="auto"):
     """Prompt for a GPU type and dispatch to the chosen launcher.
 
     Args:
@@ -45,7 +45,10 @@ def prompt_gpu_dispatch(launch_map, extra_packages, label=""):
             gpu_launch_box = f"🎯 Launching with {gpu_name} GPU... Silicon Dust 🔥"
             create_box(gpu_launch_box, f"🚀 {gpu_name} POWERED")
             show_spinner("Initializing GPU environment", 2)
-        launch_func.remote(extra_packages=extra_packages)
+        remote_kwargs = {"extra_packages": extra_packages}
+        if "rdp" in label.lower():
+            remote_kwargs["rdp_quality"] = rdp_quality
+        launch_func.remote(**remote_kwargs)
     else:
         print("❌ Invalid GPU choice. Please run again.")
         return

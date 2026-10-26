@@ -312,6 +312,10 @@ rdp_devbox_image = (
     .run_commands(
         "mkdir -p /var/run/xrdp",
         "chmod 755 /etc/xrdp",
+        # Debian bookworm backports provides PipeWire xrdp audio modules.
+        "echo 'deb http://deb.debian.org/debian bookworm-backports main contrib non-free' > /etc/apt/sources.list.d/bookworm-backports.list",
+        "apt-get update",
+        "apt-get install -y -t bookworm-backports pipewire pipewire-pulse wireplumber pipewire-alsa pipewire-module-xrdp",
         # Create XFCE environment wrapper for proper XDG setup
         "echo '#!/bin/bash' > /usr/local/bin/startxfce4-wrapper",
         "echo '# XFCE RDP Wrapper with proper environment' >> /usr/local/bin/startxfce4-wrapper",
@@ -325,6 +329,18 @@ rdp_devbox_image = (
         "echo 'chmod 700 /tmp/xdg-runtime' >> /usr/local/bin/startxfce4-wrapper",
         "echo '' >> /usr/local/bin/startxfce4-wrapper",
         "echo '# Start XFCE with proper environment' >> /usr/local/bin/startxfce4-wrapper",
+        "echo '' >> /usr/local/bin/startxfce4-wrapper",
+        "echo '# Start PipeWire for RDP audio output only' >> /usr/local/bin/startxfce4-wrapper",
+        "echo 'if ! pgrep -u root -x pipewire >/dev/null 2>&1; then' >> /usr/local/bin/startxfce4-wrapper",
+        "echo '  pipewire >/tmp/pipewire.log 2>&1 &' >> /usr/local/bin/startxfce4-wrapper",
+        "echo 'fi' >> /usr/local/bin/startxfce4-wrapper",
+        "echo 'if ! pgrep -u root -x wireplumber >/dev/null 2>&1; then' >> /usr/local/bin/startxfce4-wrapper",
+        "echo '  wireplumber >/tmp/wireplumber.log 2>&1 &' >> /usr/local/bin/startxfce4-wrapper",
+        "echo 'fi' >> /usr/local/bin/startxfce4-wrapper",
+        "echo 'if ! pgrep -u root -x pipewire-pulse >/dev/null 2>&1; then' >> /usr/local/bin/startxfce4-wrapper",
+        "echo '  pipewire-pulse >/tmp/pipewire-pulse.log 2>&1 &' >> /usr/local/bin/startxfce4-wrapper",
+        "echo 'fi' >> /usr/local/bin/startxfce4-wrapper",
+        "echo 'sleep 0.5' >> /usr/local/bin/startxfce4-wrapper",
         "echo 'exec startxfce4' >> /usr/local/bin/startxfce4-wrapper",
         "chmod +x /usr/local/bin/startxfce4-wrapper",
         # Configure XFCE session using wrapper
@@ -337,6 +353,44 @@ rdp_devbox_image = (
         # Create basic XFCE config directory structure
         "mkdir -p /etc/skel/.config/xfce4",
         "mkdir -p /etc/skel/.cache/sessions",
+        # Output-only xrdp audio: do not load module-xrdp-source.
+        '''cat > /etc/xrdp/load_pw_modules.sh <<'EOF'
+#!/bin/sh
+if ! command -v pw-cli >/dev/null; then
+  echo 'pw-cli not found, exiting'
+  exit 0
+fi
+if ! pw-cli quit >/dev/null 2>&1; then
+  echo 'PipeWire server is not running, exiting'
+  exit 0
+fi
+if [ -n "$XRDP_SESSION" -a -n "$XRDP_SOCKET_PATH" ]; then
+  OBJECT_IDS=$(pw-cli ls Node 2>/dev/null | sed -e 's/^[^a-z]//' | grep -w '^id' | sed -e 's/^[^0-9]*//' -e 's/[^0-9]/-/' | cut -d- -f1)
+  for OBJECT_ID in $OBJECT_IDS; do
+    NODE_NAME=$(pw-cli info $OBJECT_ID 2>/dev/null | grep -w 'node.name' | cut -d '"' -f2)
+    if [ "$NODE_NAME" = 'xrdp-sink' ]; then
+      pw-cli destroy $OBJECT_ID >/dev/null 2>&1
+    fi
+  done
+  export PIPEWIRE_LOG_SYSTEMD=false
+  export PIPEWIRE_DEBUG=1
+  QUANTUMVAL=2048
+  QUANTUMVAL2=$((QUANTUMVAL * 2))
+  pw-cli -m -d load-module libpipewire-module-xrdp sink.node.latency=$QUANTUMVAL sink.stream.props={node.name=xrdp-sink} >/dev/null 2>&1 &
+  sleep 1
+  pw-metadata -n settings 0 clock.force-quantum $QUANTUMVAL >/dev/null 2>&1
+  pw-metadata -n settings 0 default.clock.force-quantum $QUANTUMVAL2 >/dev/null 2>&1
+  pw-metadata -n settings 0 default.clock.quantum $QUANTUMVAL2 >/dev/null 2>&1
+  pw-metadata -n settings 0 default.clock.min-quantum $QUANTUMVAL2 >/dev/null 2>&1
+  pw-metadata -n settings 0 default.clock.rate 44100 >/dev/null 2>&1
+  if command -v pactl >/dev/null; then
+    pactl set-default-sink xrdp-sink >/dev/null 2>&1
+  fi
+fi
+exit 0
+EOF
+''',
+        "chmod +x /etc/xrdp/load_pw_modules.sh",
         # Set root password for RDP (needed for desktop)
         'echo "root:devbox123" | chpasswd',
         *get_ssh_setup_commands()

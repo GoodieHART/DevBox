@@ -96,7 +96,6 @@ RDP_PERSISTENCE_ITEMS = SSH_PERSISTENCE_ITEMS + [
     ".local/share/xfce4",
     ".cache/sessions",
     "Desktop",
-    ".xsession",
 ]
 
 GEMINI_PERSISTENCE_ITEMS = SSH_PERSISTENCE_ITEMS + [
@@ -126,17 +125,30 @@ OPENCODE_PERSISTENCE_ITEMS = SSH_PERSISTENCE_ITEMS + [
 
 FORENSICS_PERSISTENCE_ITEMS = OPENCODE_PERSISTENCE_ITEMS
 
-DIRECTORY_PERSISTENCE_ITEMS = frozenset([
-    ".config/opencode",
-    ".local/share/opencode",
-    ".cache/opencode",
-])
-
 ASSISTED_CODING_PERSISTENCE_ITEMS = GEMINI_PERSISTENCE_ITEMS + [
     ".config/opencode",
     ".local/share/opencode",
     ".cache/opencode",
 ]
+
+# Every persistence item that is not one of the SSH dotfiles is a directory.
+# Keeping this list derived from the item lists (instead of hard-coding only
+# the OpenCode paths) prevents setup_persistence() from creating empty *files*
+# for directories such as ~/.config/xfce4 when they are absent from a fresh
+# container, which later broke `mkdir -p` on the resulting file symlink.
+DIRECTORY_PERSISTENCE_ITEMS = frozenset(
+    item
+    for items in (
+        RDP_PERSISTENCE_ITEMS,
+        GEMINI_PERSISTENCE_ITEMS,
+        LLM_PERSISTENCE_ITEMS,
+        UNSLOTH_PERSISTENCE_ITEMS,
+        OPENCODE_PERSISTENCE_ITEMS,
+        ASSISTED_CODING_PERSISTENCE_ITEMS,
+    )
+    for item in items
+    if item not in SSH_PERSISTENCE_ITEMS
+)
 
 
 def get_persistence_items(devbox_type="ssh"):

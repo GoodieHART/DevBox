@@ -30,10 +30,82 @@ from runtime.cost_tracker import start_session, register_cost_flush, checkpoint
 # authentication.
 XSESSION_LAUNCHER = "/usr/local/bin/startxfce4-wrapper"
 
+# RDP color-depth presets.  Lower values reduce bandwidth at the cost of
+# color fidelity; the RDP client can still choose a smaller value.
+RDP_QUALITY_PRESETS = {
+    "low": 16,
+    "medium": 24,
+    "balanced": 24,
+    "high": 32,
+    "auto": 32,
+}
+RDP_RECOMMENDED_RESOLUTIONS = {
+    "low": "800x600 or 1024x768",
+    "medium": "1024x768 or 1280x720",
+    "balanced": "1024x768 or 1280x720",
+    "high": "your native display resolution",
+    "auto": "your native display resolution",
+}
+
 # Processes that only exist while somebody is using the desktop: xrdp's
 # per-session channel server and the XFCE session itself. The xrdp and
 # xrdp-sesman daemons run all the time, so they are not activity signals.
 RDP_SESSION_PATTERN = "xrdp-chansrv|xfce4-session"
+
+
+def _resolve_rdp_max_bpp(rdp_quality="auto", rdp_max_bpp=None):
+    """Resolve an xrdp max_bpp value from a quality preset or explicit value."""
+    if rdp_max_bpp is not None:
+        try:
+            value = int(rdp_max_bpp)
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"invalid RDP max_bpp value: {rdp_max_bpp!r}") from error
+        if value in (8, 15, 16, 24, 32):
+            return value
+        # xrdp only supports a small fixed set of color depths.
+        return min((8, 15, 16, 24, 32), key=lambda candidate: abs(candidate - value))
+
+    env_value = os.environ.get("RDP_MAX_BPP")
+    if env_value is not None:
+        try:
+            value = int(env_value)
+        except ValueError as error:
+            raise ValueError(f"invalid RDP_MAX_BPP value: {env_value!r}") from error
+        if value in (8, 15, 16, 24, 32):
+            return value
+        return min((8, 15, 16, 24, 32), key=lambda candidate: abs(candidate - value))
+
+    quality = str(os.environ.get("RDP_QUALITY", rdp_quality)).strip().lower()
+    return RDP_QUALITY_PRESETS.get(quality, 32)
+
+
+def _configure_xrdp_quality(max_bpp):
+    """Apply the resolved color depth to xrdp's configuration."""
+    config_path = "/etc/xrdp/xrdp.ini"
+    if not os.path.isfile(config_path):
+        return
+
+    with open(config_path, "r", encoding="utf-8") as handle:
+        lines = handle.readlines()
+
+    replaced = False
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("max_bpp=") or stripped.startswith("max_bpp ="):
+            lines[index] = f"max_bpp={max_bpp}\n"
+            replaced = True
+            break
+
+    if not replaced:
+        for index, line in enumerate(lines):
+            if line.strip() == "[Globals]":
+                lines.insert(index + 1, f"max_bpp={max_bpp}\n")
+                break
+        else:
+            lines.insert(0, f"max_bpp={max_bpp}\n")
+
+    with open(config_path, "w", encoding="utf-8") as handle:
+        handle.writelines(lines)
 
 
 def install_xsession_launcher(home: str = "/root") -> None:
@@ -311,7 +383,8 @@ def run_devbox_shared(extra_packages=None, devbox_type="ssh", resources=None):
                 print(f"No active SSH connection. Shutting down in {remaining}s...", file=sys.stderr,)
 
 
-def run_rdp_devbox_shared(extra_packages=None, devbox_type="rdp_devbox", resources=None):
+def run_rdp_devbox_shared(extra_packages=None, devbox_type="rdp_devbox", resources=None,
+                          rdp_quality="auto", rdp_max_bpp=None):
     """
     Shared logic for launching an RDP desktop development environment.
     Sets up public key, persistent dotfiles, installs packages, and runs RDP server.
@@ -338,7 +411,20 @@ def run_rdp_devbox_shared(extra_packages=None, devbox_type="rdp_devbox", resourc
     ]
     setup_persistence(rdp_items)
     install_xsession_launcher()
-    
+
+    # Cargo is not installed in this image. Older persisted shell profiles may
+    # still source its environment file unconditionally, and that missing-file
+    # source aborts /etc/xrdp/startwm.sh before XFCE can start.
+    for shell_profile in (".profile", ".bashrc"):
+        profile_path = os.path.join("/root", shell_profile)
+        if os.path.isfile(profile_path):
+            with open(profile_path, "r", encoding="utf-8") as handle:
+                lines = handle.readlines()
+            cleaned = [line for line in lines if ".cargo/env" not in line]
+            if cleaned != lines:
+                with open(profile_path, "w", encoding="utf-8") as handle:
+                    handle.writelines(cleaned)
+
     register_custom_backup("/root", "/data/root_full_backup.tar.gz")
 
     # Cost tracking: one record per launch (best-effort)
@@ -351,7 +437,11 @@ def run_rdp_devbox_shared(extra_packages=None, devbox_type="rdp_devbox", resourc
     install_extra_packages(extra_packages)
     
     # Setup XFCE environment
-    # Start D-Bus daemon for xfconfd
+    # Start D-Bus daemon for xfconfd. A stale pid file can make the forked
+    # daemon refuse to start in a reused container image.
+    os.makedirs("/run/dbus", exist_ok=True)
+    subprocess.run(["rm", "-f", "/run/dbus/pid", "/run/dbus/system_bus_socket"],
+                   check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.Popen(["dbus-daemon", "--system", "--fork"],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     
@@ -360,7 +450,21 @@ def run_rdp_devbox_shared(extra_packages=None, devbox_type="rdp_devbox", resourc
     # /data, and removing them discarded the user's XFCE settings every launch.
     subprocess.run(["mkdir", "-p", "/root/.config/xfce4"], check=True)
     subprocess.run(["mkdir", "-p", "/root/.cache/sessions"], check=True)
-    
+
+    # Apply the requested RDP color-depth preset before xrdp starts.  RDP
+    # resolution itself is negotiated by the client, so the server-side knob is
+    # max_bpp; the recommended client settings are printed below.
+    resolved_rdp_quality = str(os.environ.get("RDP_QUALITY", rdp_quality)).strip().lower()
+    resolved_max_bpp = _resolve_rdp_max_bpp(rdp_quality, rdp_max_bpp)
+    _configure_xrdp_quality(resolved_max_bpp)
+    print(f"[RDP] Quality preset: {resolved_rdp_quality} "
+          f"(max_bpp={resolved_max_bpp})", file=sys.stderr)
+    print(f"[RDP] Recommended client resolution: "
+          f"{RDP_RECOMMENDED_RESOLUTIONS.get(resolved_rdp_quality, 'your native display resolution')}",
+          file=sys.stderr)
+    print("[RDP] Also set the mstsc color depth to match or below the server max_bpp.",
+          file=sys.stderr)
+
     # Set permissions
     subprocess.run(["chown", "-R", "root:root", "/root/.config"], check=False)
     subprocess.run(["chown", "-R", "root:root", "/root/.cache"], check=False)

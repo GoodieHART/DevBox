@@ -95,6 +95,18 @@ def handle_rdp_choice(launch_rdp_devbox, launch_rdp_devbox_t4, launch_rdp_devbox
     else:
         print("✅ No extra desktop tools requested.")
 
+    quality_box = """
+    📶 Low-bandwidth / remote-desktop tuning?
+    • y: lower color depth and recommend a smaller client resolution
+    • n: keep the default high-quality 32-bit color depth
+    """
+    create_box(quality_box, "📶 RDP QUALITY")
+    try:
+        quality_choice = input("Low bandwidth mode? (y/n): ").lower().strip()
+    except EOFError:
+        quality_choice = "n"
+    rdp_quality = "low" if quality_choice == "y" else "auto"
+
     gpu_box = """
     🎮 Add GPU acceleration for desktop?
     • T4: Cost-effective, good for graphics
@@ -123,14 +135,14 @@ def handle_rdp_choice(launch_rdp_devbox, launch_rdp_devbox_t4, launch_rdp_devbox
             "3": ("A10G", launch_rdp_devbox_a10g),
             "4": ("L40S", launch_rdp_devbox_l40s),
         }
-        prompt_gpu_dispatch(gpu_types, package_list, "rdp")
+        prompt_gpu_dispatch(gpu_types, package_list, "rdp", rdp_quality=rdp_quality)
     else:
         cpu_box = """
         🖥️  Launching RDP Desktop (CPU-only)...
         """
         create_box(cpu_box, "🚀 RDP DESKTOP")
         show_spinner("Preparing your RDP Desktop", 2)
-        launch_rdp_devbox.remote(extra_packages=package_list)
+        launch_rdp_devbox.remote(extra_packages=package_list, rdp_quality=rdp_quality)
 
 
 def handle_simple_choice(choice, launch_llamacpp_playroom, launch_forensics_image, launch_llamacpp_playroom_gpu, cpu_only):

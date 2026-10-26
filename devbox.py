@@ -92,30 +92,35 @@ def launch_devbox_l40s(extra_packages=None):
     run_devbox_shared(extra_packages, devbox_type="cuda_devbox_l40s", resources={**gpu_devbox_args, "gpu": "L40S"})
 
 @app.function(image=rdp_devbox_image, **cpu_devbox_args_rdp)
-def launch_rdp_devbox(extra_packages=None):
+def launch_rdp_devbox(extra_packages=None, rdp_quality="auto", rdp_max_bpp=None):
     """Launches an RDP desktop development environment."""
-    run_rdp_devbox_shared(extra_packages, devbox_type="rdp_devbox", resources=cpu_devbox_args_rdp)
+    run_rdp_devbox_shared(extra_packages, devbox_type="rdp_devbox", resources=cpu_devbox_args_rdp,
+                          rdp_quality=rdp_quality, rdp_max_bpp=rdp_max_bpp)
 
 @_unless_cpu_only(app.function(image=rdp_devbox_image, gpu="t4", **gpu_devbox_args_rdp))
-def launch_rdp_devbox_t4(extra_packages=None):
+def launch_rdp_devbox_t4(extra_packages=None, rdp_quality="auto", rdp_max_bpp=None):
     """Launches an RDP desktop with T4 GPU."""
-    run_rdp_devbox_shared(extra_packages, devbox_type="rdp_devbox_t4", resources={**gpu_devbox_args_rdp, "gpu": "t4"})
+    run_rdp_devbox_shared(extra_packages, devbox_type="rdp_devbox_t4", resources={**gpu_devbox_args_rdp, "gpu": "t4"},
+                          rdp_quality=rdp_quality, rdp_max_bpp=rdp_max_bpp)
 
 @_unless_cpu_only(app.function(image=rdp_devbox_image, gpu="l4", **gpu_devbox_args_rdp))
-def launch_rdp_devbox_l4(extra_packages=None):
+def launch_rdp_devbox_l4(extra_packages=None, rdp_quality="auto", rdp_max_bpp=None):
     """Launches an RDP desktop with L4 GPU."""
-    run_rdp_devbox_shared(extra_packages, devbox_type="rdp_devbox_l4", resources={**gpu_devbox_args_rdp, "gpu": "l4"})
+    run_rdp_devbox_shared(extra_packages, devbox_type="rdp_devbox_l4", resources={**gpu_devbox_args_rdp, "gpu": "l4"},
+                          rdp_quality=rdp_quality, rdp_max_bpp=rdp_max_bpp)
 
 @_unless_cpu_only(app.function(image=rdp_devbox_image, gpu="a10g", **gpu_devbox_args_rdp))
-def launch_rdp_devbox_a10g(extra_packages=None):
+def launch_rdp_devbox_a10g(extra_packages=None, rdp_quality="auto", rdp_max_bpp=None):
     """Launches an RDP desktop with A10G GPU."""
-    run_rdp_devbox_shared(extra_packages, devbox_type="rdp_devbox_a10g", resources={**gpu_devbox_args_rdp, "gpu": "a10g"})
+    run_rdp_devbox_shared(extra_packages, devbox_type="rdp_devbox_a10g", resources={**gpu_devbox_args_rdp, "gpu": "a10g"},
+                          rdp_quality=rdp_quality, rdp_max_bpp=rdp_max_bpp)
 
 
 @_unless_cpu_only(app.function(image=rdp_devbox_image, gpu="L40S", **gpu_devbox_args_rdp))
-def launch_rdp_devbox_l40s(extra_packages=None):
+def launch_rdp_devbox_l40s(extra_packages=None, rdp_quality="auto", rdp_max_bpp=None):
     """Launches an RDP desktop with L40S GPU."""
-    run_rdp_devbox_shared(extra_packages, devbox_type="rdp_devbox_l40s", resources={**gpu_devbox_args_rdp, "gpu": "L40S"})
+    run_rdp_devbox_shared(extra_packages, devbox_type="rdp_devbox_l40s", resources={**gpu_devbox_args_rdp, "gpu": "L40S"},
+                          rdp_quality=rdp_quality, rdp_max_bpp=rdp_max_bpp)
 
 @app.function(image=doc_processing_image, **gpu_devbox_args)
 def launch_doc_processor():
