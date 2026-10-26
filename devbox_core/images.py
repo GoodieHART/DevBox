@@ -328,8 +328,12 @@ rdp_devbox_image = (
         "echo 'exec startxfce4' >> /usr/local/bin/startxfce4-wrapper",
         "chmod +x /usr/local/bin/startxfce4-wrapper",
         # Configure XFCE session using wrapper
-        "printf '#!/bin/sh\\n/usr/local/bin/startxfce4-wrapper\\n' > /etc/skel/.xsession",
+        "printf '#!/bin/sh\\nexec /usr/local/bin/startxfce4-wrapper\\n' > /etc/skel/.xsession",
         "chmod +x /etc/skel/.xsession",
+        # /etc/skel only reaches *new* users, so root keeps its own launcher.
+        # This one is also re-installed at runtime, after the backup restore.
+        "printf '#!/bin/sh\\nexec /usr/local/bin/startxfce4-wrapper\\n' > /root/.xsession",
+        "chmod +x /root/.xsession",
         # Create basic XFCE config directory structure
         "mkdir -p /etc/skel/.config/xfce4",
         "mkdir -p /etc/skel/.cache/sessions",
@@ -339,7 +343,8 @@ rdp_devbox_image = (
     )
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
-        "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker"
+        "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "ui.quotes_loader"
     )
+    .add_local_file(os.path.join(_IMAGES_DIR, "..", "ui", "quotes.json"), "/etc/quotes.json")
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "tmux.conf"), "/etc/devbox/tmux.conf")
 )

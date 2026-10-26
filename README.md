@@ -265,6 +265,12 @@ Modal validates every function in the app at startup — including GPU ones you 
 DEVBOX_CPU_ONLY=1 modal run devbox.py
 ```
 
+On Windows PowerShell `DEVBOX_CPU_ONLY=1` creates a PowerShell variable, not an environment variable, so Modal never sees it. Set it in the environment instead:
+
+```powershell
+$env:DEVBOX_CPU_ONLY = "1"; modal run devbox.py
+```
+
 This skips registering the GPU launchers entirely, so validation never trips. GPU menu choices print a notice instead of failing. Unset the variable (default) and everything behaves as before.
 
 ## Prerequisites
@@ -601,6 +607,12 @@ If you see `Please add a payment method to use A10G GPU functions` (or similar f
 DEVBOX_CPU_ONLY=1 modal run devbox.py
 ```
 
+On Windows PowerShell the assignment must target the environment:
+
+```powershell
+$env:DEVBOX_CPU_ONLY = "1"; modal run devbox.py
+```
+
 ## Architecture
 
 The codebase is organized into domain packages. Entrypoints stay at the root so Modal commands don't change (`modal run devbox.py`, `modal deploy hermes_app.py`):
@@ -623,6 +635,8 @@ The codebase is organized into domain packages. Entrypoints stay at the root so 
 | `ui/quotes.json` | Quote catalog loaded by `quotes_loader.py` |
 | `tests/test_opencode.py` | Structural tests for the OpenCode box (no Modal credentials needed) |
 | `tests/test_hermes_app.py` | Structural tests for the Hermes gateway app (no Modal credentials needed) |
+| `tests/test_image_packaging.py` | Structural tests that every runtime/UI module is packaged into the images |
+| `tests/test_rdp_session.py` | Structural tests for RDP session startup, persistence-safe dirs, and idle detection |
 
 ## Roadmap
 

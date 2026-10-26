@@ -8,6 +8,8 @@ Author: GoodieHART
 """
 
 import modal
+import os
+import subprocess
 import sys
 import time
 import atexit
@@ -19,6 +21,61 @@ from runtime.utils import inject_ssh_key
 from devbox_core.config import IDLE_TIMEOUT_SECONDS, validate_prohibited_packages
 from ui.quotes_loader import get_random_quote
 from runtime.cost_tracker import start_session, register_cost_flush, checkpoint
+
+
+# Debian's /etc/xrdp/startwm.sh execs /etc/X11/Xsession, and Xsession only uses
+# ~/.xsession when it is executable. /etc/skel/.xsession never reaches root's
+# pre-existing home, and persistence used to replace it with a mode-0644 empty
+# file, so every login fell through to x-session-manager and died right after
+# authentication.
+XSESSION_LAUNCHER = "/usr/local/bin/startxfce4-wrapper"
+
+# Processes that only exist while somebody is using the desktop: xrdp's
+# per-session channel server and the XFCE session itself. The xrdp and
+# xrdp-sesman daemons run all the time, so they are not activity signals.
+RDP_SESSION_PATTERN = "xrdp-chansrv|xfce4-session"
+
+
+def install_xsession_launcher(home: str = "/root") -> None:
+    """Write an executable `~/.xsession` that starts the XFCE wrapper.
+
+    Run-time, not build-time: `restore_backup()` wipes `/root` and
+    `setup_persistence()` owns the paths it links, so the launcher has to be
+    (re)installed after both, on every launch.
+    """
+    path = os.path.join(home, ".xsession")
+    if os.path.islink(path):
+        os.remove(path)
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(f"#!/bin/sh\nexec {XSESSION_LAUNCHER}\n")
+    os.chmod(path, 0o755)
+    print(f"  - Installed {path} -> {XSESSION_LAUNCHER}", file=sys.stderr)
+
+
+def count_rdp_sessions() -> int | None:
+    """How many live RDP session processes exist (0 when nobody is connected).
+
+    `pgrep` never reports its own command line, which is why it is used instead
+    of `ps | grep`: a grep pipeline matches the pattern in its own argv and so
+    always reports at least one session.
+
+    Returns `None` when the probe itself failed, which is distinct from "no
+    session": treating a broken probe as 0 would shut the desktop down under an
+    active user.
+    """
+    try:
+        result = subprocess.run(
+            ["pgrep", "-c", "-f", RDP_SESSION_PATTERN],
+            capture_output=True,
+            text=True,
+        )
+    except OSError as error:
+        print(f"  - WARNING: RDP session probe failed: {error}", file=sys.stderr)
+        return None
+    try:
+        return int(result.stdout.strip() or 0)
+    except ValueError:
+        return None
 
 
 def install_extra_packages(extra_packages: list[str] | None) -> None:
@@ -259,8 +316,6 @@ def run_rdp_devbox_shared(extra_packages=None, devbox_type="rdp_devbox", resourc
     Shared logic for launching an RDP desktop development environment.
     Sets up public key, persistent dotfiles, installs packages, and runs RDP server.
     """
-    import os
-    import subprocess
     import time
     
     from runtime.backup_utils import restore_backup, register_custom_backup
@@ -272,13 +327,17 @@ def run_rdp_devbox_shared(extra_packages=None, devbox_type="rdp_devbox", resourc
     
     inject_ssh_key()
     
+    # `.xsession` is the session launcher, not user state, so it is deliberately
+    # NOT persisted: doing so replaced root's launcher with an empty 0644 file on
+    # the volume and no login could start a desktop.
     rdp_items = [
         ".bash_history", ".bashrc", ".profile", ".viminfo", ".vimrc",
         ".gitconfig", ".ssh/config", ".ssh/known_hosts",
         ".config/xfce4", ".local/share/xfce4", ".cache/sessions",
-        "Desktop", ".xsession",
+        "Desktop",
     ]
     setup_persistence(rdp_items)
+    install_xsession_launcher()
     
     register_custom_backup("/root", "/data/root_full_backup.tar.gz")
 
@@ -296,9 +355,9 @@ def run_rdp_devbox_shared(extra_packages=None, devbox_type="rdp_devbox", resourc
     subprocess.Popen(["dbus-daemon", "--system", "--fork"],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     
-    # Clean and recreate XFCE config directories
-    subprocess.run(["rm", "-rf", "/root/.config/xfce4"], check=False)
-    subprocess.run(["rm", "-rf", "/root/.cache/sessions"], check=False)
+    # Make sure the XFCE config directories exist. They must NOT be deleted
+    # here: setup_persistence() has already replaced them with symlinks into
+    # /data, and removing them discarded the user's XFCE settings every launch.
     subprocess.run(["mkdir", "-p", "/root/.config/xfce4"], check=True)
     subprocess.run(["mkdir", "-p", "/root/.cache/sessions"], check=True)
     
@@ -336,22 +395,22 @@ def run_rdp_devbox_shared(extra_packages=None, devbox_type="rdp_devbox", resourc
             except Exception:
                 pass
             
-            # Check for active RDP sessions
-            result = subprocess.run(
-                "ps aux | grep -c 'xrdp-sesman.*:' | grep -v grep", shell=True, capture_output=True, text=True
-            )
-            # remeber to add debug logs to check the output of the command
-            try:
-                active_sessions = int(result.stdout.strip())
-                if active_sessions > 0:
-                    idle_time = 0
-                    print(f"[DEBUG] RDP session check: {active_sessions} {result.stdout!r}", file=sys.stderr)
-                else:
-                    idle_time += check_interval
-                    remaining = IDLE_TIMEOUT_SECONDS - idle_time
-                    print(f"[DEBUG] No active RDP connection. Shutting down in {remaining}s...", file=sys.stderr, end="\r")
-            except (ValueError, AttributeError):
+            # Check for active RDP sessions. A connected desktop runs
+            # xrdp-chansrv plus xfce4-session; the old `ps | grep -c
+            # 'xrdp-sesman.*:'` pattern never matched, so the box shut itself
+            # down mid-session once IDLE_TIMEOUT_SECONDS elapsed.
+            active_sessions = count_rdp_sessions()
+            if active_sessions is None:
+                # Probe failed: do NOT count it as idle, or the desktop dies
+                # under an active user.
+                print("[DEBUG] RDP session probe unavailable; not counting as idle.", file=sys.stderr)
+            elif active_sessions > 0:
+                idle_time = 0
+                print(f"[DEBUG] RDP session check: {active_sessions} live session(s)", file=sys.stderr)
+            else:
                 idle_time += check_interval
+                remaining = IDLE_TIMEOUT_SECONDS - idle_time
+                print(f"[DEBUG] No active RDP connection. Shutting down in {remaining}s...", file=sys.stderr, end="\r")
         
         print("\nIdle timeout reached. Shutting down RDP Desktop.", file=sys.stderr)
 

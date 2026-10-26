@@ -368,6 +368,12 @@ If you see `Please add a payment method to use A10G GPU functions` (or similar f
 DEVBOX_CPU_ONLY=1 modal run devbox.py
 ```
 
+On Windows PowerShell the assignment must target the environment, or Modal never sees it:
+
+```powershell
+$env:DEVBOX_CPU_ONLY = "1"; modal run devbox.py
+```
+
 ## Thanks & Inspirations
 
 - Using Google's Colaboratory as a VPS - [Ragug/colab-as-Vps](https://github.com/Ragug/colab-as-Vps)
