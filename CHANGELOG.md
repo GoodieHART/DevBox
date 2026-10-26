@@ -1,5 +1,32 @@
 # DevBox Changelog
 
+## DevBox Updates - 2026-10-26
+
+### Added
+
+- Added configurable RDP quality and color-depth presets for low-bandwidth sessions, including `rdp_quality`, `rdp_max_bpp`, `RDP_QUALITY`, and `RDP_MAX_BPP`.
+- Added PipeWire-based RDP audio output support to the RDP desktop image.
+- Added PipeWire, WirePlumber, and pipewire-pulse startup to RDP sessions.
+
+### Changed
+
+- RDP desktop startup now preserves persisted XFCE state instead of deleting and recreating config directories.
+- RDP idle detection now uses `pgrep` and treats probe failures as unknown rather than idle.
+- RDP session startup now installs an executable `~/.xsession` launcher after persistence restoration.
+- RDP quality settings now configure xrdp `max_bpp` and print recommended client resolution and color-depth settings.
+
+### Fixed
+
+- Fixed RDP startup failure when persisted `~/.config/xfce4` was represented by a stale empty file.
+- Fixed RDP login aborts caused by unguarded persisted `~/.profile` references to a missing cargo environment file.
+- Fixed RDP audio setup so PipeWire/PulseAudio-compatible clients connect to `xrdp-sink`; microphone/input redirection is not enabled.
+- Fixed the output-only audio loader so it no longer attempts to load `xrdp-source`.
+
+### Validation
+
+- Test suite: 94 tests passed.
+
+
 ## DevBox Updates - 2026-10-25
 
 ### Added
