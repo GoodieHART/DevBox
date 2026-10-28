@@ -16,6 +16,7 @@ Then:
 """
 
 import base64
+import json
 import os
 import secrets
 import sys
@@ -70,8 +71,7 @@ INDEX_HTML = """<!doctype html>
   code { font-family: ui-monospace, monospace; font-size: 12px; }
   .tag { padding: 1px 6px; border-radius: 999px; font-size: 11px; background: #1c2128; }
   .running { background: #14361f; color: #4ade80; }
-  .starting { background: #3a2d10; color: #fbbf24; }
-  .provisioning { background: #3a2d10; color: #fbbf24; }
+  .starting, .provisioning { background: #3a2d10; color: #fbbf24; }
   .finished, .stopped { background: #1c2128; color: #8b94a3; }
   .expired, .lost { background: #2a1f3d; color: #c4b5fd; }
   .error { background: #3b1414; color: #f87171; }
@@ -205,9 +205,20 @@ setInterval(() => { if (autoEl.checked) load(); }, 5000);
 
 
 def _render_index():
-    import json
-
     return INDEX_HTML.replace("__CATALOG__", json.dumps({k: v[0] for k, v in CATALOG.items()}))
+
+
+def _parse_launch_body(raw):
+    """The launch payload, or None when `raw` is not a JSON object.
+
+    `json.loads` raises ValueError subclasses for both malformed JSON and
+    non-UTF-8 bytes, so a bad body is a 400 rather than a 500.
+    """
+    try:
+        payload = json.loads(raw)
+    except ValueError:
+        return None
+    return payload if isinstance(payload, dict) else None
 
 
 class BasicAuthMiddleware:
@@ -249,8 +260,6 @@ class BasicAuthMiddleware:
 
 
 async def _send_json(send, status, payload, extra_headers=None):
-    import json
-
     body = json.dumps(payload).encode()
     headers = [
         (b"content-type", b"application/json"),
@@ -302,7 +311,7 @@ def _snapshot():
                 box_registry.finish(box_id, "lost")
                 status = "lost"
             elif state.startswith("error:"):
-                box_registry.finish(box_id, "error", state[6:])
+                box_registry.finish(box_id, "error", state.removeprefix("error:"))
                 status = "error"
             if status != record.get("status"):
                 record = box_registry.get(box_id) or record
@@ -337,9 +346,8 @@ def build_app():
 
     @app.post("/api/launch")
     async def launch(request: Request):
-        try:
-            payload = await request.json()
-        except Exception:
+        payload = _parse_launch_body(await request.body())
+        if payload is None:
             return JSONResponse({"error": "invalid JSON body"}, status_code=400)
         box_type = str(payload.get("box_type") or "")
         entry = CATALOG.get(box_type)
@@ -421,8 +429,6 @@ def _selfcheck():
 
     Run with: modal run webapp.py::_selfcheck
     """
-    import base64 as _b64
-
     from fastapi.testclient import TestClient
 
     class FakeDict:
@@ -451,15 +457,17 @@ def _selfcheck():
     os.environ["CONSOLE_PASSWORD"] = "poc-pass"
 
     client = TestClient(build_app())
-    auth = {"Authorization": "Basic " + _b64.b64encode(b"poc:poc-pass").decode()}
+    auth = {"Authorization": "Basic " + base64.b64encode(b"poc:poc-pass").decode()}
 
     results = {}
     results["index_unauth"] = client.get("/").status_code
     results["boxes_unauth"] = client.get("/api/boxes").status_code
-    results["index_auth"] = client.get("/", headers=auth).status_code
-    results["index_has_title"] = "DevBox Console" in client.get("/", headers=auth).text
-    results["boxes_auth"] = client.get("/api/boxes", headers=auth).status_code
-    results["boxes_payload"] = client.get("/api/boxes", headers=auth).json()["boxes"][0]["kind"]
+    index = client.get("/", headers=auth)
+    boxes = client.get("/api/boxes", headers=auth)
+    results["index_auth"] = index.status_code
+    results["index_has_title"] = "DevBox Console" in index.text
+    results["boxes_auth"] = boxes.status_code
+    results["boxes_payload"] = boxes.json()["boxes"][0]["kind"]
     results["launch_unknown"] = client.post("/api/launch", json={"box_type": "nope"}, headers=auth).status_code
     results["stop_unknown"] = client.post("/api/boxes/ghost/stop", headers=auth).status_code
     print(results)

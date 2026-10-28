@@ -48,10 +48,7 @@ def _current_call_id():
 def _write(box_id, **fields):
     try:
         store = _get_dict()
-        try:
-            record = dict(store.get(box_id) or {})
-        except Exception:
-            record = {}
+        record = get(box_id)
         record.update(fields)
         record["box_id"] = box_id
         record["updated_at"] = int(time.time())
@@ -128,10 +125,7 @@ def list_boxes():
         store = _get_dict()
         records = []
         for key in store.keys():
-            try:
-                record = dict(store.get(key) or {})
-            except Exception:
-                continue
+            record = get(key)
             if record:
                 records.append(record)
         records.sort(key=lambda r: r.get("created_at") or 0, reverse=True)

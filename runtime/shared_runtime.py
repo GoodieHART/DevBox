@@ -21,7 +21,7 @@ from runtime.utils import inject_ssh_key
 from devbox_core.config import IDLE_TIMEOUT_SECONDS, validate_prohibited_packages
 from ui.quotes_loader import get_random_quote
 from runtime.cost_tracker import start_session, register_cost_flush, checkpoint
-from runtime import box_registry
+import runtime.box_registry as box_registry
 
 
 # Debian's /etc/xrdp/startwm.sh execs /etc/X11/Xsession, and Xsession only uses
