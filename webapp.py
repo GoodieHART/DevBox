@@ -233,7 +233,9 @@ def build_app():
 console_image = (
     modal.Image.debian_slim(python_version="3.12")
     .uv_pip_install("fastapi", "httpx")
-    .add_local_python_source("runtime.box_registry")
+    # Local modules must be named here: Modal mounts the entrypoint module
+    # itself plus imported *packages*, but not loose top-level modules.
+    .add_local_python_source("runtime.box_registry", "console_ui")
 )
 
 
