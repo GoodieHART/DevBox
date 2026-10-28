@@ -12,6 +12,7 @@ import time
 
 import pytest
 
+import console_ui
 import webapp
 from runtime import box_registry
 
@@ -233,7 +234,7 @@ def test_catalog_matches_launchers_in_devbox_py():
 
 
 def test_render_index_injects_catalog_labels():
-    html = webapp._render_index()
+    html = console_ui.render_index(webapp.CATALOG)
     assert "__CATALOG__" not in html
     assert "Standard DevBox" in html
 
