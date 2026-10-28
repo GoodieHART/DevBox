@@ -105,6 +105,16 @@ def stopped(box_id):
     return _write(box_id, status="stopped", ended_at=int(time.time()))
 
 
+def finish(box_id, status, error=None):
+    """Persist a terminal status discovered by the console (finished/lost/error)."""
+    if box_id is None:
+        return False
+    fields = {"status": status, "ended_at": int(time.time())}
+    if error:
+        fields["error"] = str(error)[:500]
+    return _write(box_id, **fields)
+
+
 def get(box_id):
     try:
         return dict(_get_dict().get(box_id) or {})

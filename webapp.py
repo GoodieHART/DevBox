@@ -19,6 +19,7 @@ import base64
 import os
 import secrets
 import sys
+import time
 
 import modal
 
@@ -70,7 +71,14 @@ INDEX_HTML = """<!doctype html>
   .tag { padding: 1px 6px; border-radius: 999px; font-size: 11px; background: #1c2128; }
   .running { background: #14361f; color: #4ade80; }
   .starting { background: #3a2d10; color: #fbbf24; }
+  .provisioning { background: #3a2d10; color: #fbbf24; }
+  .finished, .stopped { background: #1c2128; color: #8b94a3; }
+  .expired, .lost { background: #2a1f3d; color: #c4b5fd; }
   .error { background: #3b1414; color: #f87171; }
+  .bar { display: flex; align-items: center; gap: 12px; margin: 0 0 14px;
+         color: #8b94a3; font-size: 12px; }
+  .bar button { padding: 6px 10px; font-size: 12px; }
+  .bar label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
   .stop { border-color: #3b1414; color: #f87171; padding: 4px 8px; font-size: 12px; }
   .msg { margin: 12px 0; padding: 8px 10px; border-radius: 8px; background: #14181d;
          border: 1px solid #262b33; color: #8b94a3; font-size: 12px; display: none; }
@@ -79,7 +87,12 @@ INDEX_HTML = """<!doctype html>
 </head>
 <body>
 <h1>DevBox Console</h1>
-<div class="sub">Boxes publish their tunnels to a Modal Dict. This page refreshes every 5 s.</div>
+<div class="sub">Boxes publish their tunnels to a Modal Dict. Status is polled from Modal every 5 s.</div>
+<div class="bar">
+  <button id="refresh">Refresh</button>
+  <label><input type="checkbox" id="auto" checked> auto-refresh 5 s</label>
+  <span id="updated"></span>
+</div>
 <div class="grid" id="catalog"></div>
 <div class="msg" id="msg"></div>
 <h2>Boxes</h2>
@@ -90,6 +103,14 @@ INDEX_HTML = """<!doctype html>
 <script>
 const CATALOG = __CATALOG__;
 const msg = document.getElementById('msg');
+const autoEl = document.getElementById('auto');
+const updatedEl = document.getElementById('updated');
+function ago(seconds) {
+  if (seconds === undefined || seconds === null) return '';
+  if (seconds < 90) return seconds + 's';
+  if (seconds < 5400) return Math.round(seconds / 60) + 'm';
+  return (seconds / 3600).toFixed(1) + 'h';
+}
 function say(text, ok) {
   msg.textContent = text;
   msg.style.display = text ? 'block' : 'none';
@@ -144,6 +165,7 @@ async function load() {
     const data = await r.json();
     const rows = document.getElementById('rows');
     if (!r.ok) throw new Error(data.error || r.status);
+    updatedEl.textContent = 'updated ' + new Date().toLocaleTimeString();
     if (!data.boxes.length) {
       rows.innerHTML = '<tr><td colspan="4" style="color:#8b94a3">no boxes yet</td></tr>';
       return;
@@ -152,7 +174,8 @@ async function load() {
     for (const rec of data.boxes) {
       const tr = document.createElement('tr');
       const status = rec.status || 'unknown';
-      tr.innerHTML = '<td>' + (rec.kind || '?') + '<br><code style="color:#8b94a3">' +
+      tr.innerHTML = '<td>' + (rec.kind || '?') +
+        ' <span style="color:#8b94a3">· ' + ago(rec.age_s) + '</span><br><code style="color:#8b94a3">' +
         (rec.box_id || '') + '</code></td>' +
         '<td><span class="tag ' + status + '">' + status + '</span></td>' +
         '<td>' + connection(rec) + '</td>' +
@@ -173,7 +196,8 @@ async function load() {
 }
 renderCatalog();
 load();
-setInterval(load, 5000);
+document.getElementById('refresh').onclick = () => load();
+setInterval(() => { if (autoEl.checked) load(); }, 5000);
 </script>
 </body>
 </html>
@@ -237,6 +261,62 @@ async def _send_json(send, status, payload, extra_headers=None):
     await send({"type": "http.response.body", "body": body})
 
 
+TERMINAL_STATUSES = {"stopped", "finished", "expired", "lost", "error"}
+PROVISIONING_AFTER_S = 120
+
+
+def _call_state(call_id):
+    """Non-blocking liveness check for a spawned call.
+
+    Returns 'running', 'finished', 'expired', 'lost', or 'error:<message>'.
+    This is the console's only liveness signal - boxes do not send heartbeats.
+    """
+    try:
+        modal.FunctionCall.from_id(call_id).get(timeout=0)
+        return "finished"
+    except modal.exception.OutputExpiredError:
+        return "finished"
+    except modal.exception.NotFoundError:
+        return "lost"
+    except (TimeoutError, modal.exception.TimeoutError):
+        return "running"
+    except Exception as exc:
+        return f"error:{type(exc).__name__}: {exc}"[:300]
+
+
+def _snapshot():
+    """List boxes, polling Modal for anything not already in a terminal state."""
+    now = int(time.time())
+    records = []
+    for record in box_registry.list_boxes():
+        status = record.get("status") or "unknown"
+        call_id = record.get("call_id")
+        box_id = record.get("box_id")
+
+        if status not in TERMINAL_STATUSES and call_id and box_id:
+            state = _call_state(call_id)
+            if state == "finished":
+                box_registry.finish(box_id, "finished")
+                status = "finished"
+            elif state == "lost":
+                box_registry.finish(box_id, "lost")
+                status = "lost"
+            elif state.startswith("error:"):
+                box_registry.finish(box_id, "error", state[6:])
+                status = "error"
+            if status != record.get("status"):
+                record = box_registry.get(box_id) or record
+                status = record.get("status") or status
+
+        if status == "starting" and now - (record.get("created_at") or now) > PROVISIONING_AFTER_S:
+            status = "provisioning"
+
+        record["status"] = status
+        record["age_s"] = max(0, now - int(record.get("created_at") or now))
+        records.append(record)
+    return records
+
+
 def build_app():
     """FastAPI app factory. Split out so `modal serve` reuses the same wiring."""
     from fastapi import FastAPI, Request
@@ -250,7 +330,10 @@ def build_app():
 
     @app.get("/api/boxes")
     def boxes():
-        return {"boxes": box_registry.list_boxes()}
+        try:
+            return {"boxes": _snapshot(), "server_time": int(time.time())}
+        except Exception as exc:
+            return JSONResponse({"error": f"snapshot failed: {exc}"}, status_code=503)
 
     @app.post("/api/launch")
     async def launch(request: Request):
