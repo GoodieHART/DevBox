@@ -80,6 +80,11 @@ INDEX_HTML = """<!doctype html>
   .bar button { padding: 6px 10px; font-size: 12px; }
   .bar label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
   .stop { border-color: #3b1414; color: #f87171; padding: 4px 8px; font-size: 12px; }
+  .termux-row { display: flex; gap: 6px; margin-top: 6px; }
+  .termux { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 12px;
+            border: 1px solid #262b33; background: #14181d; color: #7dd3fc;
+            text-decoration: none; cursor: pointer; }
+  .termux:hover { border-color: #3b82f6; }
   .msg { margin: 12px 0; padding: 8px 10px; border-radius: 8px; background: #14181d;
          border: 1px solid #262b33; color: #8b94a3; font-size: 12px; display: none; }
   h2 { font-size: 14px; margin: 28px 0 0; color: #8b94a3; font-weight: 500; }
@@ -152,12 +157,29 @@ async function stop(boxId) {
   say(r.ok ? 'stop requested for ' + boxId : 'stop failed: ' + (data.error || r.status), r.ok);
   load();
 }
+function termuxButtons(rec) {
+  if (!rec.ssh_host || !rec.ssh_port) return '';
+  const carrier = location.origin + '/connect/ssh?host=' + encodeURIComponent(rec.ssh_host) +
+    '&port=' + encodeURIComponent(rec.ssh_port);
+  // Android SEND intent: a web page cannot use RUN_COMMAND (the caller must hold
+  // com.termux.permission.RUN_COMMAND), but it can hand text to Termux's share
+  // handler, which runs ~/bin/termux-url-opener with the text as $1.
+  const intent = 'intent://send#Intent;action=android.intent.action.SEND;type=text/plain;' +
+    'S.android.intent.extra.TEXT=' + encodeURIComponent(carrier) +
+    ';package=com.termux;S.browser_fallback_url=' + encodeURIComponent(location.origin) + ';end';
+  return '<div class="termux-row">' +
+    '<a class="termux" href="' + intent + '" title="Open Termux and connect">Open in Termux</a>' +
+    '<button class="termux share" data-url="' + carrier + '" title="Share the connect link to Termux">Share → Termux</button>' +
+    '</div>';
+}
 function connection(rec) {
   if (rec.rdp_address) return 'RDP ' + rec.rdp_address + ' · root / ' + (rec.rdp_password || '?');
   const parts = [];
   if (rec.web_url) parts.push('<a href="' + rec.web_url + '" target="_blank">Open web UI</a>');
   if (rec.ssh_command) parts.push('<code>' + rec.ssh_command + '</code>');
-  return parts.join('<br>') || '<span style="color:#8b94a3">waiting for tunnel…</span>';
+  if (!parts.length) return '<span style="color:#8b94a3">waiting for tunnel…</span>';
+  parts.push(termuxButtons(rec));
+  return parts.join('<br>');
 }
 async function load() {
   try {
@@ -194,6 +216,21 @@ async function load() {
     say('could not load boxes: ' + e.message, false);
   }
 }
+document.getElementById('rows').addEventListener('click', async (event) => {
+  const btn = event.target.closest('.share');
+  if (!btn) return;
+  const url = btn.dataset.url;
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: 'DevBox connect', text: url });
+    } else {
+      await navigator.clipboard.writeText(url);
+      say('Copied the connect link — paste it into Termux.', true);
+    }
+  } catch (err) {
+    if (err.name !== 'AbortError') say('share failed: ' + err.message, false);
+  }
+});
 renderCatalog();
 load();
 document.getElementById('refresh').onclick = () => load();
