@@ -21,6 +21,7 @@ from runtime.utils import inject_ssh_key
 from devbox_core.config import IDLE_TIMEOUT_SECONDS, validate_prohibited_packages
 from ui.quotes_loader import get_random_quote
 from runtime.cost_tracker import start_session, register_cost_flush, checkpoint
+from runtime import box_registry
 
 
 # Debian's /etc/xrdp/startwm.sh execs /etc/X11/Xsession, and Xsession only uses
@@ -282,6 +283,8 @@ def run_devbox_shared(extra_packages=None, devbox_type="ssh", resources=None):
     except Exception as _e:
         print(f"[cost_tracker] init failed: {_e}", file=sys.stderr)
 
+    box_id = box_registry.start(devbox_type, resources)
+
     inject_ssh_key()
 
     # Write devbox banner with quote
@@ -349,10 +352,17 @@ def run_devbox_shared(extra_packages=None, devbox_type="ssh", resources=None):
     # so other box types don't expose a port nothing is listening on.
     with contextlib.ExitStack() as tunnels:
         ssh_tunnel = tunnels.enter_context(modal.forward(22, unencrypted=True))
+        box_registry.ready(
+            box_id,
+            ssh_host=ssh_tunnel.host,
+            ssh_port=ssh_tunnel.unencrypted_port,
+            ssh_command=f"ssh root@{ssh_tunnel.host} -p {ssh_tunnel.unencrypted_port} -t \"tmux attach -t devbox\"",
+        )
         print(f"\n🚀 Your DevBox is ready!\nssh root@{ssh_tunnel.host} -p {ssh_tunnel.unencrypted_port} -t \"tmux attach -t devbox\"")
 
         if devbox_type == "assisted_coding" and oc_web_proc is not None:
             web_tunnel = tunnels.enter_context(modal.forward(OPENCODE_PORT, unencrypted=True))
+            box_registry.update(box_id, web_url=f"http://{web_tunnel.host}:{web_tunnel.unencrypted_port}")
             print(f"\n🌐 OpenCode web: http://{web_tunnel.host}:{web_tunnel.unencrypted_port}")
             print("   (Open in browser for the Web UI; unsecured — the tunnel URL is the only secret.)")
         
@@ -480,7 +490,16 @@ def run_rdp_devbox_shared(extra_packages=None, devbox_type="rdp_devbox", resourc
     subprocess.Popen(["/usr/sbin/xrdp"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.Popen(["/usr/sbin/xrdp-sesman"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     
+    box_id = box_registry.start(devbox_type, resources)
     with modal.forward(3389, unencrypted=True) as tunnel:
+        box_registry.ready(
+            box_id,
+            rdp_address=f"{tunnel.host}:{tunnel.unencrypted_port}",
+            rdp_host=tunnel.host,
+            rdp_port=tunnel.unencrypted_port,
+            rdp_user="root",
+            rdp_password="devbox123",
+        )
         print("\n" + "=" * 60)
         print("🖥️ Your RDP Desktop is ready!")
         print("=" * 60)
@@ -692,12 +711,21 @@ def run_opencode_shared(extra_packages=None, resources=None, forensic=False):
             print(f"[DEBUG] OpenCode health check failed: {e}", file=sys.stderr)
             return False
 
+    box_id = box_registry.start("forensic_analysis" if forensic else "assisted_coding", resources)
+
     # Nested tunnels keep BOTH alive for the whole session (exiting a `with`
     # block closes that tunnel — see llamacpp pattern which drops SSH early)
     with modal.forward(22, unencrypted=True) as ssh_tunnel:
         with modal.forward(OPENCODE_PORT, unencrypted=True) as web_tunnel:
             ssh_cmd = f"ssh root@{ssh_tunnel.host} -p {ssh_tunnel.unencrypted_port} -t \"tmux attach -t devbox\""
             web_url = f"http://{web_tunnel.host}:{web_tunnel.unencrypted_port}"
+            box_registry.ready(
+                box_id,
+                ssh_host=ssh_tunnel.host,
+                ssh_port=ssh_tunnel.unencrypted_port,
+                ssh_command=ssh_cmd,
+                web_url=web_url,
+            )
             print("\n" + "=" * 60)
             print("🤖 Your OpenCode Box is ready!")
             print("=" * 60)
