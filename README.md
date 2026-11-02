@@ -12,7 +12,7 @@
 - [Setup](#setup)
 - [Connecting](#connecting)
 - [Important Notes](#important-notes)
-- [Troubleshooting](#troubleshooting)
+- [Known Issues & Limitations](#known-issues--limitations)
 - [Architecture](#architecture)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
@@ -230,9 +230,23 @@ The most feature-rich box. Comes with a curated catalog of **7 pre-configured GG
 
 Comes with **Volatility3**, symbol files for Windows/Linux/macOS, OpenCode web + SSH, REA MCP, Ghidra, JADX, Apktool, GDB, Binwalk, Tshark, WABT, and the Java/native analysis stack. Forensic projects persist under `/data/forensics`, with analysis uploads under `/data/forensics/uploads`.
 
+The box also ships the disk-image and credential-analysis tooling used by Windows-image investigations:
+
+| Tool | Use |
+|------|-----|
+| `nmap`, `smbclient` | Network and SMB enumeration |
+| `vmdkinfo`, `7z` | Read VMDK descriptors and extract files from a disk image |
+| `bdeinfo`, `dislocker` | Inspect / unlock BitLocker volumes (with a known password or recovery key) |
+| `chntpw` | Offline SAM password reset on an extracted Windows hive |
+| `pypykatz` | Offline SAM/SECURITY/SYSTEM parsing and DPAPI masterkey decryption |
+| `impacket` | `secretsdump.py`, `dpapi.py` — the Linux equivalents of the mimikatz steps |
+| `pspy64` | Unprivileged cron/process discovery for privilege-escalation enumeration |
+
+> **Limitations.** Disk-image mounting is unavailable and no credential-cracking tools are shipped. See [Known Issues & Limitations](KNOWN_ISSUES.md#forensics--reverse-engineering-box) for the exact constraints and the `7z x` / `vmdkinfo` / `bdeinfo` workaround.
+
 **Best for:** CTF challenges, incident response, malware analysis, digital forensics investigations.
 
-**Resources:** 0.5 vCPU / 1GB RAM
+**Resources:** 2 vCPU / 8GB RAM
 
 ---
 
@@ -241,6 +255,41 @@ Comes with **Volatility3**, symbol files for Windows/Linux/macOS, OpenCode web +
 The AI Coding Box and Forensics & Reverse Engineering Box both run `opencode web --port 4096 --hostname 0.0.0.0` with SSH access. Coding sessions use `/data/projects`; forensic sessions use `/data/forensics`. Attach from SSH with `opencode attach <printed OpenCode web URL>`.
 
 The Forensics box is the only box that includes REA and native reverse-engineering tooling. The optional `opencode-server-password` Modal Secret enables password authentication for both OpenCode-enabled boxes; otherwise the private tunnel URL is the access credential.
+
+### dove — universal downloader
+
+Every DevBox ships `dove`, one command that picks the right downloader from the URL you hand it. No more remembering whether a link needs `gdown`, `megadl`, or `wget`.
+
+```bash
+dove https://drive.google.com/file/d/<id>/view      # -> gdown
+dove https://mega.nz/file/<id>#<key>                # -> megadl
+dove https://t.me/c/<chat>/<msg>                    # -> tgdl
+dove https://www.terabox.com/s/<id>                 # -> TeraboxDL
+dove https://example.com/archive.zip                # -> direct, resumable
+dove https://short.link/abc                         # -> follows pointer pages
+```
+
+| URL type | Backend |
+|----------|---------|
+| `drive.google.com`, `docs.google.com` | `gdown` (`--fuzzy`, `--folder` for folders) |
+| `mega.nz`, `mega.io`, `mega.co.nz` | `megadl` |
+| `t.me`, `telegram.me`, `telegram.dog` | `tgdl download-link` |
+| Terabox family (`terabox.com`, `1024tera.com`, `4funbox.com`, …) | `TeraboxDL` |
+| anything else | `urllib`, with resume support |
+
+**Pointer redirects.** For a non-provider URL, `dove` follows HTTP 3xx, then keeps going if the response body is just a URL, an HTML `<meta http-equiv="refresh">`, or a JS `location` assignment. Hops are capped at 5 with cycle detection.
+
+**Options:**
+
+```bash
+dove URL -o name.zip        # output filename
+dove URL -d /data/files     # destination directory
+dove URL -q                 # no progress output
+dove URL --probe            # show detected backend + resolved URL, download nothing
+dove URL --no-pointer       # do not follow pointer pages
+```
+
+**Notes:** Terabox requires a cookie, Telegram requires a prior `tgdl login`, and direct-download resume depends on server support for `Range`. See [Known Issues & Limitations](KNOWN_ISSUES.md#dove-universal-downloader).
 
 ## GPU Options
 
@@ -423,7 +472,7 @@ The Forensics & Reverse Engineering Box ships REA 6.5.0 with a native decompiler
 - **Ghidra 12.1.4** (headless) — primary native decompiler. Env: `GHIDRA_INSTALL_DIR=/opt/ghidra/ghidra_12.1.4_PUBLIC`, `JAVA_HOME=/opt/java/temurin-21`.
 - **Auxiliary tools:** `gdb`, `binwalk`, `tshark`, `wabt` (apt), `objdump`/`readelf`/`nm` (binutils), `jadx`, `apktool`, plus `jadx-headless-mcp` 0.7.1 (REA's Android analysis engine, wired via `REA_JADX_MCP_JAR`).
 - **REA skill** is registered for OpenCode at build time; `rea doctor --client opencode` should report `ghidra: configured`.
-- **Not available on this Linux box:** Hopper, IDA, Kuna (proprietary — bring your own via `HOPPER_LAUNCHER_PATH` / `REA_IDA_MCP_CONFIG` / `REA_KUNA_*`), Rizin/Cutter, and macOS-only capabilities (Mach-O UI inspection, asset catalogs, native Swift demangling).
+- **Not available on this Linux box:** Hopper, IDA, Kuna, Rizin/Cutter, and macOS-only capabilities. See [Known Issues & Limitations](KNOWN_ISSUES.md#native-reverse-engineering-rea).
 
 Verify the setup on a running box:
 
@@ -478,10 +527,6 @@ Remember to replace `C:\path\to\your\DevBox\devbox.py` with the actual path to y
 - **llama.cpp Research Center**: Extended timeout of **1 hour** to accommodate long-running inference sessions.
 - A countdown warning will appear in the terminal where you ran `modal run` before shutdown.
 
-### First Build Time
-
-The first run will take **30-45 minutes** to build the container image. Subsequent runs are instant — Modal caches the image so you're up and running in seconds.
-
 ### Cost Estimate
 
 Running a Standard DevBox for 1 hour costs approximately **$0.20**. GPU usage incurs additional charges — see [modal.com/pricing](https://modal.com/pricing) for current rates.
@@ -508,30 +553,6 @@ Estimates are based on Modal's published per-second rates (see
 `estimate_cost_usd()`). They are estimates only — Modal bills on
 max(requested, used) resources plus a default 60 s scaledown window. Use
 `--reconcile` (or `modal billing report`) for authoritative numbers.
-
-### Modal Platform Constraints
-
-Modal containers run in a sandboxed environment. Here are some things to be aware of:
-
-- **Init system**: Containers use `dumb-init`, not `systemd`. You won't have systemd services available.
-
-  ```sh
-  root@modal:/data# ps -p 1 -o comm=
-  dumb-init
-  root@modal:/data#
-  ```
-
-- **No virtualization**: Containers don't have access to `/dev/kvm`, so you can't run VMs or nested virtualization.
-
-- **No Docker/containerd**: Running Docker or containerd inside a Modal container is not supported.
-
-- **No Unix sockets**: Modal doesn't support Unix sockets. This means services like MariaDB that rely on them won't work out of the box.
-
-- **No Homebrew**: `brew` does not work inside Modal containers.
-
-- **No `sudo` by default**: You're already running as `root`, so `sudo` isn't needed (or installed by default).
-
-- **`htop` readings**: Modal containers run on massive shared instances. `htop` shows host-level resource usage, not your container's allocated resources. Don't trust the CPU/RAM percentages you see there.
 
 ### Secrets — How They Work
 
@@ -562,56 +583,22 @@ If you're using the llama.cpp Research Center, you'll see model filenames like `
 
 Lower quantization = smaller file, faster inference, slightly lower quality. Higher quantization = better quality but needs more RAM.
 
-## Troubleshooting
+## Known Issues & Limitations
 
-### "Secret not found" errors
+Platform constraints, box-specific limits, and fixes for common problems live in
+[KNOWN_ISSUES.md](KNOWN_ISSUES.md). It covers:
 
-Make sure you've created all the required secrets. Run `modal secret list` to check what's stored. If a secret is missing, recreate it with the `modal secret create` commands from the Setup section.
-
-### SSH key not working or stale keys
-
-If you've regenerated your SSH key or it's just not connecting, old keys might be lingering on Modal's side. Delete the stale secret and reinsert it:
-
-```bash
-modal secret delete ssh-public-key
-modal secret create ssh-public-key PUBKEY="$(cat ~/.ssh/id_rsa.pub)"
-```
-
-### First build taking forever
-
-Yep, that's normal. The first run takes 30-45 minutes because Modal is building the container image from scratch. Grab a coffee, stretch your legs — subsequent runs will be instant.
-
-### Container terminated unexpectedly
-
-Usually caused by network hiccups on your end. If you're running in attached mode (`modal run devbox.py`), a dropped connection can kill the container. Try running in detached mode instead:
-
-```bash
-modal run -d devbox.py
-```
-
-Just don't forget to terminate it when you're done 🙂
-
-### RDP not connecting
-
-Double-check the address, username, and password printed when the container started. Make sure your RDP client is connecting to the right port. If you're on mobile, try a different client — some can be finicky.
-
-### llama.cpp model download fails
-
-Check your internet connection and make sure the HuggingFace URL is valid. Some models require you to be logged in to HuggingFace — if it's a gated model, you'll need to set up HF token authentication. Try a different model from the catalog first to isolate the issue.
-
-### "Payment method" errors on GPU functions
-
-If you see `Please add a payment method to use A10G GPU functions` (or similar for T4/L4), Modal is validating the GPU launchers at app startup — even if you only wanted a CPU box. Either add a payment method, or run in [CPU-only mode](#cpu-only-mode-no-gpu-payment-method):
-
-```bash
-DEVBOX_CPU_ONLY=1 modal run devbox.py
-```
-
-On Windows PowerShell the assignment must target the environment:
-
-```powershell
-$env:DEVBOX_CPU_ONLY = "1"; modal run devbox.py
-```
+- **Modal sandbox constraints**: no `systemd`, no `/dev/kvm`, no mount
+  permission, no Docker, no Unix sockets, no Homebrew, and misleading `htop`
+  readings.
+- **Forensics box**: disk-image mounting is unavailable and no
+  credential-cracking tools are shipped.
+- **`dove`**: Terabox cookie, Telegram login, and server-dependent resume.
+- **REA**: which proprietary and macOS-only tools are unavailable.
+- **Operational limits**: first-build time, idle timeouts, cost-estimate
+  caveats, and the GPU payment-method requirement.
+- **Troubleshooting**: secrets, SSH keys, dropped connections, RDP, llama.cpp
+  downloads, and GPU payment errors.
 
 ## Architecture
 

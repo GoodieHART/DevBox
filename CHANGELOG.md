@@ -1,5 +1,39 @@
 # DevBox Changelog
 
+## DevBox Updates - 2026-11-01
+
+### Added
+
+- Added `dove`, a universal download helper shipped to every DevBox at `/usr/local/bin/dove`. It dispatches on URL type: `gdown` for Google Drive, `megadl` for Mega, `tgdl download-link` for Telegram, `TeraboxDL` for Terabox links, and a resumable `urllib` downloader for everything else.
+- Added pointer-redirect resolution to `dove`: HTTP 3xx, bare-URL bodies, HTML `<meta http-equiv="refresh">`, and JS `location` assignments, capped at 5 hops with cycle detection.
+- Added `dove --probe` to report the detected backend and resolved URL without downloading.
+- Added `tests/test_dove.py` covering classification, pointer extraction, filename handling, backend routing, and the every-image wiring invariant.
+- Added disk-image and credential-analysis tooling to the Forensics & Reverse Engineering box: `nmap`, `smbclient`, `chntpw`, `dislocker`, `libbde-utils`, `libvmdk-utils`, `pypykatz`, and `impacket`.
+- Added `pspy64` (pinned to `v1.2.1`, SHA-256 verified at build time) for unprivileged cron and process discovery.
+- Added `FORENSIC_APT_PACKAGES` and `FORENSIC_PIP_PACKAGES` to `devbox_core/config.py`, scoped to the forensics image so no other box inherits the weight.
+- Added `tests/test_forensic_tooling.py` covering package definitions, denylist compliance, image scoping, the `pspy64` pin, and the FUSE warning.
+- Added `KNOWN_ISSUES.md`, collecting Modal sandbox constraints, box-specific limitations, operational limits, and troubleshooting in one place.
+
+### Changed
+
+- The forensics banner now states that disk-image mounting is unavailable and points to `7z x` / `vmdkinfo` / `bdeinfo` instead.
+- README section 7 now documents the toolset, the BitLocker unlocking-only scope, and the no-`/dev/kvm`, no-privileged, no-mount limitations.
+- Corrected the documented forensics resources from 0.5 vCPU / 1GB to the actual 2 vCPU / 8GB.
+- Corrected the mounting limitation text: `/dev/fuse` is present in Modal containers, but `mount(2)` is denied because there is no `CAP_SYS_ADMIN` and no `fusermount`/`fusermount3` helper.
+- Moved the README's platform-constraint, forensics-limitation, downloader-note, REA-availability, and troubleshooting sections into `KNOWN_ISSUES.md`; the README now keeps short pointers instead.
+
+### Fixed
+
+- Fixed `dove`'s Mega backend being unusable on the CUDA box: the CUDA image built from the NVIDIA registry never installed `DOWNLOAD_APT_PACKAGES`, so `megadl` was absent. It now installs `megatools`, `p7zip-full`, and `perl` like the other boxes.
+- Fixed a Modal build failure caused by `add_local_file` being followed by build steps. `dove` is now baked with `copy=True` in both base builders and the CUDA image, and a regression test rejects any mount-mode `add_local_*` followed by `apt_install` / `pip_install` / `run_commands`.
+
+### Validation
+
+- Test suite: 160 tests passed.
+- Image builds verified in live Modal containers: the Forensics box reports all 13 expected tools (including `vol`, `pspy64`, `megadl`, `vmdkinfo`, `bdeinfo`), the Standard box reports `dove` plus all download backends, and the CUDA box now reports `megadl`.
+- `dove` exercised against the live network inside a container: direct download (6034 bytes), `--probe`, and `--no-pointer` all exited 0.
+- FUSE/mount capability probed empirically: `/dev/fuse` exists, `CAP_SYS_ADMIN` is unset, `mount -t tmpfs` returns `permission denied`, and no `fusermount` helper is installed.
+
 ## DevBox Updates - 2026-10-26
 
 ### Added

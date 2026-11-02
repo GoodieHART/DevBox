@@ -567,6 +567,16 @@ def run_opencode_shared(extra_packages=None, resources=None, forensic=False):
     ║  {'🌐 OpenCode web on :4096':<36} ║
     ╚══════════════════════════════════════╝
     """)
+    if forensic:
+        # /dev/fuse exists, but the container lacks CAP_SYS_ADMIN and ships no
+        # fusermount helper, so mount(2) is denied. Say so up front instead of
+        # letting FUSE-based mounts fail mysteriously.
+        banner += (
+            "\n⚠️  No /dev/kvm, no privileged mode, no mount permission (no CAP_SYS_ADMIN,\n"
+            "   no fusermount) — disk-image *mounting* is unavailable. Read metadata with\n"
+            "   `vmdkinfo` / `bdeinfo`; extract files with `7z x <image>.vmdk`.\n"
+            "   `bdemount`, `vmdkmount`, and `dislocker` will fail at mount time.\n"
+        )
     try:
         q = get_random_quote()
         banner += f"\n{q['text']}\n- {q['author']}\n"

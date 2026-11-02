@@ -24,6 +24,9 @@ from devbox_core.config import (
     JADX_VERSION,
     APKTOOL_VERSION,
     OPENCODE_VERSION,
+    PSPY_VERSION,
+    FORENSIC_APT_PACKAGES,
+    FORENSIC_PIP_PACKAGES,
     validate_prohibited_packages,
 )
 
@@ -91,6 +94,17 @@ def create_base_devbox_image(python_version="3.10"):
             "fi\n"
             "BANNER_EOF",
         )
+        # dove: one download command that adapts to the URL type (Drive, Mega,
+        # Telegram, Terabox, direct, pointer-redirects). Shipped on every box.
+        # copy=True is required here: every caller chains more build steps
+        # (apt_install / pip_install / run_commands) onto this base image, and
+        # Modal forbids build steps after a mount-mode add_local_* call.
+        .add_local_file(
+            os.path.join(_IMAGES_DIR, "..", "integrations", "dove.py"),
+            "/usr/local/bin/dove",
+            copy=True,
+        )
+        .run_commands("chmod 755 /usr/local/bin/dove")
     )
 
 
@@ -127,6 +141,17 @@ def create_base_minimal_image(python_version="3.10"):
             "fi\n"
             "BANNER_EOF",
         )
+        # dove: one download command that adapts to the URL type (Drive, Mega,
+        # Telegram, Terabox, direct, pointer-redirects). Shipped on every box.
+        # copy=True is required here: every caller chains more build steps
+        # (apt_install / pip_install / run_commands) onto this base image, and
+        # Modal forbids build steps after a mount-mode add_local_* call.
+        .add_local_file(
+            os.path.join(_IMAGES_DIR, "..", "integrations", "dove.py"),
+            "/usr/local/bin/dove",
+            copy=True,
+        )
+        .run_commands("chmod 755 /usr/local/bin/dove")
     )
 
 
@@ -147,12 +172,23 @@ cuda_devbox_image = (
             add_python="3.11"
         ),
         *CORE_DEV_PACKAGES,
+        # dove ships on every box, so its CLI backends must exist here too;
+        # megatools provides `megadl` for the Mega path.
+        *DOWNLOAD_APT_PACKAGES,
         "nano",
         "libcudnn9-cuda-12",
         "libcudnn9-dev-cuda-12",
     )
     .run_commands(*get_ssh_setup_commands())
     .pip_install(*DOWNLOAD_PIP_PACKAGES)
+    # CUDA builds from the nvidia registry and inherits neither base builder,
+    # so dove has to be wired in here explicitly to keep "all boxes" true.
+    .add_local_file(
+        os.path.join(_IMAGES_DIR, "..", "integrations", "dove.py"),
+        "/usr/local/bin/dove",
+        copy=True,
+    )
+    .run_commands("chmod 755 /usr/local/bin/dove")
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
         "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "ui.quotes_loader"
@@ -194,8 +230,12 @@ assisted_coding_image = (
 )
 
 forensic_analysis_image = (
-    _apt_install(create_base_minimal_image(), "git", "gdb", "binwalk", "tshark", "wabt", "unzip", "binutils")
-    .pip_install(*DOWNLOAD_PIP_PACKAGES, "volatility3")
+    _apt_install(
+        create_base_minimal_image(),
+        "git", "gdb", "binwalk", "tshark", "wabt", "unzip", "binutils",
+        *FORENSIC_APT_PACKAGES,
+    )
+    .pip_install(*DOWNLOAD_PIP_PACKAGES, "volatility3", *FORENSIC_PIP_PACKAGES)
     .run_commands(
         f"curl -fsSL https://deb.nodesource.com/setup_{NODE_MAJOR_VERSION}.x | bash -",
         "apt-get install -y nodejs",
@@ -226,8 +266,12 @@ forensic_analysis_image = (
          "curl -fsSL https://downloads.volatilityfoundation.org/volatility3/symbols/mac.zip -o /tmp/mac.zip",
          "unzip -q /tmp/windows.zip -d /opt/forensic_analysis/volatility3/symbols",
          "unzip -q /tmp/linux.zip -d /opt/forensic_analysis/volatility3/symbols",
-         "unzip -q /tmp/mac.zip -d /opt/forensic_analysis/volatility3/symbols",
-         "rm -f /tmp/windows.zip /tmp/linux.zip /tmp/mac.zip",
+        "unzip -q /tmp/mac.zip -d /opt/forensic_analysis/volatility3/symbols",
+        "rm -f /tmp/windows.zip /tmp/linux.zip /tmp/mac.zip",
+        # pspy: unprivileged process/cron snooping (static Go binary, no deps)
+        f"curl -fsSL -o /usr/local/bin/pspy64 https://github.com/DominicBreuker/pspy/releases/download/{PSPY_VERSION}/pspy64",
+        "echo 'c93f29a5cc1347bdb90e14a12424e6469c8cfea9a20b800bc249755f0043a3bb  /usr/local/bin/pspy64' | sha256sum -c -",
+        "chmod +x /usr/local/bin/pspy64",
         *get_ssh_setup_commands()
     )
     .add_local_python_source(

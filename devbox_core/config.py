@@ -26,6 +26,7 @@ TEMURIN_JDK_VERSION = "21.0.12.1+1"
 JADX_VERSION = "1.5.6"
 APKTOOL_VERSION = "3.0.3"
 OPENCODE_VERSION = "1.19.0"
+PSPY_VERSION = "v1.2.1"
 
 # Resource configurations for different DevBox types
 
@@ -155,6 +156,37 @@ DOWNLOAD_PIP_PACKAGES = [
     "gdown",
     "tgdl",
     "terabox-downloader",
+]
+
+# ---------------------------------------------------------------------------
+# Forensics & reverse-engineering box extras
+# ---------------------------------------------------------------------------
+# Scoped to the Forensics box only, so no other image inherits the weight.
+#
+# BitLocker / VMDK handling here is deliberately read-only:
+#   * bdeinfo / vmdkinfo  — userspace metadata inspection, always works
+#   * bdemount / vmdkmount / dislocker — FUSE-based, require /dev/fuse and
+#     CAP_SYS_ADMIN, which Modal containers do not grant. They are shipped so
+#     the toolset is complete if that ever changes, but do not assume they run.
+#   * `7z x <image>.vmdk` (p7zip-full, already installed) is the practical way
+#     to pull files out of a VMDK image inside a Modal container.
+#
+# Credential-cracking tools (john, hashcat, bitlocker2john) are intentionally
+# absent — they are refused by PROHIBITED_PACKAGES_DENYLIST below and by
+# Modal's Terms of Service. Password *recovery* is out of scope; unlocking with
+# a known password or recovery key is not.
+FORENSIC_APT_PACKAGES = [
+    "nmap",
+    "smbclient",
+    "chntpw",
+    "dislocker",
+    "libbde-utils",
+    "libvmdk-utils",
+]
+
+FORENSIC_PIP_PACKAGES = [
+    "pypykatz",
+    "impacket",
 ]
 
 # ---------------------------------------------------------------------------
