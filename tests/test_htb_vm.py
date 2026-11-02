@@ -39,7 +39,13 @@ def test_htb_images_package_entrypoint_and_openvpn():
     images = source("devbox_core/images.py")
     assert '"openvpn"' in config
     assert '"iproute2"' in config
-    assert images.count("runtime.htb_vm") == 2
+    assert '"runtime.htb_vm"' in images.split("standard_devbox_image", 1)[1].split("cuda_devbox_image", 1)[0]
+
+
+def test_forensics_image_packages_htb_runtime():
+    images = source("devbox_core/images.py")
+    forensic_block = images.split("forensic_analysis_image", 1)[1].split("llm_playroom_image", 1)[0]
+    assert '"runtime.htb_vm"' in forensic_block
 
 
 def test_htb_launchers_exist_and_are_reachable_from_menu():
