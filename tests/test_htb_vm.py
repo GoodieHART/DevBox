@@ -25,6 +25,8 @@ def test_htb_vm_runtime_uses_vm_sandbox_and_required_secret():
     assert 'modal.Secret.from_name("htb-vpn"' in src
     assert 'required_keys=["HTB_OVPN_CONFIG"]' in src
     assert "sandbox.tunnels" in src
+    assert "exit_code = process.wait()" in src
+    assert "stderr = process.stderr.read()" in src
 
 
 def test_htb_entrypoint_starts_openvpn_before_services():

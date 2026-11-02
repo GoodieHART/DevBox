@@ -71,7 +71,11 @@ def run_htb_vm(image, volume, ssh_secret, *, forensic=False, resources=None):
             print(line, end="")
         while process.poll() is None:
             time.sleep(5)
-        if process.returncode not in (None, 0):
-            raise RuntimeError(f"HTB VM Sandbox exited with status {process.returncode}")
+        exit_code = process.wait()
+        stderr = process.stderr.read()
+        if stderr:
+            print(stderr, end="", file=__import__("sys").stderr)
+        if exit_code != 0:
+            raise RuntimeError(f"HTB VM Sandbox exited with status {exit_code}")
     finally:
         sandbox.terminate(wait=True)
