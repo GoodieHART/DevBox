@@ -68,6 +68,12 @@ def launch_devbox(extra_packages=None):
     run_devbox_shared(extra_packages, devbox_type="standard_devbox", resources=cpu_devbox_args)
 
 
+@app.function(image=standard_devbox_image, **cpu_devbox_args)
+def launch_devbox_htb():
+    from runtime.htb_vm import run_htb_vm
+    run_htb_vm(standard_devbox_image, dev_volume, ssh_secret, resources=cpu_devbox_args)
+
+
 @_unless_cpu_only(app.function(image=cuda_devbox_image, gpu="t4", **gpu_devbox_args))
 def launch_devbox_t4(extra_packages=None):
     """Launches a T4 GPU-powered personal development environment."""
@@ -141,6 +147,18 @@ def launch_llm_playroom():
 def launch_forensics_image():
   """Launches the forensic and reverse-engineering environment."""
   run_opencode_shared(extra_packages=None, resources=forensics_devbox_args, forensic=True)
+
+
+@app.function(image=forensic_analysis_image, **forensics_devbox_args)
+def launch_forensics_htb():
+    from runtime.htb_vm import run_htb_vm
+    run_htb_vm(
+        forensic_analysis_image,
+        dev_volume,
+        ssh_secret,
+        forensic=True,
+        resources=forensics_devbox_args,
+    )
 
 # llama.cpp Research Center - Curated Model Catalog lives in
 # devbox_core/llamacpp_models.py (imported function-locally below).
@@ -219,7 +237,7 @@ def main():
     print(choice)
     if choice == "1":
       from ui.launcher_menu import handle_standard_choice
-      handle_standard_choice(launch_devbox, launch_devbox_t4, launch_devbox_l4, launch_devbox_a10g, launch_devbox_l40s, CPU_ONLY)
+      handle_standard_choice(launch_devbox, launch_devbox_t4, launch_devbox_l4, launch_devbox_a10g, launch_devbox_l40s, CPU_ONLY, launch_devbox_htb)
 
     elif choice == "2":
         doc_box = """
@@ -256,7 +274,7 @@ def main():
 
     else:
       from ui.launcher_menu import handle_simple_choice
-      handle_simple_choice(choice, launch_llamacpp_playroom, launch_forensics_image, launch_llamacpp_playroom_gpu, CPU_ONLY)
+      handle_simple_choice(choice, launch_llamacpp_playroom, launch_forensics_image, launch_llamacpp_playroom_gpu, CPU_ONLY, launch_forensics_htb)
 
 
 @app.function(image=standard_devbox_image, **cpu_devbox_args)

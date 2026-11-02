@@ -5,7 +5,7 @@ parameters — never importing devbox (circular).
 """
 
 
-def handle_standard_choice(launch_devbox, launch_devbox_t4, launch_devbox_l4, launch_devbox_a10g, launch_devbox_l40s, cpu_only):
+def handle_standard_choice(launch_devbox, launch_devbox_t4, launch_devbox_l4, launch_devbox_a10g, launch_devbox_l40s, cpu_only, launch_devbox_htb=None):
     """Choice 1: Standard DevBox with optional extra packages + GPU dispatch."""
     from ui.gpu_picker import prompt_gpu_dispatch
     from ui.ui_utils import create_box, show_spinner
@@ -145,7 +145,7 @@ def handle_rdp_choice(launch_rdp_devbox, launch_rdp_devbox_t4, launch_rdp_devbox
         launch_rdp_devbox.remote(extra_packages=package_list, rdp_quality=rdp_quality)
 
 
-def handle_simple_choice(choice, launch_llamacpp_playroom, launch_forensics_image, launch_llamacpp_playroom_gpu, cpu_only):
+def handle_simple_choice(choice, launch_llamacpp_playroom, launch_forensics_image, launch_llamacpp_playroom_gpu, cpu_only, launch_forensics_htb=None):
     """Choices 6/7/8/else: single-launcher flows and the invalid-choice box."""
     from ui.ui_utils import create_box, show_spinner
 
@@ -175,7 +175,17 @@ def handle_simple_choice(choice, launch_llamacpp_playroom, launch_forensics_imag
         """
         create_box(forensics_box, "Forensics Machine")
         show_spinner("Interleaving Bits... Hold On Tight!", 3)
-        launch_forensics_image.remote()
+        try:
+            htb_choice = input("Enable HTB VPN VM mode? (y/n): ").lower().strip()
+        except EOFError:
+            htb_choice = "n"
+        if htb_choice == "y":
+            if launch_forensics_htb is None:
+                print("HTB VPN mode is unavailable in this launcher build.")
+                return
+            launch_forensics_htb.remote()
+        else:
+            launch_forensics_image.remote()
 
     elif choice == "8":
         if cpu_only:
