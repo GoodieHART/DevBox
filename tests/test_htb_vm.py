@@ -69,6 +69,13 @@ def test_forensics_image_includes_essential_tooling():
     assert "sha256sum -c" in images
 
 
+def test_dove_is_copied_into_base_images():
+    images = source("devbox_core/images.py")
+    assert images.count('"/usr/local/bin/dove"') >= 3
+    assert '"dove.py"' in images
+    assert "copy=True" in images
+
+
 def test_htb_launchers_exist_and_are_reachable_from_menu():
     devbox = source("devbox.py")
     menu = source("ui/launcher_menu.py")

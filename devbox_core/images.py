@@ -94,6 +94,12 @@ def create_base_devbox_image(python_version="3.10"):
             "fi\n"
             "BANNER_EOF",
         )
+        .add_local_file(
+            os.path.join(_IMAGES_DIR, "..", "integrations", "dove.py"),
+            "/usr/local/bin/dove",
+            copy=True,
+        )
+        .run_commands("chmod 755 /usr/local/bin/dove")
     )
 
 
@@ -130,6 +136,12 @@ def create_base_minimal_image(python_version="3.10"):
             "fi\n"
             "BANNER_EOF",
         )
+        .add_local_file(
+            os.path.join(_IMAGES_DIR, "..", "integrations", "dove.py"),
+            "/usr/local/bin/dove",
+            copy=True,
+        )
+        .run_commands("chmod 755 /usr/local/bin/dove")
     )
 
 
@@ -150,12 +162,19 @@ cuda_devbox_image = (
             add_python="3.11"
         ),
         *CORE_DEV_PACKAGES,
+        *DOWNLOAD_APT_PACKAGES,
         "nano",
         "libcudnn9-cuda-12",
         "libcudnn9-dev-cuda-12",
     )
     .run_commands(*get_ssh_setup_commands())
     .pip_install(*DOWNLOAD_PIP_PACKAGES)
+    .add_local_file(
+        os.path.join(_IMAGES_DIR, "..", "integrations", "dove.py"),
+        "/usr/local/bin/dove",
+        copy=True,
+    )
+    .run_commands("chmod 755 /usr/local/bin/dove")
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
         "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader"
