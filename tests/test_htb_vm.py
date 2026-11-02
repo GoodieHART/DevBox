@@ -30,6 +30,10 @@ def test_htb_vm_runtime_uses_vm_sandbox_and_required_secret():
     assert 'pull-filter ignore "ifconfig-ipv6"' in src
     assert 'pull-filter ignore "route-ipv6"' in src
     assert 'pull-filter ignore "redirect-gateway ipv6"' in src
+    assert "idle_timeout=${2:?idle timeout is required}" in src
+    assert "pgrep -f 'sshd: root@'" in src
+    assert "curl -fsS --max-time 2 http://127.0.0.1:4096/" in src
+    assert "OPENCODE_IDLE_TIMEOUT_SECONDS if forensic else IDLE_TIMEOUT_SECONDS" in src
 
 
 def test_htb_entrypoint_starts_openvpn_before_services():

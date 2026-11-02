@@ -36,12 +36,34 @@ if [ "$1" = "forensic" ]; then
     cd /data/forensics
     opencode web --port 4096 --hostname 0.0.0.0 >/run/devbox/opencode.log 2>&1 &
 fi
-printf 'HTB VPN connected.\n'
-while :; do sleep 30; done
+idle_seconds=0
+idle_interval=15
+idle_timeout=${2:?idle timeout is required}
+printf 'HTB VPN connected. Idle timeout: %ss.\n' "$idle_timeout"
+while [ "$idle_seconds" -lt "$idle_timeout" ]; do
+    sleep "$idle_interval"
+    active=0
+    if pgrep -f 'sshd: root@' >/dev/null 2>&1; then
+        active=1
+    fi
+    if [ "$1" = "forensic" ] && curl -fsS --max-time 2 http://127.0.0.1:4096/ >/dev/null 2>&1; then
+        active=1
+    fi
+    if [ "$active" -eq 1 ]; then
+        idle_seconds=0
+    else
+        idle_seconds=$((idle_seconds + idle_interval))
+    fi
+done
+printf 'Idle timeout reached; shutting down.\n' >&2
+exit 0
 '''
 
 
 def run_htb_vm(image, volume, ssh_secret, *, forensic=False, resources=None):
+    from devbox_core.config import IDLE_TIMEOUT_SECONDS, OPENCODE_IDLE_TIMEOUT_SECONDS
+
+    idle_timeout = OPENCODE_IDLE_TIMEOUT_SECONDS if forensic else IDLE_TIMEOUT_SECONDS
     htb_secret = modal.Secret.from_name("htb-vpn", required_keys=["HTB_OVPN_CONFIG"])
     sandbox = modal.Sandbox.create(
         "sleep",
@@ -50,6 +72,7 @@ def run_htb_vm(image, volume, ssh_secret, *, forensic=False, resources=None):
         image=image,
         runtime="vm",
         secrets=[ssh_secret, htb_secret],
+        env={"DEVBOX_IDLE_TIMEOUT": str(idle_timeout)},
         volumes={"/data": volume},
         cpu=resources.get("cpu") if resources else None,
         memory=resources.get("memory") if resources else None,
@@ -58,7 +81,12 @@ def run_htb_vm(image, volume, ssh_secret, *, forensic=False, resources=None):
     )
     try:
         sandbox.filesystem.write_text(VM_SCRIPT, "/run/devbox-vm.sh")
-        process = sandbox.exec("sh", "/run/devbox-vm.sh", "forensic" if forensic else "standard")
+        process = sandbox.exec(
+            "sh",
+            "/run/devbox-vm.sh",
+            "forensic" if forensic else "standard",
+            str(idle_timeout),
+        )
         tunnels = sandbox.tunnels(timeout=120)
         ssh_tunnel = tunnels[22]
         print(
