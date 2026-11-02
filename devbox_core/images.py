@@ -24,6 +24,9 @@ from devbox_core.config import (
     JADX_VERSION,
     APKTOOL_VERSION,
     OPENCODE_VERSION,
+    PSPY_VERSION,
+    FORENSIC_APT_PACKAGES,
+    FORENSIC_PIP_PACKAGES,
     validate_prohibited_packages,
 )
 
@@ -194,8 +197,12 @@ assisted_coding_image = (
 )
 
 forensic_analysis_image = (
-    _apt_install(create_base_minimal_image(), "git", "gdb", "binwalk", "tshark", "wabt", "unzip", "binutils")
-    .pip_install(*DOWNLOAD_PIP_PACKAGES, "volatility3")
+    _apt_install(
+        create_base_minimal_image(),
+        "git", "gdb", "binwalk", "tshark", "wabt", "unzip", "binutils",
+        *FORENSIC_APT_PACKAGES,
+    )
+    .pip_install(*DOWNLOAD_PIP_PACKAGES, "volatility3", *FORENSIC_PIP_PACKAGES)
     .run_commands(
         f"curl -fsSL https://deb.nodesource.com/setup_{NODE_MAJOR_VERSION}.x | bash -",
         "apt-get install -y nodejs",
@@ -228,7 +235,10 @@ forensic_analysis_image = (
          "unzip -q /tmp/linux.zip -d /opt/forensic_analysis/volatility3/symbols",
          "unzip -q /tmp/mac.zip -d /opt/forensic_analysis/volatility3/symbols",
          "rm -f /tmp/windows.zip /tmp/linux.zip /tmp/mac.zip",
-        *get_ssh_setup_commands()
+         f"curl -fsSL -o /usr/local/bin/pspy64 https://github.com/DominicBreuker/pspy/releases/download/{PSPY_VERSION}/pspy64",
+         "echo 'c93f29a5cc1347bdb90e14a12424e6469c8cfea9a20b800bc249755f0043a3bb  /usr/local/bin/pspy64' | sha256sum -c -",
+         "chmod +x /usr/local/bin/pspy64",
+         *get_ssh_setup_commands()
     )
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
@@ -253,7 +263,7 @@ llm_playroom_image = (
     )
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
-        "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "ui.quotes_loader"
+        "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader"
     )
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "ui", "quotes.json"), "/etc/quotes.json")
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "tmux.conf"), "/etc/devbox/tmux.conf")

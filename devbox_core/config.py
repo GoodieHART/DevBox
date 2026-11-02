@@ -26,6 +26,7 @@ TEMURIN_JDK_VERSION = "21.0.12.1+1"
 JADX_VERSION = "1.5.6"
 APKTOOL_VERSION = "3.0.3"
 OPENCODE_VERSION = "1.19.0"
+PSPY_VERSION = "v1.2.1"
 
 # Resource configurations for different DevBox types
 
@@ -157,6 +158,20 @@ DOWNLOAD_PIP_PACKAGES = [
     "gdown",
     "tgdl",
     "terabox-downloader",
+]
+
+FORENSIC_APT_PACKAGES = [
+    "nmap",
+    "smbclient",
+    "chntpw",
+    "dislocker",
+    "libbde-utils",
+    "libvmdk-utils",
+]
+
+FORENSIC_PIP_PACKAGES = [
+    "pypykatz",
+    "impacket",
 ]
 
 # ---------------------------------------------------------------------------

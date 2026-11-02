@@ -57,6 +57,18 @@ def test_forensics_image_packages_htb_runtime():
     assert '"runtime.htb_vm"' in forensic_block
 
 
+def test_forensics_image_includes_essential_tooling():
+    config = source("devbox_core/config.py")
+    images = source("devbox_core/images.py")
+    for package in ("nmap", "smbclient", "chntpw", "dislocker", "libbde-utils", "libvmdk-utils"):
+        assert f'"{package}"' in config
+    for package in ("pypykatz", "impacket"):
+        assert f'"{package}"' in config
+    assert '"runtime.htb_vm"' in images.split("forensic_analysis_image", 1)[1].split("llm_playroom_image", 1)[0]
+    assert "/pspy/releases/download/{PSPY_VERSION}/pspy64" in images
+    assert "sha256sum -c" in images
+
+
 def test_htb_launchers_exist_and_are_reachable_from_menu():
     devbox = source("devbox.py")
     menu = source("ui/launcher_menu.py")
