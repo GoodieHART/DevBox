@@ -27,6 +27,9 @@ def test_htb_vm_runtime_uses_vm_sandbox_and_required_secret():
     assert "sandbox.tunnels" in src
     assert "exit_code = process.wait()" in src
     assert "stderr = process.stderr.read()" in src
+    assert 'pull-filter ignore "ifconfig-ipv6"' in src
+    assert 'pull-filter ignore "route-ipv6"' in src
+    assert 'pull-filter ignore "redirect-gateway ipv6"' in src
 
 
 def test_htb_entrypoint_starts_openvpn_before_services():

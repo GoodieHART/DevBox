@@ -7,7 +7,11 @@ set -eu
 mkdir -p /run/devbox
 printf '%s' "$HTB_OVPN_CONFIG" > /run/devbox/htb.ovpn
 chmod 600 /run/devbox/htb.ovpn
-openvpn --config /run/devbox/htb.ovpn --log /run/devbox/openvpn.log --daemon
+openvpn --config /run/devbox/htb.ovpn \
+    --pull-filter ignore "ifconfig-ipv6" \
+    --pull-filter ignore "route-ipv6" \
+    --pull-filter ignore "redirect-gateway ipv6" \
+    --log /run/devbox/openvpn.log --daemon
 for _ in $(seq 1 60); do
     if grep -q 'Initialization Sequence Completed' /run/devbox/openvpn.log 2>/dev/null; then
         break
