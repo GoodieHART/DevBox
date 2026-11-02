@@ -273,6 +273,21 @@ $env:DEVBOX_CPU_ONLY = "1"; modal run devbox.py
 
 This skips registering the GPU launchers entirely, so validation never trips. GPU menu choices print a notice instead of failing. Unset the variable (default) and everything behaves as before.
 
+### HTB VPN VM mode
+
+The Standard DevBox and Forensics Analysis Box can launch as Modal VM Sandboxes
+with a user-provided Hack The Box OpenVPN pack. Download the `.ovpn` file from
+HTB, then create the Modal Secret without committing the file:
+
+```bash
+modal secret create htb-vpn HTB_OVPN_CONFIG="$(cat ~/Downloads/your-htb-pack.ovpn)"
+```
+
+Choose HTB VPN VM mode from the Standard or Forensics launcher menu. The VM
+waits for OpenVPN's `Initialization Sequence Completed` message before it
+starts SSH or OpenCode. VM Sandboxes are CPU-only; GPU launchers retain the
+existing Function-based behavior.
+
 ## Prerequisites
 
 Before you can use this script, you need to have the following:
