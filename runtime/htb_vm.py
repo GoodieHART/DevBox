@@ -1,0 +1,77 @@
+import time
+
+import modal
+
+VM_SCRIPT = r'''#!/bin/sh
+set -eu
+mkdir -p /run/devbox
+printf '%s' "$HTB_OVPN_CONFIG" > /run/devbox/htb.ovpn
+chmod 600 /run/devbox/htb.ovpn
+openvpn --config /run/devbox/htb.ovpn --log /run/devbox/openvpn.log --daemon
+for _ in $(seq 1 60); do
+    if grep -q 'Initialization Sequence Completed' /run/devbox/openvpn.log 2>/dev/null; then
+        break
+    fi
+    if grep -Eq 'AUTH_FAILED|Cannot open TUN|Exiting due to fatal error' /run/devbox/openvpn.log 2>/dev/null; then
+        cat /run/devbox/openvpn.log >&2
+        exit 1
+    fi
+    sleep 1
+done
+grep -q 'Initialization Sequence Completed' /run/devbox/openvpn.log
+mkdir -p /root/.ssh /var/run/sshd
+if [ -n "${PUBKEYS:-}" ]; then printf '%s\n' "$PUBKEYS" > /root/.ssh/authorized_keys; fi
+if [ -n "${PUBKEY:-}" ]; then printf '%s\n' "$PUBKEY" > /root/.ssh/authorized_keys; fi
+chmod 600 /root/.ssh/authorized_keys
+/usr/sbin/sshd
+tmux new-session -d -s devbox -n window-1 2>/dev/null || true
+tmux new-window -t devbox -n window-2 2>/dev/null || true
+tmux new-window -t devbox -n window-3 2>/dev/null || true
+if [ "$1" = "forensic" ]; then
+    mkdir -p /data/forensics /data/forensics/uploads
+    cd /data/forensics
+    opencode web --port 4096 --hostname 0.0.0.0 >/run/devbox/opencode.log 2>&1 &
+fi
+printf 'HTB VPN connected.\n'
+while :; do sleep 30; done
+'''
+
+
+def run_htb_vm(image, volume, ssh_secret, *, forensic=False, resources=None):
+    htb_secret = modal.Secret.from_name("htb-vpn", required_keys=["HTB_OVPN_CONFIG"])
+    sandbox = modal.Sandbox.create(
+        "sleep",
+        "infinity",
+        app=modal.App.lookup("personal-devbox-launcher", create_if_missing=True),
+        image=image,
+        runtime="vm",
+        secrets=[ssh_secret, htb_secret],
+        volumes={"/data": volume},
+        cpu=resources.get("cpu") if resources else None,
+        memory=resources.get("memory") if resources else None,
+        timeout=resources.get("timeout") if resources else None,
+        unencrypted_ports=[22, 4096] if forensic else [22],
+    )
+    try:
+        sandbox.filesystem.write_text(VM_SCRIPT, "/run/devbox-vm.sh")
+        process = sandbox.exec("sh", "/run/devbox-vm.sh", "forensic" if forensic else "standard")
+        tunnels = sandbox.tunnels(timeout=120)
+        ssh_tunnel = tunnels[22]
+        print(
+            f"SSH: ssh root@{ssh_tunnel.unencrypted_host} "
+            f"-p {ssh_tunnel.unencrypted_port} -t \"tmux attach -t devbox\""
+        )
+        if forensic:
+            web_tunnel = tunnels[4096]
+            print(
+                f"OpenCode web: http://{web_tunnel.unencrypted_host}:"
+                f"{web_tunnel.unencrypted_port}"
+            )
+        for line in process.stdout:
+            print(line, end="")
+        while process.poll() is None:
+            time.sleep(5)
+        if process.returncode not in (None, 0):
+            raise RuntimeError(f"HTB VM Sandbox exited with status {process.returncode}")
+    finally:
+        sandbox.terminate(wait=True)

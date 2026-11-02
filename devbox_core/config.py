@@ -124,6 +124,8 @@ FORENSICS_DEVBOX_ARGS = {
 # Package groups for reusable configurations
 CORE_DEV_PACKAGES = [
     "openssh-server",
+    "openvpn",
+    "iproute2",
     "git",
     "nano",
     "neovim",
