@@ -7,6 +7,7 @@ and global settings used across DevBox
 Author: GoodieHART
 """
 
+import os
 from collections.abc import Iterable
 from typing import Any
 
@@ -97,6 +98,16 @@ OPENCODE_UPLOADS_DIR = "/data/uploads"
 FORENSICS_WORKDIR = "/data/forensics"
 FORENSICS_UPLOADS_DIR = "/data/forensics/uploads"
 
+# noVNC browser for the forensics HTB VM. Everything is loopback-only; the
+# phone reaches it through an SSH local forward, never a public Modal port.
+VNC_DISPLAY = os.environ.get("DEVBOX_VNC_DISPLAY", ":99")
+VNC_GEOMETRY = os.environ.get("DEVBOX_VNC_GEOMETRY", "1280x800x24")
+VNC_RFB_PORT = 5900
+NOVNC_PORT = 6080
+VNC_PROFILE_DIR = "/data/browser-profile"
+VNC_LOG_DIR = "/data/devbox-vnc/logs"
+NOVNC_WEB_ROOT = "/usr/share/novnc"
+
 # OpenCode DevBox resource arguments (CPU-only, headroom for web server + TUI attach)
 OPENCODE_DEVBOX_ARGS = {
     "secrets": None,
@@ -172,6 +183,19 @@ FORENSIC_APT_PACKAGES = [
 FORENSIC_PIP_PACKAGES = [
     "pypykatz",
     "impacket",
+]
+
+# X11 + VNC browser stack for the forensics HTB VM. Chromium is the only
+# browser; the rest is the headless display, VNC server, and noVNC bridge.
+VNC_BROWSER_PACKAGES = [
+    "chromium",
+    "xvfb",
+    "x11vnc",
+    "novnc",
+    "websockify",
+    "openbox",
+    "fonts-liberation",
+    "x11-utils",
 ]
 
 # ---------------------------------------------------------------------------

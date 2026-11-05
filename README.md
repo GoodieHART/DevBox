@@ -288,6 +288,33 @@ waits for OpenVPN's `Initialization Sequence Completed` message before it
 starts SSH or OpenCode. VM Sandboxes are CPU-only; GPU launchers retain the
 existing Function-based behavior.
 
+#### Forensics HTB browser (noVNC)
+
+The Forensics HTB VM also starts a loopback-only Chromium browser, so HTB web
+targets can be opened from a phone without exposing another Modal port. The
+printed SSH command includes the forward:
+
+```
+ssh root@<host> -p <port> -L 6080:127.0.0.1:6080 -t "tmux attach -t devbox"
+```
+
+Keep that SSH session open, then open:
+
+```
+http://127.0.0.1:6080/vnc.html?autoconnect=1&resize=scale
+```
+
+Only `127.0.0.1:6080` (noVNC) and `127.0.0.1:5900` (x11vnc) listen inside the
+VM; neither is a Modal tunnel. The browser profile persists at
+`/data/browser-profile`, and startup logs are under `/data/devbox-vnc/logs`.
+The default screen is `1280x800x24`; set
+`DEVBOX_VNC_GEOMETRY=720x1280x24` before `modal run` (or change
+`VNC_GEOMETRY` in `devbox_core/config.py`) for a portrait layout. noVNC's own
+controls follow your phone's language, while Chromium itself starts in English.
+
+The standalone Forensics box does not start the browser; this flow is specific
+to the Forensics HTB VM.
+
 ## Prerequisites
 
 Before you can use this script, you need to have the following:
@@ -643,6 +670,7 @@ The codebase is organized into domain packages. Entrypoints stay at the root so 
 | `runtime/gpu_utils.py` | GPU configuration helpers and base GPU launch args |
 | `runtime/persistence_utils.py` | Symlink management for dotfiles persistence across sessions |
 | `runtime/backup_utils.py` | Backup registration and data persistence helpers |
+| `runtime/vnc_browser.py` | Loopback Chromium/noVNC stack for the Forensics HTB VM |
 | `integrations/exa_helper.py` | EXA Search integration for llama.cpp Research Center |
 | `integrations/exa_proxy.py` | EXA reverse proxy (browser port → llama-server) with tool-call loop |
 | `ui/ui_utils.py` | UI helper functions — `create_box()`, `show_spinner()` |
@@ -652,6 +680,7 @@ The codebase is organized into domain packages. Entrypoints stay at the root so 
 | `tests/test_hermes_app.py` | Structural tests for the Hermes gateway app (no Modal credentials needed) |
 | `tests/test_image_packaging.py` | Structural tests that every runtime/UI module is packaged into the images |
 | `tests/test_rdp_session.py` | Structural tests for RDP session startup, persistence-safe dirs, and idle detection |
+| `tests/test_vnc_browser.py` | Structural tests for loopback binding, Forensics VM startup, and packaging |
 
 ## Roadmap
 

@@ -35,6 +35,9 @@ if [ "$1" = "forensic" ]; then
     mkdir -p /data/forensics /data/forensics/uploads
     cd /data/forensics
     opencode web --port 4096 --hostname 0.0.0.0 >/run/devbox/opencode.log 2>&1 &
+    if ! sh /run/devbox-vnc.sh; then
+        printf 'noVNC browser failed to start; see /data/devbox-vnc/logs\n' >&2
+    fi
 fi
 idle_seconds=0
 idle_interval=15
@@ -61,7 +64,7 @@ exit 0
 
 
 def run_htb_vm(image, volume, ssh_secret, *, forensic=False, resources=None):
-    from devbox_core.config import IDLE_TIMEOUT_SECONDS, OPENCODE_IDLE_TIMEOUT_SECONDS
+    from devbox_core.config import IDLE_TIMEOUT_SECONDS, NOVNC_PORT, OPENCODE_IDLE_TIMEOUT_SECONDS
 
     idle_timeout = OPENCODE_IDLE_TIMEOUT_SECONDS if forensic else IDLE_TIMEOUT_SECONDS
     htb_secret = modal.Secret.from_name("htb-vpn", required_keys=["HTB_OVPN_CONFIG"])
@@ -81,6 +84,12 @@ def run_htb_vm(image, volume, ssh_secret, *, forensic=False, resources=None):
     )
     try:
         sandbox.filesystem.write_text(VM_SCRIPT, "/run/devbox-vm.sh")
+        if forensic:
+            # Import locally: runtime.htb_vm is packaged into every image, but
+            # the browser module and its packages only ship in the forensic image.
+            from runtime.vnc_browser import VNC_BROWSER_SCRIPT
+
+            sandbox.filesystem.write_text(VNC_BROWSER_SCRIPT, "/run/devbox-vnc.sh")
         process = sandbox.exec(
             "sh",
             "/run/devbox-vm.sh",
@@ -89,11 +98,18 @@ def run_htb_vm(image, volume, ssh_secret, *, forensic=False, resources=None):
         )
         tunnels = sandbox.tunnels(timeout=120)
         ssh_tunnel = tunnels[22]
+        forward = (
+            f" -L {NOVNC_PORT}:127.0.0.1:{NOVNC_PORT}" if forensic else ""
+        )
         print(
             f"SSH: ssh root@{ssh_tunnel.unencrypted_host} "
-            f"-p {ssh_tunnel.unencrypted_port} -t \"tmux attach -t devbox\""
+            f"-p {ssh_tunnel.unencrypted_port}{forward} -t \"tmux attach -t devbox\""
         )
         if forensic:
+            print(
+                f"Browser: http://127.0.0.1:{NOVNC_PORT}/vnc.html"
+                "?autoconnect=1&resize=scale"
+            )
             web_tunnel = tunnels[4096]
             print(
                 f"OpenCode web: http://{web_tunnel.unencrypted_host}:"
