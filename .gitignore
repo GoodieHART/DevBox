@@ -13,6 +13,8 @@ MODAL_KNOWLEDGE.md
 *.pyc
 *.pyo
 .env
+# HTB VPN connection packs are per-user credentials; never commit them.
+*.ovpn
 .DS_Store
 .vscode/
 .idea/

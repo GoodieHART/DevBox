@@ -98,15 +98,36 @@ OPENCODE_UPLOADS_DIR = "/data/uploads"
 FORENSICS_WORKDIR = "/data/forensics"
 FORENSICS_UPLOADS_DIR = "/data/forensics/uploads"
 
-# noVNC browser for the forensics HTB VM. Everything is loopback-only; the
-# phone reaches it through an SSH local forward, never a public Modal port.
-VNC_DISPLAY = os.environ.get("DEVBOX_VNC_DISPLAY", ":99")
-VNC_GEOMETRY = os.environ.get("DEVBOX_VNC_GEOMETRY", "1280x800x24")
-VNC_RFB_PORT = 5900
-NOVNC_PORT = 6080
-VNC_PROFILE_DIR = "/data/browser-profile"
-VNC_LOG_DIR = "/data/devbox-vnc/logs"
-NOVNC_WEB_ROOT = "/usr/share/novnc"
+# RDP desktop access. Shared by the RDP Desktop Box and both Forensics boxes,
+# which copy the same xrdp + XFCE desktop stack.
+RDP_PORT = 3389
+RDP_USER = "root"
+RDP_PASSWORD = "devbox123"
+
+# HTB VPN networks. Labs and Starting Point are separate HTB VPN endpoints, so
+# each has its own secret and env key: Modal applies secrets in order and a
+# later secret overwrites an earlier key of the same name. Their machine ranges
+# do not overlap, so a box can hold both tunnels on separate tun devices.
+HTB_DEFAULT_NETWORK = "labs"
+HTB_NETWORK_CHOICES = ("labs", "starting-point", "both")
+HTB_VPN_NETWORKS = {
+    "labs": {
+        "label": "HTB Labs",
+        "secret": "htb-vpn",
+        "key": "HTB_OVPN_CONFIG",
+        "device": "tun0",
+        "file": "htb-labs.ovpn",
+        "pack": "your HTB labs .ovpn (HTB -> Machines -> Connect to HTB)",
+    },
+    "starting-point": {
+        "label": "HTB Starting Point",
+        "secret": "htb-starting-point",
+        "key": "HTB_SP_OVPN_CONFIG",
+        "device": "tun1",
+        "file": "htb-starting-point.ovpn",
+        "pack": "your Starting Point .ovpn (HTB -> Starting Point -> Connect to Starting Point VPN)",
+    },
+}
 
 # OpenCode DevBox resource arguments (CPU-only, headroom for web server + TUI attach)
 OPENCODE_DEVBOX_ARGS = {
@@ -178,6 +199,10 @@ FORENSIC_APT_PACKAGES = [
     "dislocker",
     "libbde-utils",
     "libvmdk-utils",
+    # Desktop browser and network diagnostics for the RDP-backed forensics box.
+    "firefox-esr",
+    "netcat-openbsd",
+    "iputils-ping",
 ]
 
 FORENSIC_PIP_PACKAGES = [
@@ -185,17 +210,19 @@ FORENSIC_PIP_PACKAGES = [
     "impacket",
 ]
 
-# X11 + VNC browser stack for the forensics HTB VM. Chromium is the only
-# browser; the rest is the headless display, VNC server, and noVNC bridge.
-VNC_BROWSER_PACKAGES = [
-    "chromium",
-    "xvfb",
-    "x11vnc",
-    "novnc",
-    "websockify",
-    "openbox",
-    "fonts-liberation",
-    "x11-utils",
+# WPScan is a Ruby gem, so this group supplies the toolchain its native
+# extensions build against; the gem itself is installed in devbox_core/images.py.
+# 4.x needs Ruby >= 3.3 and bookworm ships 3.1, so the pin stays on 3.x.
+# License: free for non-commercial use only (WPScan Public Source License).
+WPSCAN_VERSION = "3.8.28"
+WORDPRESS_APT_PACKAGES = [
+    "ruby",
+    "ruby-dev",
+    "build-essential",
+    "libcurl4",  # runtime for ethon/typhoeus
+]
+WORDPRESS_GEM_PACKAGES = [
+    "wpscan",
 ]
 
 # ---------------------------------------------------------------------------

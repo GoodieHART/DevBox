@@ -1,5 +1,36 @@
 # DevBox Changelog
 
+## DevBox Updates - 2026-11-13
+
+### Added
+
+- Added an XFCE desktop over RDP to both Forensics boxes, built on the same xrdp, PipeWire audio, and session startup used by the RDP Desktop Box.
+- Added Firefox ESR, netcat, and ping to the Forensics box for browser-based targets and network diagnostics.
+- Added WPScan 3.8.28 to the Forensics box, along with the Ruby toolchain its native extensions require.
+- Added HTB Starting Point access to both HTB VPN boxes, with a `htb-starting-point` secret (`HTB_SP_OVPN_CONFIG`).
+
+### Changed
+
+- The HTB VPN launchers now ask which network to join: Labs, Starting Point, or both at once.
+- Forensics boxes now reset the idle timer on RDP, SSH, or OpenCode web activity.
+- The Forensics HTB VM starts xrdp after the VPN is up and exposes RDP on port 3389 alongside SSH and OpenCode.
+- The Forensics image now derives from the shared RDP desktop layer instead of the minimal base image.
+
+### Removed
+
+- Removed the loopback Chromium/noVNC browser from the Forensics HTB VM, including `runtime/vnc_browser.py`, `VNC_BROWSER_PACKAGES`, the `DEVBOX_VNC_*` settings, and their tests.
+
+### Fixed
+
+- Fixed RDP image packaging so `runtime.htb_vm` ships with the RDP Desktop Box, matching the standard image.
+- A missing HTB VPN secret now fails before the VM starts, with the `modal secret create` command needed to fix it.
+
+### Validation
+
+- Test suite: 190 tests passed.
+- Verified on Modal: Forensics box runs xrdp, Firefox, netcat, ping, and WPScan; the HTB Starting Point VM reaches `10.129.0.1` over `tun1` while normal internet traffic keeps its default route.
+
+
 ## DevBox Updates - 2026-10-26
 
 ### Added

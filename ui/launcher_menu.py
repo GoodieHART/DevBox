@@ -5,6 +5,43 @@ parameters — never importing devbox (circular).
 """
 
 
+def _network_label(network):
+    return {
+        "labs": "HTB Labs",
+        "starting-point": "HTB Starting Point",
+        "both": "HTB Labs + Starting Point",
+    }.get(network, network)
+
+
+def prompt_htb_vm():
+    """Ask whether to use HTB VPN VM mode, then which network.
+
+    Returns `labs`, `starting-point`, `both`, or None to launch normally.
+    Defaults to Labs when the network prompt is skipped.
+    """
+    from ui.ui_utils import create_box
+
+    try:
+        answer = input("Enable HTB VPN VM mode? (y/n): ").lower().strip()
+    except EOFError:
+        answer = "n"
+    if answer != "y":
+        return None
+
+    network_box = """
+    🌐 Which HTB network(s) should this box join?
+    • 1: HTB Labs (Machines, 10.10.x.x)
+    • 2: HTB Starting Point (10.129.x.x)
+    • 3: Both - separate tun device per network
+    """
+    create_box(network_box, "🌐 HTB NETWORK")
+    try:
+        answer = input("Select network [1]: ").strip()
+    except EOFError:
+        answer = "1"
+    return {"1": "labs", "2": "starting-point", "3": "both"}.get(answer, "labs")
+
+
 def handle_standard_choice(launch_devbox, launch_devbox_t4, launch_devbox_l4, launch_devbox_a10g, launch_devbox_l40s, cpu_only, launch_devbox_htb=None):
     """Choice 1: Standard DevBox with optional extra packages + GPU dispatch."""
     from ui.gpu_picker import prompt_gpu_dispatch
@@ -27,6 +64,23 @@ def handle_standard_choice(launch_devbox, launch_devbox_t4, launch_devbox_l4, la
         print(f"✅ Requesting with additional tools: {', '.join(package_list)}")
     else:
         print("✅ No extra tools requested.")
+
+    # HTB mode runs in a CPU-only VM Sandbox, so it is offered before the GPU
+    # question; answering yes skips GPU dispatch.
+    htb_network = prompt_htb_vm()
+    if htb_network is not None:
+        if launch_devbox_htb is None:
+            create_box("HTB VPN mode is unavailable in this launcher build.", "🌐 HTB VPN")
+            return
+        htb_box = f"""
+        🌐 Launching Standard DevBox in HTB VPN VM mode...
+        🔗 Network(s): {_network_label(htb_network)}
+        ⏳ The VM waits for the VPN handshake before starting SSH.
+        """
+        create_box(htb_box, "🚀 STANDARD DEVBOX + HTB VPN")
+        show_spinner("Bringing up the HTB VPN VM", 3)
+        launch_devbox_htb.remote(network=htb_network)
+        return
 
     gpu_box = """
     🎮 Add GPU acceleration?
@@ -175,15 +229,19 @@ def handle_simple_choice(choice, launch_llamacpp_playroom, launch_forensics_imag
         """
         create_box(forensics_box, "Forensics Machine")
         show_spinner("Interleaving Bits... Hold On Tight!", 3)
-        try:
-            htb_choice = input("Enable HTB VPN VM mode? (y/n): ").lower().strip()
-        except EOFError:
-            htb_choice = "n"
-        if htb_choice == "y":
+        htb_network = prompt_htb_vm()
+        if htb_network is not None:
             if launch_forensics_htb is None:
                 print("HTB VPN mode is unavailable in this launcher build.")
                 return
-            launch_forensics_htb.remote()
+            htb_box = f"""
+            🌐 Forensics box in HTB VPN VM mode...
+            🔗 Network(s): {_network_label(htb_network)}
+            🖥️  RDP desktop + OpenCode + SSH start after the VPN handshake.
+            """
+            create_box(htb_box, "🔍 FORENSICS + HTB VPN")
+            show_spinner("Bringing up the HTB VPN VM", 3)
+            launch_forensics_htb.remote(network=htb_network)
         else:
             launch_forensics_image.remote()
 

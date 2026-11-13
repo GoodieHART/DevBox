@@ -139,6 +139,10 @@ def test_shipped_package_lists_are_clean():
         config.CORE_DEV_PACKAGES,
         config.EXTENDED_DEV_PACKAGES,
         config.DOWNLOAD_APT_PACKAGES,
+        config.FORENSIC_APT_PACKAGES,
+        config.FORENSIC_PIP_PACKAGES,
+        config.WORDPRESS_APT_PACKAGES,
+        config.WORDPRESS_GEM_PACKAGES,
     ):
         assert config.find_prohibited_packages(packages) == []
 

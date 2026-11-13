@@ -228,11 +228,11 @@ The most feature-rich box. Comes with a curated catalog of **7 pre-configured GG
 
 ### 7. 🔍 Forensics & Reverse Engineering Box
 
-Comes with **Volatility3**, symbol files for Windows/Linux/macOS, OpenCode web + SSH, REA MCP, Ghidra, JADX, Apktool, GDB, Binwalk, Tshark, WABT, and the Java/native analysis stack. Forensic projects persist under `/data/forensics`, with analysis uploads under `/data/forensics/uploads`.
+Comes with **Volatility3**, symbol files for Windows/Linux/macOS, OpenCode web + SSH, REA MCP, Ghidra, JADX, Apktool, GDB, Binwalk, Tshark, WABT, WPScan, Firefox, and the Java/native analysis stack, plus a full **XFCE desktop over RDP** for graphical work. Forensic projects persist under `/data/forensics`, with analysis uploads under `/data/forensics/uploads`.
 
 **Best for:** CTF challenges, incident response, malware analysis, digital forensics investigations.
 
-**Resources:** 0.5 vCPU / 1GB RAM
+**Resources:** 2.0 vCPU / 8GB RAM
 
 ---
 
@@ -276,44 +276,62 @@ This skips registering the GPU launchers entirely, so validation never trips. GP
 ### HTB VPN VM mode
 
 The Standard DevBox and Forensics Analysis Box can launch as Modal VM Sandboxes
-with a user-provided Hack The Box OpenVPN pack. Download the `.ovpn` file from
-HTB, then create the Modal Secret without committing the file:
+with one user-provided Hack The Box OpenVPN pack, or with both packs at once.
+HTB serves Labs machines and Starting Point machines from different VPN
+endpoints with different `.ovpn` files, so each one has its own Modal Secret.
 
 ```bash
-modal secret create htb-vpn HTB_OVPN_CONFIG="$(cat ~/Downloads/your-htb-pack.ovpn)"
+# HTB Labs (Machines page)
+modal secret create htb-vpn HTB_OVPN_CONFIG="$(cat ~/Downloads/htb-labs.ovpn)"
+
+# HTB Starting Point (Starting Point page)
+modal secret create htb-starting-point HTB_SP_OVPN_CONFIG="$(cat ~/Downloads/htb-starting-point.ovpn)"
 ```
 
-Choose HTB VPN VM mode from the Standard or Forensics launcher menu. The VM
-waits for OpenVPN's `Initialization Sequence Completed` message before it
-starts SSH or OpenCode. VM Sandboxes are CPU-only; GPU launchers retain the
-existing Function-based behavior.
+The two secrets use different environment keys on purpose: Modal applies
+secrets in order and a later secret overwrites an earlier one, so a shared key
+would silently leave only one pack inside the box.
 
-#### Forensics HTB browser (noVNC)
+Choose HTB VPN VM mode from the Standard or Forensics launcher menu, then pick
+the network:
 
-The Forensics HTB VM also starts a loopback-only Chromium browser, so HTB web
-targets can be opened from a phone without exposing another Modal port. The
-printed SSH command includes the forward:
+| Choice | What the box connects to | Target range |
+|--------|--------------------------|--------------|
+| `1` (default) | HTB Labs | `10.10.x.x` |
+| `2` | HTB Starting Point | `10.129.x.x` |
+| `3` | Both, on `tun0` and `tun1` | both ranges |
+
+Only the networks you select need a secret. If a selected secret or key is
+missing, the launcher stops before creating the VM and prints the exact
+`modal secret create` command to run.
+
+The VM waits for each tunnel's `Initialization Sequence Completed` message
+before it starts SSH, OpenCode, or (for Forensics) the RDP desktop, so nothing
+is exposed while the VPN is still negotiating. VM Sandboxes are CPU-only; GPU
+launchers retain the existing Function-based behavior.
+
+#### Forensics desktop (RDP)
+
+Both Forensics boxes — the standalone Forensics Analysis box and the Forensics
+HTB VM — run the same **XFCE desktop over RDP** as the RDP Desktop Box. Firefox
+ships preinstalled, so HTB web targets open inside the desktop, with no separate
+browser window and no extra port to expose.
+
+When the box is ready it prints the address and the shared credentials:
 
 ```
-ssh root@<host> -p <port> -L 6080:127.0.0.1:6080 -t "tmux attach -t devbox"
+📡 RDP Address: <host>:<port>
+👤 Username: root
+🔑 Password: devbox123
 ```
 
-Keep that SSH session open, then open:
+Connect with any RDP client (see the table above). The desktop counts as
+activity: RDP, SSH, and OpenCode web traffic all reset the idle timer, so an
+active analysis session is never shut down mid-task.
 
-```
-http://127.0.0.1:6080/vnc.html?autoconnect=1&resize=scale
-```
-
-Only `127.0.0.1:6080` (noVNC) and `127.0.0.1:5900` (x11vnc) listen inside the
-VM; neither is a Modal tunnel. The browser profile persists at
-`/data/browser-profile`, and startup logs are under `/data/devbox-vnc/logs`.
-The default screen is `1280x800x24`; set
-`DEVBOX_VNC_GEOMETRY=720x1280x24` before `modal run` (or change
-`VNC_GEOMETRY` in `devbox_core/config.py`) for a portrait layout. noVNC's own
-controls follow your phone's language, while Chromium itself starts in English.
-
-The standalone Forensics box does not start the browser; this flow is specific
-to the Forensics HTB VM.
+For the Forensics HTB VM specifically, the VPN comes up first: the launcher
+waits for OpenVPN's `Initialization Sequence Completed`, then starts xrdp
+alongside SSH and OpenCode.
 
 ## Prerequisites
 
@@ -392,9 +410,9 @@ ssh root@<host> -p <port> -t "tmux attach -t devbox"
 
 Just copy and paste that command into a new terminal window and you're in.
 
-### RDP (RDP Desktop Box)
+### RDP (RDP Desktop and Forensics boxes)
 
-The RDP Desktop Box gives you a full XFCE graphical desktop. Once ready, you'll see:
+The RDP Desktop Box and both Forensics boxes give you a full XFCE graphical desktop. Once ready, you'll see:
 
 ```
 ============================================================
@@ -516,7 +534,7 @@ Remember to replace `C:\path\to\your\DevBox\devbox.py` with the actual path to y
 ### Idle Timeouts
 
 - **Standard boxes**: Auto-shutdown after **5 minutes** of no active SSH connection.
-- **AI Coding and Forensics boxes**: Auto-shutdown after **30 minutes** with no SSH or web activity.
+- **AI Coding and Forensics boxes**: Auto-shutdown after **30 minutes** with no SSH, web, or RDP activity.
 - **llama.cpp Research Center**: Extended timeout of **1 hour** to accommodate long-running inference sessions.
 - A countdown warning will appear in the terminal where you ran `modal run` before shutdown.
 
@@ -670,7 +688,7 @@ The codebase is organized into domain packages. Entrypoints stay at the root so 
 | `runtime/gpu_utils.py` | GPU configuration helpers and base GPU launch args |
 | `runtime/persistence_utils.py` | Symlink management for dotfiles persistence across sessions |
 | `runtime/backup_utils.py` | Backup registration and data persistence helpers |
-| `runtime/vnc_browser.py` | Loopback Chromium/noVNC stack for the Forensics HTB VM |
+| `runtime/htb_vm.py` | Modal VM Sandbox launcher for HTB VPN mode (SSH, OpenCode, RDP) |
 | `integrations/exa_helper.py` | EXA Search integration for llama.cpp Research Center |
 | `integrations/exa_proxy.py` | EXA reverse proxy (browser port → llama-server) with tool-call loop |
 | `ui/ui_utils.py` | UI helper functions — `create_box()`, `show_spinner()` |
@@ -680,7 +698,8 @@ The codebase is organized into domain packages. Entrypoints stay at the root so 
 | `tests/test_hermes_app.py` | Structural tests for the Hermes gateway app (no Modal credentials needed) |
 | `tests/test_image_packaging.py` | Structural tests that every runtime/UI module is packaged into the images |
 | `tests/test_rdp_session.py` | Structural tests for RDP session startup, persistence-safe dirs, and idle detection |
-| `tests/test_vnc_browser.py` | Structural tests for loopback binding, Forensics VM startup, and packaging |
+| `tests/test_forensic_desktop.py` | Structural tests for the RDP-backed Forensics desktop and HTB VM |
+| `tests/test_wpscan.py` | Structural tests for the WPScan/Ruby stack in the Forensics image |
 
 ## Roadmap
 

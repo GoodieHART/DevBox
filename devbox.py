@@ -69,9 +69,10 @@ def launch_devbox(extra_packages=None):
 
 
 @app.function(image=standard_devbox_image, **cpu_devbox_args)
-def launch_devbox_htb():
+def launch_devbox_htb(network="labs"):
+    """Standard DevBox as a VM Sandbox on an HTB VPN network."""
     from runtime.htb_vm import run_htb_vm
-    run_htb_vm(standard_devbox_image, dev_volume, ssh_secret, resources=cpu_devbox_args)
+    run_htb_vm(standard_devbox_image, dev_volume, ssh_secret, resources=cpu_devbox_args, network=network)
 
 
 @_unless_cpu_only(app.function(image=cuda_devbox_image, gpu="t4", **gpu_devbox_args))
@@ -150,7 +151,8 @@ def launch_forensics_image():
 
 
 @app.function(image=forensic_analysis_image, **forensics_devbox_args)
-def launch_forensics_htb():
+def launch_forensics_htb(network="labs"):
+    """Forensics box as a VM Sandbox on an HTB VPN network (RDP, SSH, OpenCode)."""
     from runtime.htb_vm import run_htb_vm
     run_htb_vm(
         forensic_analysis_image,
@@ -158,6 +160,7 @@ def launch_forensics_htb():
         ssh_secret,
         forensic=True,
         resources=forensics_devbox_args,
+        network=network,
     )
 
 # llama.cpp Research Center - Curated Model Catalog lives in
@@ -220,7 +223,7 @@ def main():
     Curated models + WebUI + EXA Search + Multimodal
     
     7. 🔍 Forensics Analysis
-    Analysis Machine using Volatilty3 and other tools
+    Analysis Machine using Volatility3, REA, and an XFCE desktop over RDP
 
     8. 🚀 llama.cpp Research Center (GPU)
     GPU-accelerated inference + 32K context + T4 GPU

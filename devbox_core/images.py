@@ -25,9 +25,13 @@ from devbox_core.config import (
     APKTOOL_VERSION,
     OPENCODE_VERSION,
     PSPY_VERSION,
+    RDP_PASSWORD,
+    RDP_USER,
     FORENSIC_APT_PACKAGES,
     FORENSIC_PIP_PACKAGES,
-    VNC_BROWSER_PACKAGES,
+    WPSCAN_VERSION,
+    WORDPRESS_APT_PACKAGES,
+    WORDPRESS_GEM_PACKAGES,
     validate_prohibited_packages,
 )
 
@@ -216,120 +220,10 @@ assisted_coding_image = (
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "tmux.conf"), "/etc/devbox/tmux.conf")
 )
 
-forensic_analysis_image = (
-    _apt_install(
-        create_base_minimal_image(),
-        "git", "gdb", "binwalk", "tshark", "wabt", "unzip", "binutils",
-        *FORENSIC_APT_PACKAGES,
-        *VNC_BROWSER_PACKAGES,
-    )
-    .pip_install(*DOWNLOAD_PIP_PACKAGES, "volatility3", *FORENSIC_PIP_PACKAGES)
-    .run_commands(
-        f"curl -fsSL https://deb.nodesource.com/setup_{NODE_MAJOR_VERSION}.x | bash -",
-        "apt-get install -y nodejs",
-        f"npm install -g rea-agents@{REA_AGENTS_VERSION}",
-        "mkdir -p /root/.config/opencode /root/.local/share/opencode /root/.cache/opencode",
-        "curl -fsSL https://opencode.ai/install | bash",
-        "ln -sf /root/.opencode/bin/opencode /usr/local/bin/opencode",
-        "mkdir -p /opt/java",
-        f"curl -fsSL -o /tmp/temurin21.tar.gz https://github.com/adoptium/temurin21-binaries/releases/download/jdk-{TEMURIN_JDK_VERSION.replace('+', '%2B')}/OpenJDK21U-jdk_x64_linux_hotspot_{TEMURIN_JDK_VERSION.split('+')[0]}_{TEMURIN_JDK_VERSION.split('+')[1]}.tar.gz",
-        "tar -xzf /tmp/temurin21.tar.gz -C /opt/java",
-        f"ln -sfn /opt/java/jdk-{TEMURIN_JDK_VERSION} /opt/java/temurin-21",
-        "rm -f /tmp/temurin21.tar.gz",
-        "mkdir -p /opt/ghidra",
-        f"curl -fsSL -o /tmp/ghidra.zip https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_{GHIDRA_VERSION}_build/ghidra_{GHIDRA_VERSION}_PUBLIC_{GHIDRA_BUILD}.zip",
-        "unzip -q /tmp/ghidra.zip -d /opt/ghidra",
-        "rm -f /tmp/ghidra.zip",
-        f"curl -fsSL -o /tmp/jadx.zip https://github.com/skylot/jadx/releases/download/v{JADX_VERSION}/jadx-{JADX_VERSION}.zip",
-        "mkdir -p /opt/jadx && unzip -q /tmp/jadx.zip -d /opt/jadx && rm -f /tmp/jadx.zip && ln -sf /opt/jadx/bin/jadx /usr/local/bin/jadx",
-        f"mkdir -p /opt/jadx-headless-mcp && curl -fsSL -o /opt/jadx-headless-mcp/jadx-headless-mcp-{JADX_HEADLESS_MCP_VERSION}-all.jar https://github.com/1013503897/jadx-headless-mcp/releases/download/v{JADX_HEADLESS_MCP_VERSION}/jadx-headless-mcp-{JADX_HEADLESS_MCP_VERSION}-all.jar",
-        f"curl -fsSL -o /usr/local/bin/apktool.jar https://github.com/iBotPeaches/Apktool/releases/download/v{APKTOOL_VERSION}/apktool_{APKTOOL_VERSION}.jar",
-        "printf '#!/bin/sh\\nexec java -jar /usr/local/bin/apktool.jar \"$@\"\\n' > /usr/local/bin/apktool && chmod +x /usr/local/bin/apktool",
-        f"cat > /etc/profile.d/rea.sh << 'REA_EOF'\nexport JAVA_HOME=/opt/java/temurin-21\nexport GHIDRA_INSTALL_DIR=/opt/ghidra/ghidra_{GHIDRA_VERSION}_PUBLIC\nexport REA_GHIDRA_STARTUP_TIMEOUT_MS=120000\nexport REA_MCP_MAX_RESPONSE_BYTES=52428800\nexport REA_JADX_MCP_JAR=/opt/jadx-headless-mcp/jadx-headless-mcp-{JADX_HEADLESS_MCP_VERSION}-all.jar\nexport PATH=/opt/java/temurin-21/bin:/opt/jadx/bin:$PATH\nREA_EOF",
-         "chmod 644 /etc/profile.d/rea.sh",
-         "bash -c 'source /etc/profile.d/rea.sh; rea setup --client opencode --yes'",
-         "mkdir -p /opt/forensic_analysis/volatility3/symbols",
-         "curl -fsSL https://downloads.volatilityfoundation.org/volatility3/symbols/windows.zip -o /tmp/windows.zip",
-         "curl -fsSL https://downloads.volatilityfoundation.org/volatility3/symbols/linux.zip -o /tmp/linux.zip",
-         "curl -fsSL https://downloads.volatilityfoundation.org/volatility3/symbols/mac.zip -o /tmp/mac.zip",
-         "unzip -q /tmp/windows.zip -d /opt/forensic_analysis/volatility3/symbols",
-         "unzip -q /tmp/linux.zip -d /opt/forensic_analysis/volatility3/symbols",
-         "unzip -q /tmp/mac.zip -d /opt/forensic_analysis/volatility3/symbols",
-         "rm -f /tmp/windows.zip /tmp/linux.zip /tmp/mac.zip",
-         f"curl -fsSL -o /usr/local/bin/pspy64 https://github.com/DominicBreuker/pspy/releases/download/{PSPY_VERSION}/pspy64",
-         "echo 'c93f29a5cc1347bdb90e14a12424e6469c8cfea9a20b800bc249755f0043a3bb  /usr/local/bin/pspy64' | sha256sum -c -",
-         "chmod +x /usr/local/bin/pspy64",
-         *get_ssh_setup_commands()
-    )
-    .add_local_python_source(
-        "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
-        "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "runtime.vnc_browser", "ui.quotes_loader"
-    )
-    .add_local_file(os.path.join(_IMAGES_DIR, "..", "ui", "quotes.json"), "/etc/quotes.json")
-    .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "opencode.json"), "/etc/devbox/opencode.json")
-    .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "tmux.conf"), "/etc/devbox/tmux.conf")
-)
-
-llm_playroom_image = (
-    _apt_install(
-        create_base_minimal_image(),
-        "pciutils",
-        "lshw",
-        "zstd",
-    )
-    .run_commands(
-        # Install Ollama
-        "curl -fsSL https://ollama.com/install.sh | bash",
-        *get_ssh_setup_commands()
-    )
-    .add_local_python_source(
-        "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
-        "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader"
-    )
-    .add_local_file(os.path.join(_IMAGES_DIR, "..", "ui", "quotes.json"), "/etc/quotes.json")
-    .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "tmux.conf"), "/etc/devbox/tmux.conf")
-)
-
-llamacpp_cpu_image = (
-    _apt_install(
-        create_base_minimal_image(),
-        "libssl3",
-        "libcurl4",
-        "zlib1g",
-    )
-    .pip_install(
-        "exa-py",
-        "openai",
-        "httpx",
-        "hf",
-        "huggingface_hub",
-        "hf_transfer",
-    )
-    .run_commands(
-        # Download and extract prebuilt llama.cpp binaries
-        f"curl -L -o /tmp/llama.tar.gz https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_VERSION}/llama-{LLAMACPP_VERSION}-bin-ubuntu-x64.tar.gz",
-        "mkdir -p /opt/llama.cpp",
-        "tar -xzf /tmp/llama.tar.gz -C /opt/llama.cpp --strip-components=1",
-        "rm /tmp/llama.tar.gz",
-
-        # symlinks for easy access
-        "ln -sf /opt/llama.cpp/llama-cli /usr/local/bin/llama-cli",
-        "ln -sf /opt/llama.cpp/llama-server /usr/local/bin/llama-server",
-        "ln -sf /opt/llama.cpp/llama-bench /usr/local/bin/llama-bench",
-        "ln -sf /opt/llama.cpp/llama-mtmd-cli /usr/local/bin/llama-mtmd-cli",
-
-        *get_ssh_setup_commands()
-    )
-    .add_local_python_source(
-        "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
-        "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "integrations.exa_helper", "integrations.exa_proxy", "ui.quotes_loader",
-        "runtime.llamacpp_runtime", "devbox_core.llamacpp_models"
-    )
-    .add_local_file(os.path.join(_IMAGES_DIR, "..", "ui", "quotes.json"), "/etc/quotes.json")
-    .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "tmux.conf"), "/etc/devbox/tmux.conf")
-)
-
-rdp_devbox_image = (
+# Shared xrdp + XFCE desktop layer for the RDP Desktop Box and both Forensics
+# boxes. Carries no add_local_* calls: Modal rejects build steps after a
+# local-file mount, so each concrete image appends those last.
+_rdp_desktop_layer = (
     _apt_install(
         create_base_devbox_image(),
         "xrdp",
@@ -423,12 +317,132 @@ EOF
 ''',
         "chmod +x /etc/xrdp/load_pw_modules.sh",
         # Set root password for RDP (needed for desktop)
-        'echo "root:devbox123" | chpasswd',
+        f'echo "{RDP_USER}:{RDP_PASSWORD}" | chpasswd',
+        *get_ssh_setup_commands()
+    )
+)
+
+forensic_analysis_image = (
+    _apt_install(
+        _rdp_desktop_layer,
+        "git", "gdb", "binwalk", "tshark", "wabt", "unzip", "binutils",
+        *FORENSIC_APT_PACKAGES,
+        *WORDPRESS_APT_PACKAGES,
+    )
+    .pip_install(*DOWNLOAD_PIP_PACKAGES, "volatility3", *FORENSIC_PIP_PACKAGES)
+    .run_commands(
+        f"curl -fsSL https://deb.nodesource.com/setup_{NODE_MAJOR_VERSION}.x | bash -",
+        "apt-get install -y nodejs",
+        f"npm install -g rea-agents@{REA_AGENTS_VERSION}",
+        "mkdir -p /root/.config/opencode /root/.local/share/opencode /root/.cache/opencode",
+        "curl -fsSL https://opencode.ai/install | bash",
+        "ln -sf /root/.opencode/bin/opencode /usr/local/bin/opencode",
+        "mkdir -p /opt/java",
+        f"curl -fsSL -o /tmp/temurin21.tar.gz https://github.com/adoptium/temurin21-binaries/releases/download/jdk-{TEMURIN_JDK_VERSION.replace('+', '%2B')}/OpenJDK21U-jdk_x64_linux_hotspot_{TEMURIN_JDK_VERSION.split('+')[0]}_{TEMURIN_JDK_VERSION.split('+')[1]}.tar.gz",
+        "tar -xzf /tmp/temurin21.tar.gz -C /opt/java",
+        f"ln -sfn /opt/java/jdk-{TEMURIN_JDK_VERSION} /opt/java/temurin-21",
+        "rm -f /tmp/temurin21.tar.gz",
+        "mkdir -p /opt/ghidra",
+        f"curl -fsSL -o /tmp/ghidra.zip https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_{GHIDRA_VERSION}_build/ghidra_{GHIDRA_VERSION}_PUBLIC_{GHIDRA_BUILD}.zip",
+        "unzip -q /tmp/ghidra.zip -d /opt/ghidra",
+        "rm -f /tmp/ghidra.zip",
+        f"curl -fsSL -o /tmp/jadx.zip https://github.com/skylot/jadx/releases/download/v{JADX_VERSION}/jadx-{JADX_VERSION}.zip",
+        "mkdir -p /opt/jadx && unzip -q /tmp/jadx.zip -d /opt/jadx && rm -f /tmp/jadx.zip && ln -sf /opt/jadx/bin/jadx /usr/local/bin/jadx",
+        f"mkdir -p /opt/jadx-headless-mcp && curl -fsSL -o /opt/jadx-headless-mcp/jadx-headless-mcp-{JADX_HEADLESS_MCP_VERSION}-all.jar https://github.com/1013503897/jadx-headless-mcp/releases/download/v{JADX_HEADLESS_MCP_VERSION}/jadx-headless-mcp-{JADX_HEADLESS_MCP_VERSION}-all.jar",
+        f"curl -fsSL -o /usr/local/bin/apktool.jar https://github.com/iBotPeaches/Apktool/releases/download/v{APKTOOL_VERSION}/apktool_{APKTOOL_VERSION}.jar",
+        "printf '#!/bin/sh\\nexec java -jar /usr/local/bin/apktool.jar \"$@\"\\n' > /usr/local/bin/apktool && chmod +x /usr/local/bin/apktool",
+        f"cat > /etc/profile.d/rea.sh << 'REA_EOF'\nexport JAVA_HOME=/opt/java/temurin-21\nexport GHIDRA_INSTALL_DIR=/opt/ghidra/ghidra_{GHIDRA_VERSION}_PUBLIC\nexport REA_GHIDRA_STARTUP_TIMEOUT_MS=120000\nexport REA_MCP_MAX_RESPONSE_BYTES=52428800\nexport REA_JADX_MCP_JAR=/opt/jadx-headless-mcp/jadx-headless-mcp-{JADX_HEADLESS_MCP_VERSION}-all.jar\nexport PATH=/opt/java/temurin-21/bin:/opt/jadx/bin:$PATH\nREA_EOF",
+         "chmod 644 /etc/profile.d/rea.sh",
+         "bash -c 'source /etc/profile.d/rea.sh; rea setup --client opencode --yes'",
+         "mkdir -p /opt/forensic_analysis/volatility3/symbols",
+         "curl -fsSL https://downloads.volatilityfoundation.org/volatility3/symbols/windows.zip -o /tmp/windows.zip",
+         "curl -fsSL https://downloads.volatilityfoundation.org/volatility3/symbols/linux.zip -o /tmp/linux.zip",
+         "curl -fsSL https://downloads.volatilityfoundation.org/volatility3/symbols/mac.zip -o /tmp/mac.zip",
+         "unzip -q /tmp/windows.zip -d /opt/forensic_analysis/volatility3/symbols",
+         "unzip -q /tmp/linux.zip -d /opt/forensic_analysis/volatility3/symbols",
+         "unzip -q /tmp/mac.zip -d /opt/forensic_analysis/volatility3/symbols",
+         "rm -f /tmp/windows.zip /tmp/linux.zip /tmp/mac.zip",
+         f"curl -fsSL -o /usr/local/bin/pspy64 https://github.com/DominicBreuker/pspy/releases/download/{PSPY_VERSION}/pspy64",
+         "echo 'c93f29a5cc1347bdb90e14a12424e6469c8cfea9a20b800bc249755f0043a3bb  /usr/local/bin/pspy64' | sha256sum -c -",
+         "chmod +x /usr/local/bin/pspy64",
+         # The gem is installed here; WORDPRESS_APT_PACKAGES only carries Ruby.
+         f"gem install {' '.join(WORDPRESS_GEM_PACKAGES)} --version {WPSCAN_VERSION} --no-document --bindir /usr/local/bin",
+         f"test -x /usr/local/bin/{WORDPRESS_GEM_PACKAGES[0]}",
+         *get_ssh_setup_commands()
+    )
+    .add_local_python_source(
+        "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
+        "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader"
+    )
+    .add_local_file(os.path.join(_IMAGES_DIR, "..", "ui", "quotes.json"), "/etc/quotes.json")
+    .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "opencode.json"), "/etc/devbox/opencode.json")
+    .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "tmux.conf"), "/etc/devbox/tmux.conf")
+)
+
+llm_playroom_image = (
+    _apt_install(
+        create_base_minimal_image(),
+        "pciutils",
+        "lshw",
+        "zstd",
+    )
+    .run_commands(
+        # Install Ollama
+        "curl -fsSL https://ollama.com/install.sh | bash",
         *get_ssh_setup_commands()
     )
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
-        "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "ui.quotes_loader"
+        "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader"
+    )
+    .add_local_file(os.path.join(_IMAGES_DIR, "..", "ui", "quotes.json"), "/etc/quotes.json")
+    .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "tmux.conf"), "/etc/devbox/tmux.conf")
+)
+
+llamacpp_cpu_image = (
+    _apt_install(
+        create_base_minimal_image(),
+        "libssl3",
+        "libcurl4",
+        "zlib1g",
+    )
+    .pip_install(
+        "exa-py",
+        "openai",
+        "httpx",
+        "hf",
+        "huggingface_hub",
+        "hf_transfer",
+    )
+    .run_commands(
+        # Download and extract prebuilt llama.cpp binaries
+        f"curl -L -o /tmp/llama.tar.gz https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_VERSION}/llama-{LLAMACPP_VERSION}-bin-ubuntu-x64.tar.gz",
+        "mkdir -p /opt/llama.cpp",
+        "tar -xzf /tmp/llama.tar.gz -C /opt/llama.cpp --strip-components=1",
+        "rm /tmp/llama.tar.gz",
+
+        # symlinks for easy access
+        "ln -sf /opt/llama.cpp/llama-cli /usr/local/bin/llama-cli",
+        "ln -sf /opt/llama.cpp/llama-server /usr/local/bin/llama-server",
+        "ln -sf /opt/llama.cpp/llama-bench /usr/local/bin/llama-bench",
+        "ln -sf /opt/llama.cpp/llama-mtmd-cli /usr/local/bin/llama-mtmd-cli",
+
+        *get_ssh_setup_commands()
+    )
+    .add_local_python_source(
+        "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
+        "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "integrations.exa_helper", "integrations.exa_proxy", "ui.quotes_loader",
+        "runtime.llamacpp_runtime", "devbox_core.llamacpp_models"
+    )
+    .add_local_file(os.path.join(_IMAGES_DIR, "..", "ui", "quotes.json"), "/etc/quotes.json")
+    .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "tmux.conf"), "/etc/devbox/tmux.conf")
+)
+
+rdp_devbox_image = (
+    _rdp_desktop_layer
+    .add_local_python_source(
+        "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
+        "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader"
     )
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "ui", "quotes.json"), "/etc/quotes.json")
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "tmux.conf"), "/etc/devbox/tmux.conf")

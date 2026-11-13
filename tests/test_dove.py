@@ -218,6 +218,17 @@ def _functions() -> dict[str, str]:
     }
 
 
+def _desktop_layer() -> str:
+    source = IMAGES.read_text(encoding="utf-8")
+    for node in _images_tree().body:
+        if (
+            isinstance(node, ast.Assign)
+            and getattr(node.targets[0], "id", None) == "_rdp_desktop_layer"
+        ):
+            return ast.get_source_segment(source, node) or ""
+    raise AssertionError("_rdp_desktop_layer assignment missing")
+
+
 def test_both_base_builders_install_dove():
     functions = _functions()
     for builder in BASE_BUILDERS:
@@ -240,10 +251,17 @@ def test_every_image_reaches_dove():
     """Each image either wires dove itself or inherits a base that does."""
     functions = _functions()
     inherited = any("/usr/local/bin/dove" in functions[b] for b in BASE_BUILDERS)
+    # The RDP desktop layer is shared by the RDP and Forensics images and
+    # derives from a base builder, so chaining from it still reaches dove.
+    layer = _desktop_layer()
+    assert any(f"{builder}(" in layer for builder in BASE_BUILDERS)
 
     for name, segment in _assignments().items():
         direct = "/usr/local/bin/dove" in segment
-        derives = any(f"{builder}(" in segment for builder in BASE_BUILDERS)
+        derives = any(
+            (f"{builder}(" if builder in BASE_BUILDERS else builder) in segment
+            for builder in (*BASE_BUILDERS, "_rdp_desktop_layer")
+        )
         assert direct or (inherited and derives), f"{name} has no path to dove"
 
 

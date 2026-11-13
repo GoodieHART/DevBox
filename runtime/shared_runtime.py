@@ -23,11 +23,8 @@ from ui.quotes_loader import get_random_quote
 from runtime.cost_tracker import start_session, register_cost_flush, checkpoint
 
 
-# Debian's /etc/xrdp/startwm.sh execs /etc/X11/Xsession, and Xsession only uses
-# ~/.xsession when it is executable. /etc/skel/.xsession never reaches root's
-# pre-existing home, and persistence used to replace it with a mode-0644 empty
-# file, so every login fell through to x-session-manager and died right after
-# authentication.
+# Debian's /etc/xrdp/startwm.sh execs /etc/X11/Xsession, which only honors
+# ~/.xsession when it is executable, so the runtime reinstalls it on each launch.
 XSESSION_LAUNCHER = "/usr/local/bin/startxfce4-wrapper"
 
 # RDP color-depth presets.  Lower values reduce bandwidth at the cost of
@@ -51,6 +48,16 @@ RDP_RECOMMENDED_RESOLUTIONS = {
 # per-session channel server and the XFCE session itself. The xrdp and
 # xrdp-sesman daemons run all the time, so they are not activity signals.
 RDP_SESSION_PATTERN = "xrdp-chansrv|xfce4-session"
+
+# Persisted RDP dotfiles and desktop state. `.xsession` is the session launcher,
+# not user state: a persisted copy is empty and non-executable, and Xsession then
+# starts no desktop.
+RDP_DESKTOP_ITEMS = [
+    ".bash_history", ".bashrc", ".profile", ".viminfo", ".vimrc",
+    ".gitconfig", ".ssh/config", ".ssh/known_hosts",
+    ".config/xfce4", ".local/share/xfce4", ".cache/sessions",
+    "Desktop",
+]
 
 
 def _resolve_rdp_max_bpp(rdp_quality="auto", rdp_max_bpp=None):
@@ -111,9 +118,8 @@ def _configure_xrdp_quality(max_bpp):
 def install_xsession_launcher(home: str = "/root") -> None:
     """Write an executable `~/.xsession` that starts the XFCE wrapper.
 
-    Run-time, not build-time: `restore_backup()` wipes `/root` and
-    `setup_persistence()` owns the paths it links, so the launcher has to be
-    (re)installed after both, on every launch.
+    `restore_backup()` wipes `/root` and `setup_persistence()` owns the paths it
+    links, so the launcher is reinstalled after both on every launch.
     """
     path = os.path.join(home, ".xsession")
     if os.path.islink(path):
@@ -148,6 +154,55 @@ def count_rdp_sessions() -> int | None:
         return int(result.stdout.strip() or 0)
     except ValueError:
         return None
+
+
+def prepare_xfce_session() -> None:
+    """Start D-Bus and create the state directories an xrdp/XFCE login needs.
+
+    Runs after `setup_persistence()` and only ensures the `/root` config dirs,
+    so the persisted symlinks survive.
+    """
+    os.makedirs("/run/dbus", exist_ok=True)
+    # A stale pid file makes a forked system bus refuse to start in a reused
+    # container image.
+    subprocess.run(
+        ["rm", "-f", "/run/dbus/pid", "/run/dbus/system_bus_socket"],
+        check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    subprocess.Popen(
+        ["dbus-daemon", "--system", "--fork"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    subprocess.run(["mkdir", "-p", "/root/.config/xfce4"], check=True)
+    subprocess.run(["mkdir", "-p", "/root/.cache/sessions"], check=True)
+    subprocess.run(["chown", "-R", "root:root", "/root/.config"], check=False)
+    subprocess.run(["chown", "-R", "root:root", "/root/.cache"], check=False)
+
+    os.environ.setdefault("XDG_CONFIG_DIRS", "/etc/xdg")
+    os.environ.setdefault("XDG_DATA_DIRS", "/usr/local/share:/usr/share")
+    os.environ.setdefault("XDG_RUNTIME_DIR", "/tmp/xdg-runtime")
+    os.makedirs("/tmp/xdg-runtime", exist_ok=True)
+    os.chmod("/tmp/xdg-runtime", 0o700)
+
+
+def start_rdp_services() -> None:
+    """Start xrdp and its session manager for a running desktop."""
+    os.makedirs("/var/run/xrdp", exist_ok=True)
+    subprocess.Popen(["/usr/sbin/xrdp"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.Popen(["/usr/sbin/xrdp-sesman"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def print_rdp_connection(tunnel) -> None:
+    """Print the RDP address and static credentials for a Modal tunnel."""
+    from devbox_core.config import RDP_PASSWORD, RDP_USER
+
+    print("\n" + "=" * 60)
+    print("🖥️ Your RDP Desktop is ready!")
+    print("=" * 60)
+    print(f"\n📡 RDP Address: {tunnel.host}:{tunnel.unencrypted_port}")
+    print(f"👤 Username: {RDP_USER}")
+    print(f"🔑 Password: {RDP_PASSWORD}")
+    print("\n" + "=" * 60)
 
 
 def install_extra_packages(extra_packages: list[str] | None) -> None:
@@ -400,21 +455,11 @@ def run_rdp_devbox_shared(extra_packages=None, devbox_type="rdp_devbox", resourc
     
     inject_ssh_key()
     
-    # `.xsession` is the session launcher, not user state, so it is deliberately
-    # NOT persisted: doing so replaced root's launcher with an empty 0644 file on
-    # the volume and no login could start a desktop.
-    rdp_items = [
-        ".bash_history", ".bashrc", ".profile", ".viminfo", ".vimrc",
-        ".gitconfig", ".ssh/config", ".ssh/known_hosts",
-        ".config/xfce4", ".local/share/xfce4", ".cache/sessions",
-        "Desktop",
-    ]
-    setup_persistence(rdp_items)
+    setup_persistence(RDP_DESKTOP_ITEMS)
     install_xsession_launcher()
 
-    # Cargo is not installed in this image. Older persisted shell profiles may
-    # still source its environment file unconditionally, and that missing-file
-    # source aborts /etc/xrdp/startwm.sh before XFCE can start.
+    # Cargo is absent from this image, and a persisted profile that sources
+    # ~/.cargo/env aborts /etc/xrdp/startwm.sh before XFCE can start.
     for shell_profile in (".profile", ".bashrc"):
         profile_path = os.path.join("/root", shell_profile)
         if os.path.isfile(profile_path):
@@ -435,21 +480,8 @@ def run_rdp_devbox_shared(extra_packages=None, devbox_type="rdp_devbox", resourc
         print(f"[cost_tracker] init failed: {_e}", file=sys.stderr)
 
     install_extra_packages(extra_packages)
-    
-    # Setup XFCE environment
-    # Start D-Bus daemon for xfconfd. A stale pid file can make the forked
-    # daemon refuse to start in a reused container image.
-    os.makedirs("/run/dbus", exist_ok=True)
-    subprocess.run(["rm", "-f", "/run/dbus/pid", "/run/dbus/system_bus_socket"],
-                   check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.Popen(["dbus-daemon", "--system", "--fork"],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    
-    # Make sure the XFCE config directories exist. They must NOT be deleted
-    # here: setup_persistence() has already replaced them with symlinks into
-    # /data, and removing them discarded the user's XFCE settings every launch.
-    subprocess.run(["mkdir", "-p", "/root/.config/xfce4"], check=True)
-    subprocess.run(["mkdir", "-p", "/root/.cache/sessions"], check=True)
+
+    prepare_xfce_session()
 
     # Apply the requested RDP color-depth preset before xrdp starts.  RDP
     # resolution itself is negotiated by the client, so the server-side knob is
@@ -465,29 +497,12 @@ def run_rdp_devbox_shared(extra_packages=None, devbox_type="rdp_devbox", resourc
     print("[RDP] Also set the mstsc color depth to match or below the server max_bpp.",
           file=sys.stderr)
 
-    # Set permissions
-    subprocess.run(["chown", "-R", "root:root", "/root/.config"], check=False)
-    subprocess.run(["chown", "-R", "root:root", "/root/.cache"], check=False)
-    
-    # XDG environment variables
-    os.environ.setdefault('XDG_CONFIG_DIRS', '/etc/xdg')
-    os.environ.setdefault('XDG_DATA_DIRS', '/usr/local/share:/usr/share')
-    os.environ.setdefault('XDG_RUNTIME_DIR', '/tmp/xdg-runtime')
-    os.makedirs('/tmp/xdg-runtime', exist_ok=True)
-    os.chmod('/tmp/xdg-runtime', 0o700)
-    
-    # Start RDP services
-    subprocess.Popen(["/usr/sbin/xrdp"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.Popen(["/usr/sbin/xrdp-sesman"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    
-    with modal.forward(3389, unencrypted=True) as tunnel:
-        print("\n" + "=" * 60)
-        print("🖥️ Your RDP Desktop is ready!")
-        print("=" * 60)
-        print(f"\n📡 RDP Address: {tunnel.host}:{tunnel.unencrypted_port}")
-        print("👤 Username: root")
-        print("🔑 Password: devbox123")
-        print("\n" + "=" * 60)
+    start_rdp_services()
+
+    from devbox_core.config import RDP_PORT
+
+    with modal.forward(RDP_PORT, unencrypted=True) as tunnel:
+        print_rdp_connection(tunnel)
         
         idle_time = 0
         check_interval = 15
@@ -499,14 +514,10 @@ def run_rdp_devbox_shared(extra_packages=None, devbox_type="rdp_devbox", resourc
             except Exception:
                 pass
             
-            # Check for active RDP sessions. A connected desktop runs
-            # xrdp-chansrv plus xfce4-session; the old `ps | grep -c
-            # 'xrdp-sesman.*:'` pattern never matched, so the box shut itself
-            # down mid-session once IDLE_TIMEOUT_SECONDS elapsed.
             active_sessions = count_rdp_sessions()
             if active_sessions is None:
-                # Probe failed: do NOT count it as idle, or the desktop dies
-                # under an active user.
+                # A failed probe is not idleness; the desktop would die under an
+                # active user.
                 print("[DEBUG] RDP session probe unavailable; not counting as idle.", file=sys.stderr)
             elif active_sessions > 0:
                 idle_time = 0
@@ -520,13 +531,10 @@ def run_rdp_devbox_shared(extra_packages=None, devbox_type="rdp_devbox", resourc
 
 
 def run_opencode_shared(extra_packages=None, resources=None, forensic=False):
-    """Lifecycle for the dedicated OpenCode box: SSH + `opencode web` server.
+    """Run the OpenCode box: SSH plus an `opencode web` server.
 
-    Keeps the exact same provisioning primitives as the SSH boxes
-    (backup restore, persistence symlinks, SSH key injection, atexit backup)
-    then starts sshd AND `opencode web --port 4096 --hostname 0.0.0.0` with
-    workdir /data/oc-sessions. Both ports are forwarded; idle shutdown resets on either
-    SSH activity or HTTP activity against the OpenCode server.
+    Same provisioning as the SSH boxes, then sshd and the web server. SSH, web,
+    and (on the forensics box) RDP activity reset the idle timer.
     """
     import os
     import subprocess
@@ -540,11 +548,32 @@ def run_opencode_shared(extra_packages=None, resources=None, forensic=False):
         OPENCODE_UPLOADS_DIR,
         GHIDRA_VERSION,
         JADX_HEADLESS_MCP_VERSION,
+        RDP_PORT,
     )
     restore_backup()
 
-    setup_persistence(get_persistence_items("forensic_analysis" if forensic else "opencode"))
+    persistence_items = get_persistence_items("forensic_analysis" if forensic else "opencode")
+    if forensic:
+        # The forensics box also runs the xrdp/XFCE desktop, so it persists both
+        # states. dict.fromkeys de-duplicates without reordering.
+        persistence_items = list(dict.fromkeys(persistence_items + RDP_DESKTOP_ITEMS))
+    setup_persistence(persistence_items)
+    if forensic:
+        install_xsession_launcher()
     seed_opencode_config()
+
+    # Cargo is absent from this image, and a persisted profile that sources
+    # ~/.cargo/env aborts /etc/xrdp/startwm.sh before XFCE can start.
+    if forensic:
+        for shell_profile in (".profile", ".bashrc"):
+            profile_path = os.path.join("/root", shell_profile)
+            if os.path.isfile(profile_path):
+                with open(profile_path, "r", encoding="utf-8") as handle:
+                    lines = handle.readlines()
+                cleaned = [line for line in lines if ".cargo/env" not in line]
+                if cleaned != lines:
+                    with open(profile_path, "w", encoding="utf-8") as handle:
+                        handle.writelines(cleaned)
 
     # Register backup on exit (same target as SSH boxes)
     register_custom_backup("/root", "/data/root_full_backup.tar.gz")
@@ -565,6 +594,7 @@ def run_opencode_shared(extra_packages=None, resources=None, forensic=False):
     ║  {icon} {name:<30} ║
     ║  {'💾 Persistent: /data':<36} ║
     ║  {'🌐 OpenCode web on :4096':<36} ║
+    ║  {'🖥️ RDP desktop on :3389':<36} ║
     ╚══════════════════════════════════════╝
     """)
     try:
@@ -692,51 +722,77 @@ def run_opencode_shared(extra_packages=None, resources=None, forensic=False):
             print(f"[DEBUG] OpenCode health check failed: {e}", file=sys.stderr)
             return False
 
-    # Nested tunnels keep BOTH alive for the whole session (exiting a `with`
-    # block closes that tunnel — see llamacpp pattern which drops SSH early)
-    with modal.forward(22, unencrypted=True) as ssh_tunnel:
-        with modal.forward(OPENCODE_PORT, unencrypted=True) as web_tunnel:
-            ssh_cmd = f"ssh root@{ssh_tunnel.host} -p {ssh_tunnel.unencrypted_port} -t \"tmux attach -t devbox\""
-            web_url = f"http://{web_tunnel.host}:{web_tunnel.unencrypted_port}"
-            print("\n" + "=" * 60)
-            print("🤖 Your OpenCode Box is ready!")
-            print("=" * 60)
-            print(f"\n🌐 OpenCode web: {web_url}")
-            print(f"   (Open in browser; attach TUI via SSH with `opencode attach {web_url}`)")
-            print(f"\n🔐 SSH: {ssh_cmd}")
-            print(f"📁 Workdir: {workdir} (persistent)")
-            print(f"⏰ Idle timeout: {OPENCODE_IDLE_TIMEOUT_SECONDS // 60} minutes (SSH or web activity resets it)")
-            print(f"{auth_note}")
-            print("\n" + "=" * 60)
+    # Desktop only for the forensics box; the AI Coding box stays headless.
+    if forensic:
+        prepare_xfce_session()
+        forensic_max_bpp = _resolve_rdp_max_bpp("auto", None)
+        _configure_xrdp_quality(forensic_max_bpp)
+        start_rdp_services()
+        print(
+            f"[RDP] Forensics desktop ready (max_bpp={forensic_max_bpp}).",
+            file=sys.stderr,
+        )
 
-            idle_time = 0
-            check_interval = 15
-            while idle_time < OPENCODE_IDLE_TIMEOUT_SECONDS:
-                time.sleep(check_interval)
-                try:
-                    checkpoint()
-                except Exception:
-                    pass
-                ssh_result = subprocess.run(
-                    "ps -ef | grep 'sshd: root@' | grep -v grep",
-                    shell=True, capture_output=True,
-                )
-                ssh_active = bool(ssh_result.stdout)
-                # HTTP listener alone is NOT activity — only a successful
-                # response resets the timer, so an idle-but-running server
-                # still shuts down and saves cost.
-                web_active = _http_active()
-                active = ssh_active or web_active
-                print(
-                    f"[DEBUG] OpenCode idle check: ssh={ssh_active} web={web_active} idle={idle_time}s",
-                    file=sys.stderr,
-                )
-                if active:
-                    idle_time = 0
-                else:
-                    idle_time += check_interval
-                    remaining = OPENCODE_IDLE_TIMEOUT_SECONDS - idle_time
-                    print(f"No activity. Shutting down in {remaining}s...", file=sys.stderr)
+    # ExitStack keeps every tunnel open for the whole session; leaving a `with`
+    # block closes it. RDP is forwarded only when the desktop runs.
+    with contextlib.ExitStack() as tunnels:
+        ssh_tunnel = tunnels.enter_context(modal.forward(22, unencrypted=True))
+        web_tunnel = tunnels.enter_context(modal.forward(OPENCODE_PORT, unencrypted=True))
+        rdp_tunnel = (
+            tunnels.enter_context(modal.forward(RDP_PORT, unencrypted=True))
+            if forensic else None
+        )
 
-            print("\nIdle timeout reached. Shutting down.", file=sys.stderr)
+        ssh_cmd = f"ssh root@{ssh_tunnel.host} -p {ssh_tunnel.unencrypted_port} -t \"tmux attach -t devbox\""
+        web_url = f"http://{web_tunnel.host}:{web_tunnel.unencrypted_port}"
+        print("\n" + "=" * 60)
+        print("🤖 Your OpenCode Box is ready!")
+        print("=" * 60)
+        print(f"\n🌐 OpenCode web: {web_url}")
+        print(f"   (Open in browser; attach TUI via SSH with `opencode attach {web_url}`)")
+        print(f"\n🔐 SSH: {ssh_cmd}")
+        print(f"📁 Workdir: {workdir} (persistent)")
+        if rdp_tunnel is not None:
+            print_rdp_connection(rdp_tunnel)
+        activity = "SSH, web, or RDP" if forensic else "SSH or web"
+        print(f"⏰ Idle timeout: {OPENCODE_IDLE_TIMEOUT_SECONDS // 60} minutes ({activity} activity resets it)")
+        print(f"{auth_note}")
+        print("\n" + "=" * 60)
+
+        idle_time = 0
+        check_interval = 15
+        while idle_time < OPENCODE_IDLE_TIMEOUT_SECONDS:
+            time.sleep(check_interval)
+            try:
+                checkpoint()
+            except Exception:
+                pass
+            ssh_result = subprocess.run(
+                "ps -ef | grep 'sshd: root@' | grep -v grep",
+                shell=True, capture_output=True,
+            )
+            ssh_active = bool(ssh_result.stdout)
+            # An HTTP listener alone is not activity; only a successful response
+            # resets the timer, so an idle server still shuts down.
+            web_active = _http_active()
+            rdp_active = False
+            if forensic:
+                rdp_sessions = count_rdp_sessions()
+                # A failed probe must not count as idle, or the desktop dies
+                # under an active user.
+                rdp_active = bool(rdp_sessions) or rdp_sessions is None
+            active = ssh_active or web_active or rdp_active
+            print(
+                f"[DEBUG] OpenCode idle check: ssh={ssh_active} web={web_active} "
+                f"rdp={rdp_active} idle={idle_time}s",
+                file=sys.stderr,
+            )
+            if active:
+                idle_time = 0
+            else:
+                idle_time += check_interval
+                remaining = OPENCODE_IDLE_TIMEOUT_SECONDS - idle_time
+                print(f"No activity. Shutting down in {remaining}s...", file=sys.stderr)
+
+        print("\nIdle timeout reached. Shutting down.", file=sys.stderr)
     server_proc.terminate()

@@ -18,12 +18,17 @@ def names(name):
     }
 
 
-def test_htb_vm_runtime_uses_vm_sandbox_and_required_secret():
+def test_htb_vm_runtime_uses_vm_sandbox_and_profiles_secrets():
     src = source("runtime/htb_vm.py")
+    config = source("devbox_core/config.py")
     assert "modal.Sandbox.create" in src
     assert 'runtime="vm"' in src
-    assert 'modal.Secret.from_name("htb-vpn"' in src
-    assert 'required_keys=["HTB_OVPN_CONFIG"]' in src
+    assert 'modal.Secret.from_name(' in src
+    assert 'required_keys=[profile["key"]]' in src
+    # Both HTB networks are declared in config and resolved at runtime.
+    assert '"htb-vpn"' in config and '"htb-starting-point"' in config
+    assert '"HTB_OVPN_CONFIG"' in config and '"HTB_SP_OVPN_CONFIG"' in config
+    assert "resolve_htb_networks" in src
     assert "sandbox.tunnels" in src
     assert "exit_code = process.wait()" in src
     assert "stderr = process.stderr.read()" in src
@@ -36,9 +41,9 @@ def test_htb_vm_runtime_uses_vm_sandbox_and_required_secret():
     assert "OPENCODE_IDLE_TIMEOUT_SECONDS if forensic else IDLE_TIMEOUT_SECONDS" in src
 
 
-def test_htb_entrypoint_starts_openvpn_before_services():
+def test_htb_entrypoint_starts_every_vpn_before_services():
     src = source("runtime/htb_vm.py")
-    assert "openvpn --config /run/devbox/htb.ovpn" in src
+    assert 'openvpn --config "/run/devbox/htb-$label.ovpn"' in src
     assert "Initialization Sequence Completed" in src
     assert src.index("openvpn --config") < src.index("/usr/sbin/sshd")
 

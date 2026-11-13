@@ -66,13 +66,18 @@ def _called_names(node: ast.AST) -> list[str]:
 
 
 def _rdp_image_commands() -> list[str]:
-    """Every string passed to `.run_commands(...)` on the RDP image."""
+    """Every string passed to `.run_commands(...)` on the RDP desktop layer.
+
+    The desktop build steps live in `_rdp_desktop_layer`, which both the RDP
+    and Forensics images chain from; the `rdp_devbox_image` assignment only
+    appends local files.
+    """
     commands = []
     for node in _tree(IMAGES).body:
         if not (
             isinstance(node, ast.Assign)
             and isinstance(node.targets[0], ast.Name)
-            and node.targets[0].id == "rdp_devbox_image"
+            and node.targets[0].id == "_rdp_desktop_layer"
         ):
             continue
         for sub in ast.walk(node):
@@ -92,10 +97,10 @@ def _rdp_image_commands() -> list[str]:
 def test_rdp_items_does_not_persist_the_session_launcher():
     """Persisting ~/.xsession turned it into an empty file that Xsession skips."""
     items = None
-    for node in ast.walk(_function(SHARED_RUNTIME, RDP_RUNTIME_FUNCTION)):
+    for node in _tree(SHARED_RUNTIME).body:
         if (
             isinstance(node, ast.Assign)
-            and getattr(node.targets[0], "id", None) == "rdp_items"
+            and getattr(node.targets[0], "id", None) == "RDP_DESKTOP_ITEMS"
             and isinstance(node.value, ast.List)
         ):
             items = [
@@ -103,7 +108,7 @@ def test_rdp_items_does_not_persist_the_session_launcher():
                 for element in node.value.elts
                 if isinstance(element, ast.Constant) and isinstance(element.value, str)
             ]
-    assert items is not None, "rdp_items assignment missing"
+    assert items is not None, "RDP_DESKTOP_ITEMS assignment missing"
     assert ".xsession" not in items
 
 
