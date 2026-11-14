@@ -91,15 +91,18 @@ def test_every_image_reaches_the_helper():
         assert direct or derives, f"{name} has no path to the tmux helper"
 
 
-def test_tmux_conf_is_still_mounted_last():
-    steps = (
-        ".add_local_file(", ".add_local_python_source(", ".add_local_dir(",
-        ".run_commands(", ".pip_install(", ".apt_install(",
-    )
+def test_every_image_bakes_the_config_instead_of_mounting_it():
+    # The HTB VM runs in a Sandbox, which never receives add_local_file
+    # mounts, so a mounted tmux.conf leaves the VM on tmux defaults. A copy is
+    # a build step, and Modal rejects build steps after a mount-mode add, so
+    # the copy has to precede the modules and quote catalogue.
     for name, segment in _assignments().items():
-        mounted = segment.rindex('"tmux.conf"')
-        later = [step for step in steps if segment.find(step, mounted) != -1]
-        assert not later, f"{name}: {later} after the tmux.conf mount"
+        line = next((l for l in segment.splitlines() if '"tmux.conf"' in l), None)
+        assert line is not None, f"{name} has no tmux.conf"
+        assert "copy=True" in line, f"{name} mounts tmux.conf instead of baking it"
+        assert segment.index(line) < segment.index(".add_local_python_source("), (
+            f"{name} bakes tmux.conf after a mount-mode add"
+        )
 
 
 # --- the helper itself ------------------------------------------------------
