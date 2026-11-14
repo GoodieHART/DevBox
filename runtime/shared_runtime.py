@@ -19,7 +19,7 @@ import textwrap
 from runtime.persistence_utils import setup_persistence, get_persistence_items
 from runtime.backup_utils import restore_backup, register_custom_backup
 from runtime.utils import inject_ssh_key
-from devbox_core.config import IDLE_TIMEOUT_SECONDS, validate_prohibited_packages
+from devbox_core.config import IDLE_TIMEOUT_SECONDS, OPENCODE_PORT, validate_prohibited_packages
 from ui.quotes_loader import get_random_quote
 from runtime.cost_tracker import start_session, register_cost_flush, checkpoint
 
@@ -177,6 +177,28 @@ def count_rdp_sessions() -> int | None:
         return int(result.stdout.strip() or 0)
     except ValueError:
         return None
+
+
+def count_web_clients(port: int = OPENCODE_PORT) -> int | None:
+    """How many clients hold a connection to the OpenCode port.
+
+    The server answers `/` whether or not anyone is watching, so a 200 response
+    proves nothing. An open tab keeps an SSE connection established, which this
+    counts. Returns `None` when the probe itself failed, so a broken `ss` never
+    shuts the box down under a user.
+    """
+    try:
+        result = subprocess.run(
+            ["ss", "-Htn", "state", "established", f"sport = :{port}"],
+            capture_output=True,
+            text=True,
+        )
+    except OSError as error:
+        print(f"  - WARNING: OpenCode client probe failed: {error}", file=sys.stderr)
+        return None
+    if result.returncode != 0:
+        return None
+    return len([line for line in result.stdout.splitlines() if line.strip()])
 
 
 def prepare_xfce_session() -> None:
@@ -743,14 +765,6 @@ def run_opencode_shared(extra_packages=None, resources=None, forensic=False):
     print(f"✅ OpenCode web ready on {OPENCODE_HOSTNAME}:{OPENCODE_PORT}", file=sys.stderr)
     print(auth_note, file=sys.stderr)
 
-    def _http_active():
-        try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{OPENCODE_PORT}/", timeout=2) as resp:
-                return resp.status < 500
-        except Exception as e:
-            print(f"[DEBUG] OpenCode health check failed: {e}", file=sys.stderr)
-            return False
-
     # Desktop only for the forensics box; the AI Coding box stays headless.
     if forensic:
         prepare_xfce_session()
@@ -783,7 +797,7 @@ def run_opencode_shared(extra_packages=None, resources=None, forensic=False):
         print(f"📁 Workdir: {workdir} (persistent)")
         if rdp_tunnel is not None:
             print_rdp_connection(rdp_tunnel)
-        activity = "SSH, web, or RDP" if forensic else "SSH or web"
+        activity = "SSH, an open OpenCode tab, or RDP" if forensic else "SSH or an open OpenCode tab"
         print(f"⏰ Idle timeout: {OPENCODE_IDLE_TIMEOUT_SECONDS // 60} minutes ({activity} activity resets it)")
         print(f"{auth_note}")
         print("\n" + "=" * 60)
@@ -801,9 +815,10 @@ def run_opencode_shared(extra_packages=None, resources=None, forensic=False):
                 shell=True, capture_output=True,
             )
             ssh_active = bool(ssh_result.stdout)
-            # An HTTP listener alone is not activity; only a successful response
-            # resets the timer, so an idle server still shuts down.
-            web_active = _http_active()
+            # The web server answers requests with nobody attached, so count
+            # connected clients instead of probing for a 200.
+            web_clients = count_web_clients(OPENCODE_PORT)
+            web_active = web_clients is None or web_clients > 0
             rdp_active = False
             if forensic:
                 rdp_sessions = count_rdp_sessions()
@@ -813,7 +828,7 @@ def run_opencode_shared(extra_packages=None, resources=None, forensic=False):
             active = ssh_active or web_active or rdp_active
             print(
                 f"[DEBUG] OpenCode idle check: ssh={ssh_active} web={web_active} "
-                f"rdp={rdp_active} idle={idle_time}s",
+                f"clients={web_clients} rdp={rdp_active} idle={idle_time}s",
                 file=sys.stderr,
             )
             if active:

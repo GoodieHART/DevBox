@@ -14,10 +14,15 @@
 - `jadx` is a wrapper script instead of a symlink, so it also works from the desktop and from `bash -c`, where no login profile has run.
 - Existing volumes have `/opt/jadx/bin` stripped from persisted shell profiles, so the wrapper is not shadowed.
 
+### Fixed
+
+- Fixed the OpenCode idle watchdog: it treated any HTTP 200 from port 4096 as user activity, so AI Coding and Forensics boxes never idled and always ran to their 3-hour hard timeout. Activity now comes from established connections to the port.
+
 ### Validation
 
-- Test suite: 198 tests passed.
+- Test suite: 203 tests passed.
 - Verified on Modal: `ghidra`, `ghidra-headless`, `jadx`, and `jadx-gui` resolve to the wrappers, Ghidra and JADX GUI windows open under Xvfb, `ghidra-headless` imports a binary into `/data/forensics/ghidra`, both desktop icons land in the persisted `~/Desktop`, and the interactive shell exposes the new aliases.
+- Verified on Modal with a 2-minute override: idle advanced while nothing was attached, reset to 0 while an SSE client was connected, and the box shut itself down when the client dropped.
 
 ## DevBox Updates - 2026-11-13
 
@@ -31,7 +36,7 @@
 ### Changed
 
 - The HTB VPN launchers now ask which network to join: Labs, Starting Point, or both at once.
-- Forensics boxes now reset the idle timer on RDP, SSH, or OpenCode web activity.
+- Forensics boxes now reset the idle timer on RDP, SSH, or an open OpenCode tab.
 - The Forensics HTB VM starts xrdp after the VPN is up and exposes RDP on port 3389 alongside SSH and OpenCode.
 - The Forensics image now derives from the shared RDP desktop layer instead of the minimal base image.
 

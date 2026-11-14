@@ -326,7 +326,7 @@ When the box is ready it prints the address and the shared credentials:
 ```
 
 Connect with any RDP client (see the table above). The desktop counts as
-activity: RDP, SSH, and OpenCode web traffic all reset the idle timer, so an
+activity: RDP, SSH, and an open OpenCode tab all reset the idle timer, so an
 active analysis session is never shut down mid-task.
 
 For the Forensics HTB VM specifically, the VPN comes up first: the launcher
@@ -551,7 +551,7 @@ Remember to replace `C:\path\to\your\DevBox\devbox.py` with the actual path to y
 ### Idle Timeouts
 
 - **Standard boxes**: Auto-shutdown after **5 minutes** of no active SSH connection.
-- **AI Coding and Forensics boxes**: Auto-shutdown after **30 minutes** with no SSH, web, or RDP activity.
+- **AI Coding and Forensics boxes**: Auto-shutdown after **30 minutes** with no SSH session, no OpenCode tab, and no RDP session. A background browser tab left open counts as activity.
 - **llama.cpp Research Center**: Extended timeout of **1 hour** to accommodate long-running inference sessions.
 - A countdown warning will appear in the terminal where you ran `modal run` before shutdown.
 
