@@ -97,6 +97,7 @@ OPENCODE_SESSIONS_DIR = "/data/projects"
 OPENCODE_UPLOADS_DIR = "/data/uploads"
 FORENSICS_WORKDIR = "/data/forensics"
 FORENSICS_UPLOADS_DIR = "/data/forensics/uploads"
+GHIDRA_PROJECTS_DIR = "/data/forensics/ghidra"
 
 # RDP desktop access. Shared by the RDP Desktop Box and both Forensics boxes,
 # which copy the same xrdp + XFCE desktop stack.
@@ -203,6 +204,11 @@ FORENSIC_APT_PACKAGES = [
     "firefox-esr",
     "netcat-openbsd",
     "iputils-ping",
+    # AWT links these at runtime, so Ghidra and JADX need them for their GUIs.
+    "libxtst6",
+    "libxi6",
+    "libxrender1",
+    "libxext6",
 ]
 
 FORENSIC_PIP_PACKAGES = [

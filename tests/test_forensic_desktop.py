@@ -11,6 +11,8 @@ credentials, no GUI process, no network.
 import ast
 import pathlib
 
+from runtime import shared_runtime as shared
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SHARED_RUNTIME = ROOT / "runtime" / "shared_runtime.py"
 
@@ -86,6 +88,7 @@ def test_forensic_runtime_starts_the_desktop_and_counts_rdp_activity():
     for name in (
         "prepare_xfce_session",
         "install_xsession_launcher",
+        "install_desktop_shortcuts",
         "start_rdp_services",
         "count_rdp_sessions",
     ):
@@ -134,6 +137,95 @@ def test_htb_prints_rdp_credentials_only_for_the_forensic_vm():
     assert "RDP_USER" in htb and "RDP_PASSWORD" in htb
     forensic_branch = htb.split("if forensic:", 1)[1]
     assert "rdp_tunnel" in forensic_branch
+
+
+# --- tooling shortcuts ---
+
+
+def _shortcut_block() -> str:
+    images = source("devbox_core/images.py")
+    return images.split("def _forensic_shortcut_commands", 1)[1].split(
+        "\nforensic_analysis_image = (", 1
+    )[0]
+
+
+def test_shortcut_commands_are_wired_into_the_forensic_image():
+    assert "*_forensic_shortcut_commands()" in _forensic_block()
+
+
+def test_shortcuts_put_ghidra_and_jadx_on_path():
+    block = _shortcut_block()
+    for wrapper in ('"ghidra":', '"ghidra-headless":', '"jadx":', '"jadx-gui":'):
+        assert wrapper in block, f"missing {wrapper} wrapper"
+    assert "/usr/local/bin/{name}" in block
+    # Install paths stay derived from the version constants.
+    assert "ghidra_{GHIDRA_VERSION}_PUBLIC" in block
+    assert "GHIDRA_PROJECTS_DIR" in block
+    # The wrappers export the JDK themselves for desktop launches.
+    assert "JAVA_HOME" in block and "/opt/java/temurin-21" in block
+
+
+def test_shortcuts_add_desktop_entries():
+    block = _shortcut_block()
+    assert "/usr/share/applications/ghidra.desktop" in block
+    assert "/usr/share/applications/jadx-gui.desktop" in block
+    assert "/root/Desktop/ghidra.desktop" in block
+    assert "/root/Desktop/jadx-gui.desktop" in block
+    assert "Exec=/usr/local/bin/ghidra %f" in block
+    assert "Exec=/usr/local/bin/jadx-gui %f" in block
+    # The icon must exist in the installed themes, or XFCE shows a blank.
+    assert "Icon=application-x-executable" in block
+    assert "Icon=applications-development" in block
+    assert "applications-engineering" not in block
+
+
+def test_shortcuts_reach_non_login_shells():
+    block = _shortcut_block()
+    assert "/etc/profile.d/devbox-forensics.sh" in block
+    assert "/etc/bash.bashrc" in block
+    for alias in (
+        "alias vol3='vol'",
+        "alias vol.py='vol'",
+        "alias volshell3='volshell'",
+        "alias pspy='pspy64'",
+    ):
+        assert alias in block, f"missing {alias}"
+
+
+def test_config_declares_the_ghidra_projects_directory_and_awt_libraries():
+    config = source("devbox_core/config.py")
+    assert 'GHIDRA_PROJECTS_DIR = "/data/forensics/ghidra"' in config
+    for package in ("libxtst6", "libxi6", "libxrender1", "libxext6"):
+        assert f'"{package}"' in config
+
+
+def test_shortcut_wrappers_are_not_shadowed_by_the_jadx_bin_directory():
+    # /opt/jadx/bin ahead of /usr/local/bin would bypass the JAVA_HOME wrappers.
+    for name in ("devbox_core/images.py", "runtime/shared_runtime.py"):
+        text = source(name)
+        assert "/opt/jadx/bin:$PATH" not in text, f"{name} still prepends /opt/jadx/bin"
+
+
+def test_persisted_profiles_drop_the_jadx_bin_directory():
+    # Volumes written before the wrappers exist still prepend /opt/jadx/bin.
+    shared_code = source("runtime/shared_runtime.py")
+    assert 'replace("/opt/jadx/bin:", "")' in shared_code
+    assert 'replace(":/opt/jadx/bin", "")' in shared_code
+
+
+def test_desktop_shortcuts_are_reinstalled_on_launch(tmp_path):
+    source_dir = tmp_path / "applications"
+    source_dir.mkdir()
+    for name in shared.DESKTOP_SHORTCUTS:
+        (source_dir / f"{name}.desktop").write_text("[Desktop Entry]\n", encoding="utf-8")
+
+    home = tmp_path / "root"
+    shared.install_desktop_shortcuts(str(home), str(source_dir))
+
+    for name in shared.DESKTOP_SHORTCUTS:
+        entry = home / "Desktop" / f"{name}.desktop"
+        assert entry.is_file()
+        assert entry.stat().st_mode & 0o111, "desktop entries must be executable"
 
 
 # --- docs ---

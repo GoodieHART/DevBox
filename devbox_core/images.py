@@ -29,6 +29,7 @@ from devbox_core.config import (
     RDP_USER,
     FORENSIC_APT_PACKAGES,
     FORENSIC_PIP_PACKAGES,
+    GHIDRA_PROJECTS_DIR,
     WPSCAN_VERSION,
     WORDPRESS_APT_PACKAGES,
     WORDPRESS_GEM_PACKAGES,
@@ -322,6 +323,108 @@ EOF
     )
 )
 
+
+def _forensic_shortcut_commands() -> list[str]:
+    """PATH wrappers, desktop entries, and shell setup for the forensic toolchain.
+
+    Files are written with printf because Modal parses run_commands as
+    Dockerfile lines, where a heredoc body is not valid.
+    """
+
+    def shell_quote(line: str) -> str:
+        return "'" + line.replace("'", "'\\''") + "'"
+
+    def write(path: str, *lines: str, mode: str = "644") -> str:
+        body = " ".join(shell_quote(line) for line in lines)
+        return f"printf '%s\\n' {body} > {path} && chmod {mode} {path}"
+
+    ghidra_home = f"/opt/ghidra/ghidra_{GHIDRA_VERSION}_PUBLIC"
+    java_home = 'export JAVA_HOME="${JAVA_HOME:-/opt/java/temurin-21}"'
+    ghidra_env = 'export GHIDRA_INSTALL_DIR="${GHIDRA_INSTALL_DIR:-%s}"' % ghidra_home
+    jadx_env = [
+        "#!/bin/sh",
+        java_home,
+        'export PATH="$JAVA_HOME/bin:$PATH"',
+    ]
+
+    wrappers = {
+        "ghidra": [
+            "#!/bin/sh",
+            java_home,
+            ghidra_env,
+            'exec "$GHIDRA_INSTALL_DIR/ghidraRun" "$@"',
+        ],
+        "ghidra-headless": [
+            "#!/bin/sh",
+            java_home,
+            ghidra_env,
+            f"mkdir -p {GHIDRA_PROJECTS_DIR}",
+            f'exec "$GHIDRA_INSTALL_DIR/support/analyzeHeadless" {GHIDRA_PROJECTS_DIR} "$@"',
+        ],
+        "jadx": jadx_env + ['exec /opt/jadx/bin/jadx "$@"'],
+        "jadx-gui": jadx_env + ['exec /opt/jadx/bin/jadx-gui "$@"'],
+    }
+
+    commands = [
+        write(f"/usr/local/bin/{name}", *lines, mode="755")
+        for name, lines in wrappers.items()
+    ]
+    commands += [
+        "mkdir -p /usr/share/applications /root/Desktop",
+        write(
+            "/usr/share/applications/ghidra.desktop",
+            "[Desktop Entry]",
+            "Type=Application",
+            "Name=Ghidra",
+            "GenericName=Reverse Engineering Suite",
+            "Comment=Decompile and analyze native binaries",
+            "Exec=/usr/local/bin/ghidra %f",
+            "Icon=application-x-executable",
+            "Terminal=false",
+            "Categories=Development;Utility;",
+            "MimeType=application/x-executable;application/x-sharedlib;",
+        ),
+        write(
+            "/usr/share/applications/jadx-gui.desktop",
+            "[Desktop Entry]",
+            "Type=Application",
+            "Name=JADX",
+            "GenericName=Dex to Java Decompiler",
+            "Comment=Decompile APK and DEX files",
+            "Exec=/usr/local/bin/jadx-gui %f",
+            "Icon=applications-development",
+            "Terminal=false",
+            "Categories=Development;Utility;",
+            "MimeType=application/java-archive;application/vnd.android.package-archive;",
+        ),
+        "install -m 755 /usr/share/applications/ghidra.desktop /root/Desktop/ghidra.desktop",
+        "install -m 755 /usr/share/applications/jadx-gui.desktop /root/Desktop/jadx-gui.desktop",
+        "update-desktop-database /usr/share/applications >/dev/null 2>&1 || true",
+        write(
+            "/etc/profile.d/devbox-forensics.sh",
+            "# Forensic toolchain shortcuts. Login shells read this file directly;",
+            "# /etc/bash.bashrc sources it for the XFCE terminal and tmux panes.",
+            '[ -n "$DEVBOX_TOOLS_SOURCED" ] && return 0',
+            "DEVBOX_TOOLS_SOURCED=1",
+            "",
+            "if [ -r /etc/profile.d/rea.sh ]; then",
+            "  . /etc/profile.d/rea.sh",
+            "fi",
+            "",
+            "alias ll='ls -alF'",
+            "alias la='ls -A'",
+            "alias vol3='vol'",
+            "alias vol.py='vol'",
+            "alias volshell3='volshell'",
+            "alias pspy='pspy64'",
+        ),
+        "printf '%s\\n' '' '# DevBox forensic toolchain (non-login interactive shells)' "
+        "'if [ -r /etc/profile.d/devbox-forensics.sh ]; then . /etc/profile.d/devbox-forensics.sh; fi' "
+        ">> /etc/bash.bashrc",
+    ]
+    return commands
+
+
 forensic_analysis_image = (
     _apt_install(
         _rdp_desktop_layer,
@@ -347,13 +450,14 @@ forensic_analysis_image = (
         "unzip -q /tmp/ghidra.zip -d /opt/ghidra",
         "rm -f /tmp/ghidra.zip",
         f"curl -fsSL -o /tmp/jadx.zip https://github.com/skylot/jadx/releases/download/v{JADX_VERSION}/jadx-{JADX_VERSION}.zip",
-        "mkdir -p /opt/jadx && unzip -q /tmp/jadx.zip -d /opt/jadx && rm -f /tmp/jadx.zip && ln -sf /opt/jadx/bin/jadx /usr/local/bin/jadx",
+        "mkdir -p /opt/jadx && unzip -q /tmp/jadx.zip -d /opt/jadx && rm -f /tmp/jadx.zip",
         f"mkdir -p /opt/jadx-headless-mcp && curl -fsSL -o /opt/jadx-headless-mcp/jadx-headless-mcp-{JADX_HEADLESS_MCP_VERSION}-all.jar https://github.com/1013503897/jadx-headless-mcp/releases/download/v{JADX_HEADLESS_MCP_VERSION}/jadx-headless-mcp-{JADX_HEADLESS_MCP_VERSION}-all.jar",
         f"curl -fsSL -o /usr/local/bin/apktool.jar https://github.com/iBotPeaches/Apktool/releases/download/v{APKTOOL_VERSION}/apktool_{APKTOOL_VERSION}.jar",
         "printf '#!/bin/sh\\nexec java -jar /usr/local/bin/apktool.jar \"$@\"\\n' > /usr/local/bin/apktool && chmod +x /usr/local/bin/apktool",
-        f"cat > /etc/profile.d/rea.sh << 'REA_EOF'\nexport JAVA_HOME=/opt/java/temurin-21\nexport GHIDRA_INSTALL_DIR=/opt/ghidra/ghidra_{GHIDRA_VERSION}_PUBLIC\nexport REA_GHIDRA_STARTUP_TIMEOUT_MS=120000\nexport REA_MCP_MAX_RESPONSE_BYTES=52428800\nexport REA_JADX_MCP_JAR=/opt/jadx-headless-mcp/jadx-headless-mcp-{JADX_HEADLESS_MCP_VERSION}-all.jar\nexport PATH=/opt/java/temurin-21/bin:/opt/jadx/bin:$PATH\nREA_EOF",
+        f"cat > /etc/profile.d/rea.sh << 'REA_EOF'\nexport JAVA_HOME=/opt/java/temurin-21\nexport GHIDRA_INSTALL_DIR=/opt/ghidra/ghidra_{GHIDRA_VERSION}_PUBLIC\nexport REA_GHIDRA_STARTUP_TIMEOUT_MS=120000\nexport REA_MCP_MAX_RESPONSE_BYTES=52428800\nexport REA_JADX_MCP_JAR=/opt/jadx-headless-mcp/jadx-headless-mcp-{JADX_HEADLESS_MCP_VERSION}-all.jar\nexport PATH=/opt/java/temurin-21/bin:$PATH\nREA_EOF",
          "chmod 644 /etc/profile.d/rea.sh",
          "bash -c 'source /etc/profile.d/rea.sh; rea setup --client opencode --yes'",
+         *_forensic_shortcut_commands(),
          "mkdir -p /opt/forensic_analysis/volatility3/symbols",
          "curl -fsSL https://downloads.volatilityfoundation.org/volatility3/symbols/windows.zip -o /tmp/windows.zip",
          "curl -fsSL https://downloads.volatilityfoundation.org/volatility3/symbols/linux.zip -o /tmp/linux.zip",

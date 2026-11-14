@@ -1,5 +1,24 @@
 # DevBox Changelog
 
+## DevBox Updates - 2026-11-14
+
+### Added
+
+- The Forensics toolchain is now on `PATH`: `ghidra`, `ghidra-headless`, `jadx`, and `jadx-gui`, each setting up the bundled Temurin 21 JDK itself.
+- Added Ghidra and JADX desktop icons and application-menu entries to the Forensics box, with projects under `/data/forensics/ghidra`.
+- Added `vol3`, `vol.py`, `volshell3`, `pspy`, `ll`, and `la` aliases, and the JDK/Ghidra environment for non-login shells such as the XFCE terminal.
+- Added the AWT X11 libraries (`libxtst6`, `libxi6`, `libxrender1`, `libxext6`) that Ghidra and JADX need to draw their GUIs.
+
+### Changed
+
+- `jadx` is a wrapper script instead of a symlink, so it also works from the desktop and from `bash -c`, where no login profile has run.
+- Existing volumes have `/opt/jadx/bin` stripped from persisted shell profiles, so the wrapper is not shadowed.
+
+### Validation
+
+- Test suite: 198 tests passed.
+- Verified on Modal: `ghidra`, `ghidra-headless`, `jadx`, and `jadx-gui` resolve to the wrappers, Ghidra and JADX GUI windows open under Xvfb, `ghidra-headless` imports a binary into `/data/forensics/ghidra`, both desktop icons land in the persisted `~/Desktop`, and the interactive shell exposes the new aliases.
+
 ## DevBox Updates - 2026-11-13
 
 ### Added

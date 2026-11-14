@@ -333,6 +333,23 @@ For the Forensics HTB VM specifically, the VPN comes up first: the launcher
 waits for OpenVPN's `Initialization Sequence Completed`, then starts xrdp
 alongside SSH and OpenCode.
 
+#### Tooling shortcuts
+
+The Forensics image wires its reverse-engineering toolchain into `PATH`, the
+XFCE application menu, and the desktop, so no versioned path is needed:
+
+| Command | What it does |
+| --- | --- |
+| `ghidra [file]` | Ghidra GUI, from any shell or the desktop icon |
+| `ghidra-headless <Project> -import <file>` | `analyzeHeadless`, with projects kept under `/data/forensics/ghidra` |
+| `jadx` / `jadx-gui [file]` | JADX CLI and GUI, both with the bundled JDK on `PATH` |
+| `vol`, `vol3`, `vol.py` | Volatility 3 |
+| `pspy` | `pspy64` |
+
+Every new shell — SSH, the XFCE terminal, tmux panes — sources the JDK and
+Ghidra environment automatically, and sets `ll`, `la`, and `volshell3`
+aliases. Ghidra and JADX also get desktop icons and menu entries for `root`.
+
 ## Prerequisites
 
 Before you can use this script, you need to have the following:

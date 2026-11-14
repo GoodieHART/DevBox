@@ -9,6 +9,7 @@ Author: GoodieHART
 
 import modal
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -128,6 +129,28 @@ def install_xsession_launcher(home: str = "/root") -> None:
         handle.write(f"#!/bin/sh\nexec {XSESSION_LAUNCHER}\n")
     os.chmod(path, 0o755)
     print(f"  - Installed {path} -> {XSESSION_LAUNCHER}", file=sys.stderr)
+
+
+DESKTOP_SHORTCUTS = ("ghidra", "jadx-gui")
+
+
+def install_desktop_shortcuts(
+    home: str = "/root", source_dir: str = "/usr/share/applications"
+) -> None:
+    """Copy the tool shortcuts into the desktop directory.
+
+    `~/Desktop` is linked onto the persistence volume, which hides the copies
+    baked into the image, so they are reinstalled on every launch.
+    """
+    desktop = os.path.join(home, "Desktop")
+    os.makedirs(desktop, exist_ok=True)
+    for name in DESKTOP_SHORTCUTS:
+        source = os.path.join(source_dir, f"{name}.desktop")
+        if not os.path.isfile(source):
+            continue
+        target = os.path.join(desktop, f"{name}.desktop")
+        shutil.copyfile(source, target)
+        os.chmod(target, 0o755)
 
 
 def count_rdp_sessions() -> int | None:
@@ -560,17 +583,23 @@ def run_opencode_shared(extra_packages=None, resources=None, forensic=False):
     setup_persistence(persistence_items)
     if forensic:
         install_xsession_launcher()
+        install_desktop_shortcuts()
     seed_opencode_config()
 
     # Cargo is absent from this image, and a persisted profile that sources
-    # ~/.cargo/env aborts /etc/xrdp/startwm.sh before XFCE can start.
+    # ~/.cargo/env aborts /etc/xrdp/startwm.sh before XFCE can start. An older
+    # profile can also put /opt/jadx/bin ahead of the JAVA_HOME wrappers.
     if forensic:
         for shell_profile in (".profile", ".bashrc"):
             profile_path = os.path.join("/root", shell_profile)
             if os.path.isfile(profile_path):
                 with open(profile_path, "r", encoding="utf-8") as handle:
                     lines = handle.readlines()
-                cleaned = [line for line in lines if ".cargo/env" not in line]
+                cleaned = [
+                    line.replace("/opt/jadx/bin:", "").replace(":/opt/jadx/bin", "")
+                    for line in lines
+                    if ".cargo/env" not in line
+                ]
                 if cleaned != lines:
                     with open(profile_path, "w", encoding="utf-8") as handle:
                         handle.writelines(cleaned)
@@ -645,7 +674,7 @@ def run_opencode_shared(extra_packages=None, resources=None, forensic=False):
                 _f.write("export REA_GHIDRA_STARTUP_TIMEOUT_MS=120000\n")
                 _f.write("export REA_MCP_MAX_RESPONSE_BYTES=52428800\n")
                 _f.write(f"export REA_JADX_MCP_JAR=/opt/jadx-headless-mcp/jadx-headless-mcp-{JADX_HEADLESS_MCP_VERSION}-all.jar\n")
-                _f.write("export PATH=/opt/java/temurin-21/bin:/opt/jadx/bin:$PATH\n")
+                _f.write("export PATH=/opt/java/temurin-21/bin:$PATH\n")
       except Exception:
           pass
 
