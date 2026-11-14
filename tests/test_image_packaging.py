@@ -55,13 +55,6 @@ def _packaged_modules() -> dict[str, list[str]]:
     }
 
 
-def _mounted_files() -> dict[str, list[str]]:
-    return {
-        name: _chained_strings(node.value, "add_local_file")
-        for name, node in _image_assignments().items()
-    }
-
-
 def _imported_modules(module_name: str) -> set[str]:
     """First-party modules imported at module scope by `module_name`."""
     path = ROOT.joinpath(*module_name.split(".")).with_suffix(".py")
@@ -112,11 +105,23 @@ def test_every_image_packages_ui_quotes_loader():
         assert "ui.quotes_loader" in modules, f"{image} dropped ui.quotes_loader"
 
 
-def test_every_image_mounts_the_quote_catalogue():
-    for image, files in _mounted_files().items():
-        assert any("quotes.json" in path for path in files), (
-            f"{image} does not mount ui/quotes.json; the launcher would fall back "
+def test_every_image_bakes_the_quote_catalogue():
+    # Sandboxes get no add_local_file mounts, so a mounted catalogue leaves
+    # the VM quoting the three hardcoded fallbacks.
+    text = IMAGES.read_text(encoding="utf-8")
+    for name, node in _image_assignments().items():
+        segment = ast.get_source_segment(text, node) or ""
+        line = next(
+            (line for line in segment.splitlines() if '"quotes.json"' in line),
+            None,
+        )
+        assert line is not None, f"{name} has no ui/quotes.json"
+        assert "copy=True" in line, (
+            f"{name} mounts ui/quotes.json; the launcher would fall back "
             "to the three hardcoded quotes"
+        )
+        assert segment.index(line) < segment.index(".add_local_python_source("), (
+            f"{name} bakes ui/quotes.json after a mount-mode add"
         )
 
 
