@@ -16,6 +16,7 @@ from devbox_core.config import (
     HTB_NETWORK_CHOICES,
     HTB_VPN_NETWORKS,
 )
+from runtime.shared_runtime import format_banner
 
 # One `case` arm per network, generated from config so the secret key, device,
 # and name cannot drift apart. VM_SCRIPT is not an f-string (it is full of shell
@@ -227,6 +228,13 @@ def run_htb_vm(image, volume, ssh_secret, *, forensic=False, resources=None, net
         unencrypted_ports=exposed_ports,
     )
     print(f"HTB network(s): {labels}")
+    banner = format_banner(
+        "forensic_analysis" if forensic else "standard_devbox",
+        ("🌐 OpenCode web on :4096", "🖥️ RDP desktop on :3389")
+        if forensic
+        else (),
+    )
+    sandbox.filesystem.write_text(banner, "/etc/devbox-banner")
     try:
         sandbox.filesystem.write_text(VM_SCRIPT, "/run/devbox-vm.sh")
         process = sandbox.exec(

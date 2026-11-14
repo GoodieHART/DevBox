@@ -15,7 +15,6 @@ import sys
 import time
 import atexit
 import contextlib
-import textwrap
 from runtime.persistence_utils import setup_persistence, get_persistence_items
 from runtime.backup_utils import restore_backup, register_custom_backup
 from runtime.utils import inject_ssh_key
@@ -295,6 +294,30 @@ DEVBOX_BANNERS = {
 }
 
 
+def format_banner(devbox_type, extra_lines=()):
+    """Login banner: box header, extra rows, and a random quote when found."""
+    icon, name = DEVBOX_BANNERS.get(devbox_type, ("🚀", "DevBox"))
+    rows = [
+        f"║  {icon} {name:<30} ║",
+        f"║  {'💾 Persistent: /data':<36} ║",
+        *(f"║  {line:<36} ║" for line in extra_lines),
+    ]
+    banner = "\n".join(
+        [
+            "╔══════════════════════════════════════╗",
+            *rows,
+            "╚══════════════════════════════════════╝",
+            "",
+        ]
+    )
+    try:
+        quote = get_random_quote()
+        banner += f"\n{quote['text']}\n- {quote['author']}\n"
+    except Exception:
+        pass  # Quotes are optional; the header still renders.
+    return banner
+
+
 
 TMUX_SESSION_SCRIPT = "/usr/local/bin/devbox-tmux"
 
@@ -358,20 +381,8 @@ def run_devbox_shared(extra_packages=None, devbox_type="ssh", resources=None):
     inject_ssh_key()
 
     # Write devbox banner with quote
-    icon, name = DEVBOX_BANNERS.get(devbox_type, ("🚀", "DevBox"))
-    banner = textwrap.dedent(f"""\
-    ╔══════════════════════════════════════╗
-    ║  {icon} {name:<30} ║
-    ║  {'💾 Persistent: /data':<36} ║
-    ╚══════════════════════════════════════╝
-    """)
-    try:
-        q = get_random_quote()
-        banner += f"\n{q['text']}\n- {q['author']}\n"
-    except Exception:
-        pass  # Quotes are optional — banner still works without them
     with open("/etc/devbox-banner", "w") as f:
-        f.write(banner)
+        f.write(format_banner(devbox_type))
 
     install_extra_packages(extra_packages)
     
@@ -612,22 +623,16 @@ def run_opencode_shared(extra_packages=None, resources=None, forensic=False):
     inject_ssh_key()
 
     # Write devbox banner (same mechanism as run_devbox_shared)
-    icon, name = DEVBOX_BANNERS.get("forensic_analysis" if forensic else "assisted_coding", ("🚀", "DevBox"))
-    banner = textwrap.dedent(f"""\
-    ╔══════════════════════════════════════╗
-    ║  {icon} {name:<30} ║
-    ║  {'💾 Persistent: /data':<36} ║
-    ║  {'🌐 OpenCode web on :4096':<36} ║
-    ║  {'🖥️ RDP desktop on :3389':<36} ║
-    ╚══════════════════════════════════════╝
-    """)
-    try:
-        q = get_random_quote()
-        banner += f"\n{q['text']}\n- {q['author']}\n"
-    except Exception:
-        pass  # Quotes are optional — banner still works without them
+    extra_lines = ()
+    if forensic:
+        extra_lines = ("🌐 OpenCode web on :4096", "🖥️ RDP desktop on :3389")
     with open("/etc/devbox-banner", "w") as f:
-        f.write(banner)
+        f.write(
+            format_banner(
+                "forensic_analysis" if forensic else "assisted_coding",
+                extra_lines,
+            )
+        )
 
     install_extra_packages(extra_packages)
 
