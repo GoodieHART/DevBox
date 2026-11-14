@@ -14,6 +14,11 @@
 - `jadx` is a wrapper script instead of a symlink, so it also works from the desktop and from `bash -c`, where no login profile has run.
 - Existing volumes have `/opt/jadx/bin` stripped from persisted shell profiles, so the wrapper is not shadowed.
 
+### Removed
+
+- Removed the Document Processing Box, including `doc_processing_image` and `launch_doc_processor`. `pandoc` and `texlive-full` were used by that box alone.
+- Launcher choices are now 1-7: Standard at 1, AI Coding at 2, LLM Playroom at 3, RDP Desktop at 4, llama.cpp CPU at 5, Forensics at 6, llama.cpp GPU at 7.
+
 ### Fixed
 
 - Fixed the OpenCode idle watchdog: it treated any HTTP 200 from port 4096 as user activity, so AI Coding and Forensics boxes never idled and always ran to their 3-hour hard timeout. Activity now comes from established connections to the port.

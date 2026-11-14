@@ -288,7 +288,6 @@ DEVBOX_BANNERS = {
     "cuda_devbox_l4": ("🎮", "CUDA DevBox (L4)"),
     "cuda_devbox_a10g": ("🎮", "CUDA DevBox (A10G)"),
     "cuda_devbox_l40s": ("🎮", "CUDA DevBox (L40S)"),
-    "doc_processing": ("📄", "Document Processing Box"),
     "assisted_coding": ("🤖", "AI Assistants Box"),
     "opencode": ("🤖", "OpenCode Box"),
     "llm_playroom": ("🧠", "LLM Playroom"),

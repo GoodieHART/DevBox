@@ -3,7 +3,7 @@ import os
 from datetime import datetime, timedelta, timezone
 
 from devbox_core.images import (
-    standard_devbox_image, cuda_devbox_image, doc_processing_image,
+    standard_devbox_image, cuda_devbox_image,
     assisted_coding_image, llm_playroom_image, llamacpp_cpu_image, rdp_devbox_image, forensic_analysis_image
 )
 from runtime.shared_runtime import run_devbox_shared, run_rdp_devbox_shared, run_opencode_shared
@@ -129,11 +129,6 @@ def launch_rdp_devbox_l40s(extra_packages=None, rdp_quality="auto", rdp_max_bpp=
     run_rdp_devbox_shared(extra_packages, devbox_type="rdp_devbox_l40s", resources={**gpu_devbox_args_rdp, "gpu": "L40S"},
                           rdp_quality=rdp_quality, rdp_max_bpp=rdp_max_bpp)
 
-@app.function(image=doc_processing_image, **gpu_devbox_args)
-def launch_doc_processor():
-    """Launches a document processing environment with Pandoc and TeX Live."""
-    run_devbox_shared(extra_packages=None, devbox_type="doc_processing", resources=gpu_devbox_args)
-
 @app.function(image=assisted_coding_image, **assisted_devbox_args)
 def launch_assisted_coding():
     """Launches a development environment with Gemini CLI & OpenCode pre-installed."""
@@ -208,31 +203,28 @@ def main():
     🎯 Choose your DevBox Config:
     1. 🛠️  Standard DevBox general purpose development environment with optional extra packages
     
-    2. 📄 Document Processing Box
-    Pandoc + Full TeX Live for document work
-    
-    3. 🤖 AI Coding Box
+    2. 🤖 AI Coding Box
     OpenCode web UI, SSH, and Gemini CLI
     
-    4. 🧠 LLM Playroom 
+    3. 🧠 LLM Playroom
     Ollama for AI experimentation
     
-    5. 🖥️  RDP Desktop Box Full graphical desktop with XFCE and RDP access
+    4. 🖥️  RDP Desktop Box Full graphical desktop with XFCE and RDP access
     
-    6. 🔬 llama.cpp Research Center (CPU)
+    5. 🔬 llama.cpp Research Center (CPU)
     Curated models + WebUI + EXA Search + Multimodal
     
-    7. 🔍 Forensics Analysis
+    6. 🔍 Forensics Analysis
     Analysis Machine using Volatility3, REA, and an XFCE desktop over RDP
 
-    8. 🚀 llama.cpp Research Center (GPU)
+    7. 🚀 llama.cpp Research Center (GPU)
     GPU-accelerated inference + 32K context + T4 GPU
 
     """
     create_box(menu_box, "🚀 LAUNCH OPTIONS")
     
     try:
-      choice = input("Enter your choice (1-9): ").strip()
+      choice = input("Enter your choice (1-7): ").strip()
     except EOFError:
       print("\nNo input received. Exiting.")
       return
@@ -243,15 +235,6 @@ def main():
       handle_standard_choice(launch_devbox, launch_devbox_t4, launch_devbox_l4, launch_devbox_a10g, launch_devbox_l40s, CPU_ONLY, launch_devbox_htb)
 
     elif choice == "2":
-        doc_box = """
-        📄 Launching Document Processing Box...
-        📚 Pandoc + Full TeX Live Distribution
-        """
-        create_box(doc_box, "📄 DOCUMENT PROCESSING")
-        show_spinner("Setting up document tools", 2)
-        launch_doc_processor.remote()
-
-    elif choice == "3":
         assistants_box = """
         🤖 Launching AI Coding Box...
         🧠 Includes OpenCode and Gemini CLI
@@ -261,7 +244,7 @@ def main():
         show_spinner("Initializing AI assistants", 2)
         launch_assisted_coding.remote()
 
-    elif choice == "4":
+    elif choice == "3":
         llm_box = """
         🧠 Launching LLM Playroom...
         🤖 Ollama with DeepSeek R1 (8B distilled)
@@ -271,7 +254,7 @@ def main():
         show_spinner("Initializing LLM environment", 2)
         launch_llm_playroom.remote()
 
-    elif choice == "5":
+    elif choice == "4":
       from ui.launcher_menu import handle_rdp_choice
       handle_rdp_choice(launch_rdp_devbox, launch_rdp_devbox_t4, launch_rdp_devbox_l4, launch_rdp_devbox_a10g, launch_rdp_devbox_l40s, CPU_ONLY)
 

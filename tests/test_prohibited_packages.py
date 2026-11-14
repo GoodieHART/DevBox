@@ -69,8 +69,6 @@ def test_ordinary_development_packages_are_allowed():
         "neovim",
         "openssh-server",
         "python3-dev",
-        "pandoc",
-        "texlive-full",
         "xrdp",
         "xfce4",
         "gdb",

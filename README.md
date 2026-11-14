@@ -151,11 +151,11 @@ The script launches a general-purpose DevBox, a Debian environment with essentia
 -   **Secure SSH Access**: Automatically injects your public SSH key for secure, passwordless access.
 -   **Auto-Shutdown**: Includes an idle timer that automatically shuts down the container after 5 minutes of inactivity to save costs.
 -   **Resource Allocation**: The environment is configured with appropriate CPU and memory resources for its intended task.
--   **Interactive Launcher**: A simple command-line prompt to choose from 7 specialized DevBox configurations.
+-   **Interactive Launcher**: A simple command-line prompt to choose from 6 specialized DevBox configurations.
 
 ## Launcher Options
 
-When you run `modal run devbox.py`, you'll be presented with 7 DevBox configurations. Here's what each one does:
+When you run `modal run devbox.py`, you'll be presented with the DevBox configurations below. Here's what each one does:
 
 ### 1. 🛠️ Standard DevBox
 
@@ -167,17 +167,7 @@ A general-purpose Debian environment with essential dev tools — `git`, `nano`,
 
 ---
 
-### 2. 📄 Document Processing Box
-
-Comes with **Pandoc** and a full **TeX Live** distribution pre-installed. Convert between document formats (Markdown → PDF, LaTeX → HTML, etc.) with everything you need for professional document workflows.
-
-**Best for:** LaTeX/PDF generation, academic papers, technical documentation, format conversion.
-
-**Resources:** 1.0 vCPU / 2GB RAM
-
----
-
-### 3. 🤖 AI Coding Box
+### 2. 🤖 AI Coding Box
 
 Pre-installed with **OpenCode** and **Gemini CLI** for AI-assisted coding sessions right out of the box. OpenCode sessions persist under `/data/projects`; the box does not include REA or reverse-engineering tools.
 
@@ -187,7 +177,7 @@ Pre-installed with **OpenCode** and **Gemini CLI** for AI-assisted coding sessio
 
 ---
 
-### 4. 🧪 LLM Playroom
+### 3. 🧪 LLM Playroom
 
 Comes with **Ollama** pre-installed. Pull and run any open-source model with a single command — no local hardware needed.
 
@@ -197,7 +187,7 @@ Comes with **Ollama** pre-installed. Pull and run any open-source model with a s
 
 ---
 
-### 5. 🖥️ RDP Desktop Box
+### 4. 🖥️ RDP Desktop Box
 
 A full **XFCE graphical desktop** accessible via RDP. Comes with `xrdp`, `xfce4`, and a suite of desktop goodies. Username is `root`, password is `devbox123`. Optional GPU acceleration available.
 
@@ -207,7 +197,7 @@ A full **XFCE graphical desktop** accessible via RDP. Comes with `xrdp`, `xfce4`
 
 ---
 
-### 6. 🔬 llama.cpp Research Center
+### 5. 🔬 llama.cpp Research Center
 
 The most feature-rich box. Comes with a curated catalog of **7 pre-configured GGUF models** plus the ability to load any custom HuggingFace GGUF. Each model has individually tuned temperature, top_p, and top_k settings. Includes a built-in **WebUI** (SvelteKit-based chat interface on port 8080) and **EXA Search integration** for function-calling web search.
 
@@ -226,7 +216,7 @@ The most feature-rich box. Comes with a curated catalog of **7 pre-configured GG
 
 ---
 
-### 7. 🔍 Forensics & Reverse Engineering Box
+### 6. 🔍 Forensics & Reverse Engineering Box
 
 Comes with **Volatility3**, symbol files for Windows/Linux/macOS, OpenCode web + SSH, REA MCP, Ghidra, JADX, Apktool, GDB, Binwalk, Tshark, WABT, WPScan, Firefox, and the Java/native analysis stack, plus a full **XFCE desktop over RDP** for graphical work. Forensic projects persist under `/data/forensics`, with analysis uploads under `/data/forensics/uploads`.
 

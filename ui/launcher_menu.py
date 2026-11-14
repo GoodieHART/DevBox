@@ -121,7 +121,7 @@ def handle_standard_choice(launch_devbox, launch_devbox_t4, launch_devbox_l4, la
 
 
 def handle_rdp_choice(launch_rdp_devbox, launch_rdp_devbox_t4, launch_rdp_devbox_l4, launch_rdp_devbox_a10g, launch_rdp_devbox_l40s, cpu_only):
-    """Choice 5: RDP Desktop Box with optional extra packages + GPU dispatch."""
+    """Choice 4: RDP Desktop Box with optional extra packages + GPU dispatch."""
     from ui.gpu_picker import prompt_gpu_dispatch
     from ui.ui_utils import create_box, show_spinner
 
@@ -200,10 +200,10 @@ def handle_rdp_choice(launch_rdp_devbox, launch_rdp_devbox_t4, launch_rdp_devbox
 
 
 def handle_simple_choice(choice, launch_llamacpp_playroom, launch_forensics_image, launch_llamacpp_playroom_gpu, cpu_only, launch_forensics_htb=None):
-    """Choices 6/7/8/else: single-launcher flows and the invalid-choice box."""
+    """Choices 5/6/7/else: single-launcher flows and the invalid-choice box."""
     from ui.ui_utils import create_box, show_spinner
 
-    if choice == "6":
+    if choice == "5":
         research_box = """
         🔬 Launching llama.cpp Research Center...
 
@@ -223,7 +223,7 @@ def handle_simple_choice(choice, launch_llamacpp_playroom, launch_forensics_imag
         show_spinner("Preparing research environment", 3)
         launch_llamacpp_playroom.remote()
 
-    elif choice == "7":
+    elif choice == "6":
         forensics_box = """
         Immerse Yourself Into The Bits.... 01001100 01101111 01110110 01100101
         """
@@ -245,7 +245,7 @@ def handle_simple_choice(choice, launch_llamacpp_playroom, launch_forensics_imag
         else:
             launch_forensics_image.remote()
 
-    elif choice == "8":
+    elif choice == "7":
         if cpu_only:
             create_box("GPU launchers are disabled in CPU-only mode (DEVBOX_CPU_ONLY=1).\nUnset it or add a GPU payment method to use them.", "⚡ GPU UNAVAILABLE")
             return
@@ -275,12 +275,11 @@ def handle_simple_choice(choice, launch_llamacpp_playroom, launch_forensics_imag
         ❌ Invalid choice selected.
         Please run the launcher again and choose:
         • 1 for Standard DevBox
-        • 2 for Document Processing
-        • 3 for AI Assistants Box
-        • 4 for LLM Playroom
-        • 5 for RDP Desktop Box
-        • 6 for llama.cpp Research Center (CPU)
-        • 7 for Forensics Machine
-        • 8 for llama.cpp Research Center (GPU)
+        • 2 for AI Assistants Box
+        • 3 for LLM Playroom
+        • 4 for RDP Desktop Box
+        • 5 for llama.cpp Research Center (CPU)
+        • 6 for Forensics Machine
+        • 7 for llama.cpp Research Center (GPU)
         """
         create_box(error_box, "❌ ERROR")

@@ -212,16 +212,6 @@ cuda_devbox_image = (
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "tmux.conf"), "/etc/devbox/tmux.conf")
 )
 
-doc_processing_image = (
-    _apt_install(create_base_minimal_image(), "pandoc", "texlive-full")
-    .add_local_python_source(
-        "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
-        "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader"
-    )
-    .add_local_file(os.path.join(_IMAGES_DIR, "..", "ui", "quotes.json"), "/etc/quotes.json")
-    .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "tmux.conf"), "/etc/devbox/tmux.conf")
-)
-
 assisted_coding_image = (
     create_base_minimal_image()
     .run_commands(

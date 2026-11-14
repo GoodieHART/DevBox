@@ -86,7 +86,6 @@ def test_every_image_is_discovered():
     assert set(_packaged_modules()) == {
         "standard_devbox_image",
         "cuda_devbox_image",
-        "doc_processing_image",
         "assisted_coding_image",
         "forensic_analysis_image",
         "llm_playroom_image",
