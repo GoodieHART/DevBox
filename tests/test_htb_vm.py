@@ -37,8 +37,18 @@ def test_htb_vm_runtime_uses_vm_sandbox_and_profiles_secrets():
     assert 'pull-filter ignore "redirect-gateway ipv6"' in src
     assert "idle_timeout=${2:?idle timeout is required}" in src
     assert "pgrep -f 'sshd: root@'" in src
-    assert "curl -fsS --max-time 2 http://127.0.0.1:4096/" in src
+    # `opencode web` answers `/` regardless of watchers; only established
+    # clients count as activity.
+    assert 'ss -Htn state established "sport = :4096"' in src
+    assert "http://127.0.0.1:4096/" not in src
     assert "OPENCODE_IDLE_TIMEOUT_SECONDS if forensic else IDLE_TIMEOUT_SECONDS" in src
+
+
+def test_htb_vm_uses_the_shared_tmux_bootstrap():
+    src = source("runtime/htb_vm.py")
+    assert "sh /usr/local/bin/devbox-tmux devbox 3" in src
+    assert "tmux new-session" not in src
+    assert "tmux new-window" not in src
 
 
 def test_htb_entrypoint_starts_every_vpn_before_services():

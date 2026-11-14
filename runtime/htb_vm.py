@@ -159,6 +159,16 @@ if [ "$1" = "forensic" ]; then
         printf 'xrdp failed to start; the desktop will be unavailable\n' >&2
     fi
 fi
+# `opencode web` answers `/` regardless of watchers, so mirror
+# count_web_clients() and count established clients. A probe that cannot run
+# counts as activity: a broken `ss` must not shut the box down under a user.
+web_clients_active() {
+    if ! clients=$(ss -Htn state established "sport = :4096" 2>/dev/null); then
+        return 0
+    fi
+    [ -n "$clients" ]
+}
+
 idle_seconds=0
 idle_interval=15
 idle_timeout=${2:?idle timeout is required}
@@ -169,7 +179,7 @@ while [ "$idle_seconds" -lt "$idle_timeout" ]; do
     if pgrep -f 'sshd: root@' >/dev/null 2>&1; then
         active=1
     fi
-    if [ "$1" = "forensic" ] && curl -fsS --max-time 2 http://127.0.0.1:4096/ >/dev/null 2>&1; then
+    if [ "$1" = "forensic" ] && web_clients_active; then
         active=1
     fi
     if [ "$1" = "forensic" ] && pgrep -f 'xrdp-chansrv|xfce4-session' >/dev/null 2>&1; then
