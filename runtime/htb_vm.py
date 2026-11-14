@@ -135,9 +135,9 @@ if [ -n "${PUBKEYS:-}" ]; then printf '%s\n' "$PUBKEYS" > /root/.ssh/authorized_
 if [ -n "${PUBKEY:-}" ]; then printf '%s\n' "$PUBKEY" > /root/.ssh/authorized_keys; fi
 chmod 600 /root/.ssh/authorized_keys
 /usr/sbin/sshd
-tmux new-session -d -s devbox -n window-1 2>/dev/null || true
-tmux new-window -t devbox -n window-2 2>/dev/null || true
-tmux new-window -t devbox -n window-3 2>/dev/null || true
+# Shared bootstrap, so this VM gets the baked config instead of tmux defaults.
+sh /usr/local/bin/devbox-tmux devbox 3 ||
+    printf 'tmux session setup failed; SSH will land in a plain shell\n' >&2
 if [ "$1" = "forensic" ]; then
     mkdir -p /data/forensics /data/forensics/uploads
     cd /data/forensics
