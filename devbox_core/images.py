@@ -106,6 +106,14 @@ def create_base_devbox_image(python_version="3.10"):
             copy=True,
         )
         .run_commands("chmod 755 /usr/local/bin/dove")
+        # Shared tmux bootstrap for the Function runtimes and the HTB VM.
+        # copy=True: callers chain build steps after add_local_* on these images.
+        .add_local_file(
+            os.path.join(_IMAGES_DIR, "..", "integrations", "devbox-tmux.sh"),
+            "/usr/local/bin/devbox-tmux",
+            copy=True,
+        )
+        .run_commands("chmod 755 /usr/local/bin/devbox-tmux")
     )
 
 
@@ -148,6 +156,14 @@ def create_base_minimal_image(python_version="3.10"):
             copy=True,
         )
         .run_commands("chmod 755 /usr/local/bin/dove")
+        # Shared tmux bootstrap for the Function runtimes and the HTB VM.
+        # copy=True: callers chain build steps after add_local_* on these images.
+        .add_local_file(
+            os.path.join(_IMAGES_DIR, "..", "integrations", "devbox-tmux.sh"),
+            "/usr/local/bin/devbox-tmux",
+            copy=True,
+        )
+        .run_commands("chmod 755 /usr/local/bin/devbox-tmux")
     )
 
 
@@ -181,6 +197,13 @@ cuda_devbox_image = (
         copy=True,
     )
     .run_commands("chmod 755 /usr/local/bin/dove")
+    # Starts from the NVIDIA registry, so it needs its own copy of the helper.
+    .add_local_file(
+        os.path.join(_IMAGES_DIR, "..", "integrations", "devbox-tmux.sh"),
+        "/usr/local/bin/devbox-tmux",
+        copy=True,
+    )
+    .run_commands("chmod 755 /usr/local/bin/devbox-tmux")
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
         "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader"

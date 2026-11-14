@@ -297,67 +297,41 @@ DEVBOX_BANNERS = {
 
 
 
-def start_tmux_session(session_name="devbox", windows=3):
-    """Launch a detached tmux session with `windows` windows.
+TMUX_SESSION_SCRIPT = "/usr/local/bin/devbox-tmux"
 
-    Best-effort: if tmux is missing or fails to start, the DevBox still
-    works over plain SSH. The session is created so users can attach with
-    `tmux attach -t <session_name>`.
+
+def start_tmux_session(session_name="devbox", windows=3):
+    """Create the detached `session_name` tmux session via the baked helper.
+
+    The HTB VM entrypoint runs the same script, so config, window names, and
+    mouse support stay identical across boxes. Best-effort: on failure the
+    DevBox still works over plain SSH.
     """
-    import os
     import subprocess
     import sys
 
-    # Ensure the DevBox tmux config is in place after restore_backup may have
-    # wiped /root. /etc/devbox is image-baked and survives the wipe.
     try:
-        if not os.path.exists("/root/.tmux.conf") and os.path.exists("/etc/devbox/tmux.conf"):
-            os.symlink("/etc/devbox/tmux.conf", "/root/.tmux.conf")
-        elif os.path.exists("/root/.tmux.conf") and not os.path.islink("/root/.tmux.conf"):
-            # Replace a stale/restored config with the image-baked one.
-            try:
-                os.remove("/root/.tmux.conf")
-                os.symlink("/etc/devbox/tmux.conf", "/root/.tmux.conf")
-            except Exception:
-                pass
-    except Exception:
-        pass
+        result = subprocess.run(
+            [TMUX_SESSION_SCRIPT, session_name, str(windows)],
+            capture_output=True,
+            text=True,
+        )
+    except OSError as error:
+        print(
+            f"⚠️ tmux helper unavailable ({error}) — skipping tmux session.",
+            file=sys.stderr,
+        )
+        return
 
-    # Prefer the image-baked config; fall back to tmux defaults if absent.
-    tmux_conf = "/etc/devbox/tmux.conf" if os.path.exists("/etc/devbox/tmux.conf") else None
+    warnings = (result.stderr or "").strip()
+    if result.returncode != 0:
+        detail = warnings or f"exit {result.returncode}"
+        print(f"⚠️ tmux session setup failed: {detail}", file=sys.stderr)
+        return
 
-    try:
-        subprocess.run(
-            ["tmux", "kill-session", "-t", session_name],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
-        new_session_cmd = ["tmux"]
-        if tmux_conf:
-            new_session_cmd += ["-f", tmux_conf]
-        new_session_cmd += ["new-session", "-d", "-s", session_name, "-n", "window-1"]
-        subprocess.run(
-            new_session_cmd,
-            check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
-        for i in range(2, windows + 1):
-            subprocess.run(
-                ["tmux", "new-window", "-t", session_name, "-n", f"window-{i}"],
-                check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            )
-        # Enable mouse on the live session (window tabs, pane resize, scroll).
-        subprocess.run(
-            ["tmux", "set-option", "-g", "mouse", "on"],
-            check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
-        subprocess.run(
-            ["tmux", "select-window", "-t", f"{session_name}:0"],
-            check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
-        print(f"✅ tmux session '{session_name}' ready ({windows} windows)", file=sys.stderr)
-    except FileNotFoundError:
-        print("⚠️ 'tmux' binary not found — skipping tmux session.", file=sys.stderr)
-    except Exception as e:
-        print(f"⚠️ tmux session setup failed: {e}", file=sys.stderr)
+    for line in warnings.splitlines():
+        print(line, file=sys.stderr)
+    print(f"✅ tmux session '{session_name}' ready ({windows} windows)", file=sys.stderr)
 
 
 def run_devbox_shared(extra_packages=None, devbox_type="ssh", resources=None):
