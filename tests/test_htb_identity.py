@@ -22,8 +22,8 @@ import os
 import pathlib
 import subprocess
 
-from devbox_core.box_identity import resolve_box_name
-from runtime.htb_vm import VM_SCRIPT, _print_ready_block
+from devbox_core.box_identity import apply_sandbox_identity, resolve_box_name
+from runtime.htb_vm import VM_SCRIPT, _print_ready_block, _wait_for_tailscale
 from ui.launcher_menu import prompt_htb_vm
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -348,6 +348,105 @@ def test_the_connection_block_never_prints_an_empty_tailscale_address(capsys):
     assert "Tailscale (recommended)" not in out
     assert "Modal tunnel (break-glass)" in out
     assert "not available" in out
+
+
+def test_the_connection_block_shows_why_tailscale_failed(capsys):
+    _print_ready_block(
+        {},
+        _fake_tunnels(),
+        False,
+        tailscale_error="no Tailscale auth key: set TS_AUTHKEY",
+    )
+    out = capsys.readouterr().out
+    assert "not available" in out
+    assert "Reason: no Tailscale auth key: set TS_AUTHKEY" in out
+
+
+class _FakeFileSystem:
+    def __init__(self, files):
+        self._files = files
+
+    def read_text(self, path):
+        if path not in self._files:
+            raise FileNotFoundError(path)
+        return self._files[path]
+
+
+class _FakeSandbox:
+    def __init__(self, files=None):
+        self.filesystem = _FakeFileSystem(files or {})
+
+
+def test_the_tailscale_failure_reason_is_read_from_the_vm():
+    sandbox = _FakeSandbox(
+        {"/run/devbox/tailscale.status": "failed: no Tailscale auth key\n"}
+    )
+    details, reason = _wait_for_tailscale(sandbox, timeout=1)
+    assert details == {}
+    assert reason == "no Tailscale auth key"
+
+
+def test_a_tailscale_result_without_a_name_is_a_failure():
+    sandbox = _FakeSandbox(
+        {
+            "/run/devbox/tailscale.status": "ok\n",
+            "/run/devbox/tailscale.env": "DEVBOX_TAILSCALE_IP=100.1.2.3\n",
+        }
+    )
+    details, reason = _wait_for_tailscale(sandbox, timeout=1)
+    assert details == {}
+    assert "no node name" in reason
+
+
+class _FakeExecProcess:
+    def __init__(self, stdout="", stderr="", returncode=0):
+        self.stdout = _FakeStream(stdout)
+        self.stderr = _FakeStream(stderr)
+        self._returncode = returncode
+
+    def wait(self):
+        return self._returncode
+
+
+class _FakeStream:
+    def __init__(self, text):
+        self._text = text
+
+    def read(self):
+        return self._text
+
+
+class _FakeExecSandbox:
+    def __init__(self, process):
+        self._process = process
+        self.calls = []
+
+    def exec(self, *args, **kwargs):
+        self.calls.append((args, kwargs))
+        return self._process
+
+
+def test_identity_runs_from_the_baked_package_with_an_explicit_pythonpath():
+    sandbox = _FakeExecSandbox(
+        _FakeExecProcess(stdout='{"name": "box", "hostname_changed": true, "reason": ""}\n')
+    )
+    result = apply_sandbox_identity(sandbox, "box")
+    assert result["hostname_changed"] is True
+    _args, kwargs = sandbox.calls[0]
+    assert kwargs["workdir"] == "/root"
+    assert kwargs["env"] == {"PYTHONPATH": "/root"}
+
+
+def test_identity_reports_the_python_error_instead_of_unknown_reason():
+    sandbox = _FakeExecSandbox(
+        _FakeExecProcess(
+            stderr="ModuleNotFoundError: No module named 'devbox_core'\n",
+            returncode=1,
+        )
+    )
+    result = apply_sandbox_identity(sandbox, "box")
+    assert result["hostname_changed"] is False
+    assert "ModuleNotFoundError" in result["reason"]
 
 
 def test_the_forensics_block_shows_both_paths(capsys):

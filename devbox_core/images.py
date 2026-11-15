@@ -4,6 +4,12 @@ Docker image definitions for DevBox Launcher.
 This module provides centralized image definitions with inheritance patterns
 to eliminate code duplication and standardize base configurations.
 
+Every ``add_local_python_source`` call passes ``copy=True``. A Modal Function
+receives those modules as serve mounts, but a VM Sandbox does not, so a mounted
+module is missing inside the box. The HTB VM runs the identity step and the
+Tailscale runtime from these modules; baked sources are the only way they
+import there.
+
 Author: GoodieHART
 """
 
@@ -238,7 +244,8 @@ standard_devbox_image = (
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
         "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader",
-        "runtime.tailscale_runtime", "devbox_core.box_identity"
+        "runtime.tailscale_runtime", "devbox_core.box_identity",
+        copy=True,
     )
 )
 cuda_devbox_image = (
@@ -289,7 +296,8 @@ cuda_devbox_image = (
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
         "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader",
-        "runtime.tailscale_runtime", "devbox_core.box_identity"
+        "runtime.tailscale_runtime", "devbox_core.box_identity",
+        copy=True,
     )
 )
 
@@ -310,7 +318,8 @@ assisted_coding_image = (
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
         "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader",
-        "runtime.tailscale_runtime", "devbox_core.box_identity"
+        "runtime.tailscale_runtime", "devbox_core.box_identity",
+        copy=True,
     )
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "opencode-coding.json"), "/etc/devbox/opencode.json")
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "opencode-coding.json"), "/etc/devbox/opencode-coding.json")
@@ -574,7 +583,8 @@ forensic_analysis_image = (
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
         "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader",
-        "runtime.tailscale_runtime", "devbox_core.box_identity"
+        "runtime.tailscale_runtime", "devbox_core.box_identity",
+        copy=True,
     )
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "opencode.json"), "/etc/devbox/opencode.json")
 )
@@ -596,7 +606,8 @@ llm_playroom_image = (
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
         "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader",
-        "runtime.tailscale_runtime", "devbox_core.box_identity"
+        "runtime.tailscale_runtime", "devbox_core.box_identity",
+        copy=True,
     )
 )
 
@@ -636,7 +647,8 @@ llamacpp_cpu_image = (
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
         "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "integrations.exa_helper", "integrations.exa_proxy", "ui.quotes_loader",
         "runtime.llamacpp_runtime", "devbox_core.llamacpp_models",
-        "runtime.tailscale_runtime", "devbox_core.box_identity"
+        "runtime.tailscale_runtime", "devbox_core.box_identity",
+        copy=True,
     )
 )
 
@@ -647,6 +659,7 @@ rdp_devbox_image = (
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
         "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader",
-        "runtime.tailscale_runtime", "devbox_core.box_identity"
+        "runtime.tailscale_runtime", "devbox_core.box_identity",
+        copy=True,
     )
 )

@@ -105,6 +105,26 @@ def test_every_image_packages_ui_quotes_loader():
         assert "ui.quotes_loader" in modules, f"{image} dropped ui.quotes_loader"
 
 
+def test_every_python_source_is_baked_into_the_image():
+    """VM Sandboxes get no serve mounts, so mounted sources are missing there.
+
+    The HTB box imports `devbox_core.box_identity` and
+    `runtime.tailscale_runtime` inside the sandbox; with copy=False both fail
+    with ModuleNotFoundError.
+    """
+    for node in ast.walk(_tree()):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        if node.func.attr != "add_local_python_source":
+            continue
+        keywords = {keyword.arg: keyword.value for keyword in node.keywords}
+        copy = keywords.get("copy")
+        assert isinstance(copy, ast.Constant) and copy.value is True, (
+            "add_local_python_source must pass copy=True so the modules exist "
+            "inside a VM Sandbox"
+        )
+
+
 def test_every_image_bakes_the_quote_catalogue():
     # Sandboxes get no add_local_file mounts, so a mounted catalogue leaves
     # the VM quoting the three hardcoded fallbacks.

@@ -312,8 +312,11 @@ def _read_sandbox_file(sandbox, path):
 def _wait_for_tailscale(sandbox, process=None, timeout=120):
     """Wait for the VM script to publish its Tailscale result.
 
-    Returns the connection details as a dict, or an empty dict when Tailscale
-    did not come up (the box then runs on the Modal tunnel alone).
+    Returns `(details, reason)`. `details` is the connection details as a
+    dict, empty when Tailscale did not come up. `reason` is the readable
+    failure the VM published, and "" on success. The box runs on the Modal
+    tunnel alone when `details` is empty, and the reason is what makes that
+    visible instead of a bare "not available".
     """
     deadline = time.time() + timeout
     status = ""
@@ -323,11 +326,15 @@ def _wait_for_tailscale(sandbox, process=None, timeout=120):
             break
         if process is not None and process.poll() is not None:
             # The VM script died before publishing a result.
-            return {}
+            return {}, "the VM script exited before publishing a Tailscale result"
         time.sleep(2)
 
+    if not status:
+        return {}, f"no Tailscale result after {timeout}s"
+
     if not status.startswith("ok"):
-        return {}
+        reason = status.partition(":")[2].strip()
+        return {}, reason or status
 
     values = {}
     for line in _read_sandbox_file(sandbox, TAILSCALE_ENV_PATH).splitlines():
@@ -336,8 +343,8 @@ def _wait_for_tailscale(sandbox, process=None, timeout=120):
             values[key.strip()] = value.strip()
 
     if not values.get("DEVBOX_TAILSCALE_NAME"):
-        return {}
-    return values
+        return {}, "the Tailscale result has no node name"
+    return values, ""
 
 
 def _print_field(label, value):
@@ -354,6 +361,7 @@ def _print_ready_block(
     rdp_port=3389,
     rdp_user="root",
     rdp_password="",
+    tailscale_error="",
 ):
     """Print the connection block for a ready HTB box.
 
@@ -390,6 +398,8 @@ def _print_ready_block(
         print()
     else:
         print("⚠️  Tailscale is not available - use the Modal tunnel below.")
+        if tailscale_error:
+            print(f"    Reason: {tailscale_error}")
         print()
 
     print("🚪 Modal tunnel (break-glass):")
@@ -498,7 +508,7 @@ def run_htb_vm(
             str(idle_timeout),
             ",".join(names),
         )
-        tailscale = _wait_for_tailscale(sandbox, process)
+        tailscale, tailscale_error = _wait_for_tailscale(sandbox, process)
         tunnels = sandbox.tunnels(timeout=120)
         _print_ready_block(
             tailscale,
@@ -508,6 +518,7 @@ def run_htb_vm(
             rdp_port=RDP_PORT,
             rdp_user=RDP_USER,
             rdp_password=RDP_PASSWORD,
+            tailscale_error=tailscale_error,
         )
         for line in process.stdout:
             print(line, end="")

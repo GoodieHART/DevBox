@@ -225,13 +225,21 @@ def apply_box_identity(name, set_hostname=True):
     return result
 
 
+def _brief_error(text, limit=300):
+    """One readable line from a process's stderr, for the launch warning."""
+    lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
+    return " | ".join(lines)[-limit:]
+
+
 def apply_sandbox_identity(sandbox, name):
     """Apply the box identity inside a Modal Sandbox.
 
     The sandbox image ships this module, so the same implementation runs
     there. A sandbox that refuses is reported, not fatal.
 
-    Returns the same dict shape as `apply_box_identity`.
+    Returns the same dict shape as `apply_box_identity`. The reason always
+    carries the Python error when the helper could not run, so the launcher
+    never has to fall back to "unknown reason".
     """
     result = {"name": name, "hostname_changed": False, "reason": ""}
 
@@ -241,16 +249,30 @@ def apply_sandbox_identity(sandbox, name):
         "print(json.dumps(apply_box_identity(sys.argv[1])))\n"
     )
     try:
-        process = sandbox.exec("python3", "-c", script, name)
+        process = sandbox.exec(
+            "python3",
+            "-c",
+            script,
+            name,
+            # The image bakes the first-party packages under /root.
+            workdir="/root",
+            env={"PYTHONPATH": "/root"},
+        )
         output = process.stdout.read()
-        process.stderr.read()
-        process.wait()
+        errors = process.stderr.read()
+        returncode = process.wait()
     except Exception as error:  # noqa: BLE001 - identity must never be fatal
         result["reason"] = f"identity script failed: {error}"
         return result
 
+    if returncode != 0:
+        detail = _brief_error(errors) or f"exit status {returncode}"
+        result["reason"] = f"identity script failed: {detail}"
+        return result
+
     import json
 
+    parsed = False
     for line in (output or "").splitlines():
         line = line.strip()
         if not line.startswith("{"):
@@ -259,8 +281,17 @@ def apply_sandbox_identity(sandbox, name):
             payload = json.loads(line)
         except ValueError:
             continue
+        if not isinstance(payload, dict):
+            continue
+        parsed = True
         result["hostname_changed"] = bool(payload.get("hostname_changed"))
         result["reason"] = payload.get("reason", "")
+
+    if not parsed:
+        detail = _brief_error(errors)
+        result["reason"] = "identity script produced no result"
+        if detail:
+            result["reason"] += f": {detail}"
     return result
 
 

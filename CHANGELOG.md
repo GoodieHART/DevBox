@@ -21,14 +21,20 @@
 - The tmux status bar shows the name from `/etc/devbox/name` and falls back to `devbox`, instead of the session name that was the same in every box.
 - `iptables`, `ca-certificates`, and `tar` are part of the Tailscale image layer, so the netfilter rules and the verified download work on a slim base image.
 
+### Fixed
+
+- The identity and Tailscale steps now run inside the HTB VM. First-party Python sources are baked with `add_local_python_source(copy=True)`; Modal gives them to Functions as serve mounts but not to VM Sandboxes, so both steps previously failed with `ModuleNotFoundError` and the box fell back to the Modal tunnel.
+- A failed identity step reports the Python error instead of "unknown reason", and the connection block prints the VM's Tailscale failure reason instead of only "not available".
+
 ### Validation
 
-- Test suite: 306 tests passed.
+- Test suite: 312 tests passed.
 - Verified on Modal: root logs in as `/usr/bin/zsh`, `ZSH_HIGHLIGHT_VERSION` is `0.7.1-2_debian`, the autosuggestion style and functions are loaded, 180 completion files register `compdef`, and the banner prints in an interactive login shell.
 - Verified in an HTB VM Sandbox: `/etc/devbox/zshrc` is present, all three tmux panes run `zsh`, and the banner renders with a quote in the pane.
 - Verified in a Modal VM Sandbox with `standard_devbox_image`: the Tailscale 1.104.7 client installs from the pinned, checksum-verified tarball; `socket.sethostname` renames the box, `hostname -f` resolves through the new `/etc/hosts` entry, and `tailscale status` reports the node under its MagicDNS name with a tailnet address.
 - Verified on a live HTB VPN connection: Tailscale and OpenVPN run together in one VM Sandbox. The split tunnel keeps the default route on `eth0` while the HTB ranges route through `tun0`, and `tailscaled`, `openvpn`, and `sshd` all stay up. The connection block lists the Tailscale address first and the Modal tunnel as the break-glass fallback.
 - Verified the break-glass path: with no `TS_AUTHKEY`, enrollment fails with a clear reason, the VM script keeps running, the VPN still connects, and the connection block prints only the Modal tunnel.
+- Verified the baked-source fix in VM Sandboxes on `standard_devbox_image` and `forensic_analysis_image`: `/root/devbox_core` and `/root/runtime` exist, both modules import, `socket.sethostname` renames the box, `hostname -f` resolves, and `tailscale up` reports the MagicDNS name and address.
 
 ## DevBox Updates - 2026-11-14
 
