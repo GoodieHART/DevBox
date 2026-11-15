@@ -13,6 +13,8 @@ MODAL_KNOWLEDGE.md
 *.pyc
 *.pyo
 .env
+# Local, machine-specific config (may hold secrets); never commit.
+*.local
 # HTB VPN connection packs are per-user credentials; never commit them.
 *.ovpn
 .DS_Store
