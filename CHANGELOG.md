@@ -1,5 +1,21 @@
 # DevBox Changelog
 
+## DevBox Updates - 2026-11-15
+
+### Added
+
+- zsh is now the login shell on every box, with `zsh-autosuggestions`, `zsh-syntax-highlighting`, and `zsh-completions`.
+- The setup lives in `/etc/devbox/zshrc`, baked into each image and sourced from `/etc/zsh/zshrc`, so Function boxes, RDP terminals, and the HTB VM get the same shell.
+- zsh keeps the bash behaviour: Starship, the login banner, and the Forensics aliases and environment.
+- `.zsh_history` is persisted alongside `.bash_history`.
+- `zsh-completions` is pinned to 0.36.0 and installed from its release tarball, because Debian does not package it.
+
+### Validation
+
+- Test suite: 229 tests passed.
+- Verified on Modal: root logs in as `/usr/bin/zsh`, `ZSH_HIGHLIGHT_VERSION` is `0.7.1-2_debian`, the autosuggestion style and functions are loaded, 180 completion files register `compdef`, and the banner prints in an interactive login shell.
+- Verified in an HTB VM Sandbox: `/etc/devbox/zshrc` is present, all three tmux panes run `zsh`, and the banner renders with a quote in the pane.
+
 ## DevBox Updates - 2026-11-14
 
 ### Added

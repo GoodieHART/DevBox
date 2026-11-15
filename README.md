@@ -147,6 +147,7 @@ The script launches a general-purpose DevBox, a Debian environment with essentia
 ## Features
 
 -   **Standard DevBox**: A general-purpose Debian environment with essential development tools (`git`, `vim`, `curl`, `build-essential`, etc.). Supports optional GPU acceleration (T4, L4, A10G, L40S). Allows dynamic installation of extra `apt` packages at launch time.
+-   **zsh Shell**: zsh is the login shell, with autosuggestions, syntax highlighting, `zsh-completions`, and the Starship prompt. The setup lives in `/etc/devbox/zshrc`, so tmux panes, RDP terminals, and the HTB VM all get it.
 -   **Persistent Storage**: Uses a `modal.Volume` to provide a persistent `/data` directory, ensuring your work is saved between sessions.
 -   **Secure SSH Access**: Automatically injects your public SSH key for secure, passwordless access.
 -   **Auto-Shutdown**: Includes an idle timer that automatically shuts down the container after 5 minutes of inactivity to save costs.

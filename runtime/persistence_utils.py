@@ -82,6 +82,7 @@ def setup_persistence(
 SSH_PERSISTENCE_ITEMS = [
     ".bash_history",
     ".bashrc",
+    ".zsh_history",
     ".profile",
     ".viminfo",
     ".vimrc",

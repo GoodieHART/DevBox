@@ -28,6 +28,7 @@ JADX_VERSION = "1.5.6"
 APKTOOL_VERSION = "3.0.3"
 OPENCODE_VERSION = "1.19.0"
 PSPY_VERSION = "v1.2.1"
+ZSH_COMPLETIONS_VERSION = "0.36.0"
 
 # Resource configurations for different DevBox types
 
@@ -168,6 +169,9 @@ CORE_DEV_PACKAGES = [
     "unzip",
     "procps",
     "tmux",
+    "zsh",
+    "zsh-autosuggestions",
+    "zsh-syntax-highlighting",
 ]
 
 EXTENDED_DEV_PACKAGES = [

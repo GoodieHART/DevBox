@@ -1,0 +1,32 @@
+# DevBox zsh config, baked to /etc/devbox/zshrc and sourced from
+# /etc/zsh/zshrc. Shell-only on purpose: the HTB VM Sandbox ships no Python.
+
+[[ -o interactive ]] || return 0
+
+HISTFILE=${HISTFILE:-$HOME/.zsh_history}
+HISTSIZE=50000
+SAVEHIST=50000
+setopt HIST_IGNORE_DUPS SHARE_HISTORY INC_APPEND_HISTORY
+
+fpath=(/usr/share/zsh-completions $fpath)
+autoload -Uz compinit && compinit -i
+zstyle ':completion:*' menu select
+zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}'
+
+# Autosuggestions first; syntax highlighting must stay last.
+[ -r /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh ] &&
+    . /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+[ -r /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ] &&
+    . /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+
+command -v starship >/dev/null 2>&1 && eval "$(starship init zsh)"
+
+# Keep the forensics shortcuts available outside bash.
+[ -r /etc/profile.d/devbox-forensics.sh ] && . /etc/profile.d/devbox-forensics.sh
+
+# Login banner, same content the bash profile.d hook prints.
+if [[ -o login ]] && [ -f /etc/devbox-banner ]; then
+    clear
+    cat /etc/devbox-banner
+    [ -d /data ] && cd /data
+fi

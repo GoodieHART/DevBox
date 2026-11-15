@@ -25,6 +25,7 @@ from devbox_core.config import (
     APKTOOL_VERSION,
     OPENCODE_VERSION,
     PSPY_VERSION,
+    ZSH_COMPLETIONS_VERSION,
     RDP_PASSWORD,
     RDP_USER,
     FORENSIC_APT_PACKAGES,
@@ -89,6 +90,9 @@ def create_base_devbox_image(python_version="3.10"):
             "curl -sSLO https://github.com/starship/starship/releases/download/v1.22.1/starship-x86_64-unknown-linux-gnu.tar.gz",
             "tar -xzf starship-x86_64-unknown-linux-gnu.tar.gz -C /usr/local/bin/",
             "rm starship-x86_64-unknown-linux-gnu.tar.gz",
+            # Debian has no zsh-completions package, so pin the tarball.
+            f"curl -fsSL -o /tmp/zsh-completions.tar.gz https://github.com/zsh-users/zsh-completions/archive/refs/tags/{ZSH_COMPLETIONS_VERSION}.tar.gz",
+            f"mkdir -p /usr/share/zsh-completions && tar -xzf /tmp/zsh-completions.tar.gz -C /usr/share/zsh-completions --strip-components=2 zsh-completions-{ZSH_COMPLETIONS_VERSION}/src && rm /tmp/zsh-completions.tar.gz",
             # Create starship init script (interactive only)
             "printf '%s\\n' 'if command -v starship &> /dev/null && [ -t 0 ]; then' '  eval \"$(starship init bash)\"' 'fi' > /etc/profile.d/starship.sh",
             # Create devbox-banner display script
@@ -99,6 +103,9 @@ def create_base_devbox_image(python_version="3.10"):
             "  [ -d /data ] && cd /data\n"
             "fi\n"
             "BANNER_EOF",
+            # zsh ignores /etc/profile.d, so it needs its own global rc.
+            "grep -q 'devbox/zshrc' /etc/zsh/zshrc || printf '%s\\n' '[ -r /etc/devbox/zshrc ] && . /etc/devbox/zshrc' >> /etc/zsh/zshrc",
+            "chsh -s /usr/bin/zsh root",
         )
         .add_local_file(
             os.path.join(_IMAGES_DIR, "..", "integrations", "dove.py"),
@@ -114,6 +121,11 @@ def create_base_devbox_image(python_version="3.10"):
             copy=True,
         )
         .run_commands("chmod 755 /usr/local/bin/devbox-tmux")
+        .add_local_file(
+            os.path.join(_IMAGES_DIR, "..", "integrations", "zshrc"),
+            "/etc/devbox/zshrc",
+            copy=True,
+        )
     )
 
 
@@ -139,6 +151,9 @@ def create_base_minimal_image(python_version="3.10"):
             "curl -sSLO https://github.com/starship/starship/releases/download/v1.22.1/starship-x86_64-unknown-linux-gnu.tar.gz",
             "tar -xzf starship-x86_64-unknown-linux-gnu.tar.gz -C /usr/local/bin/",
             "rm starship-x86_64-unknown-linux-gnu.tar.gz",
+            # Debian has no zsh-completions package, so pin the tarball.
+            f"curl -fsSL -o /tmp/zsh-completions.tar.gz https://github.com/zsh-users/zsh-completions/archive/refs/tags/{ZSH_COMPLETIONS_VERSION}.tar.gz",
+            f"mkdir -p /usr/share/zsh-completions && tar -xzf /tmp/zsh-completions.tar.gz -C /usr/share/zsh-completions --strip-components=2 zsh-completions-{ZSH_COMPLETIONS_VERSION}/src && rm /tmp/zsh-completions.tar.gz",
             # Create starship init script (interactive only)
             "printf '%s\\n' 'if command -v starship &> /dev/null && [ -t 0 ]; then' '  eval \"$(starship init bash)\"' 'fi' > /etc/profile.d/starship.sh",
             # Create devbox-banner display script
@@ -149,6 +164,9 @@ def create_base_minimal_image(python_version="3.10"):
             "  [ -d /data ] && cd /data\n"
             "fi\n"
             "BANNER_EOF",
+            # zsh ignores /etc/profile.d, so it needs its own global rc.
+            "grep -q 'devbox/zshrc' /etc/zsh/zshrc || printf '%s\\n' '[ -r /etc/devbox/zshrc ] && . /etc/devbox/zshrc' >> /etc/zsh/zshrc",
+            "chsh -s /usr/bin/zsh root",
         )
         .add_local_file(
             os.path.join(_IMAGES_DIR, "..", "integrations", "dove.py"),
@@ -164,6 +182,11 @@ def create_base_minimal_image(python_version="3.10"):
             copy=True,
         )
         .run_commands("chmod 755 /usr/local/bin/devbox-tmux")
+        .add_local_file(
+            os.path.join(_IMAGES_DIR, "..", "integrations", "zshrc"),
+            "/etc/devbox/zshrc",
+            copy=True,
+        )
     )
 
 
@@ -189,7 +212,14 @@ cuda_devbox_image = (
         "libcudnn9-cuda-12",
         "libcudnn9-dev-cuda-12",
     )
-    .run_commands(*get_ssh_setup_commands())
+    .run_commands(
+        *get_ssh_setup_commands(),
+        # Ubuntu ships zsh-completions, but pin the tarball so both bases match.
+        f"curl -fsSL -o /tmp/zsh-completions.tar.gz https://github.com/zsh-users/zsh-completions/archive/refs/tags/{ZSH_COMPLETIONS_VERSION}.tar.gz",
+        f"mkdir -p /usr/share/zsh-completions && tar -xzf /tmp/zsh-completions.tar.gz -C /usr/share/zsh-completions --strip-components=2 zsh-completions-{ZSH_COMPLETIONS_VERSION}/src && rm /tmp/zsh-completions.tar.gz",
+        "grep -q 'devbox/zshrc' /etc/zsh/zshrc || printf '%s\\n' '[ -r /etc/devbox/zshrc ] && . /etc/devbox/zshrc' >> /etc/zsh/zshrc",
+        "chsh -s /usr/bin/zsh root",
+    )
     .pip_install(*DOWNLOAD_PIP_PACKAGES)
     .add_local_file(
         os.path.join(_IMAGES_DIR, "..", "integrations", "dove.py"),
@@ -206,6 +236,11 @@ cuda_devbox_image = (
     .run_commands("chmod 755 /usr/local/bin/devbox-tmux")
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "tmux.conf"), "/etc/devbox/tmux.conf", copy=True)
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "ui", "quotes.json"), "/etc/quotes.json", copy=True)
+    .add_local_file(
+        os.path.join(_IMAGES_DIR, "..", "integrations", "zshrc"),
+        "/etc/devbox/zshrc",
+        copy=True,
+    )
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
         "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader"
