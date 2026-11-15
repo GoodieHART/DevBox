@@ -27,6 +27,8 @@
 - Verified on Modal: root logs in as `/usr/bin/zsh`, `ZSH_HIGHLIGHT_VERSION` is `0.7.1-2_debian`, the autosuggestion style and functions are loaded, 180 completion files register `compdef`, and the banner prints in an interactive login shell.
 - Verified in an HTB VM Sandbox: `/etc/devbox/zshrc` is present, all three tmux panes run `zsh`, and the banner renders with a quote in the pane.
 - Verified in a Modal VM Sandbox with `standard_devbox_image`: the Tailscale 1.104.7 client installs from the pinned, checksum-verified tarball; `socket.sethostname` renames the box, `hostname -f` resolves through the new `/etc/hosts` entry, and `tailscale status` reports the node under its MagicDNS name with a tailnet address.
+- Verified on a live HTB VPN connection: Tailscale and OpenVPN run together in one VM Sandbox. The split tunnel keeps the default route on `eth0` while the HTB ranges route through `tun0`, and `tailscaled`, `openvpn`, and `sshd` all stay up. The connection block lists the Tailscale address first and the Modal tunnel as the break-glass fallback.
+- Verified the break-glass path: with no `TS_AUTHKEY`, enrollment fails with a clear reason, the VM script keeps running, the VPN still connects, and the connection block prints only the Modal tunnel.
 
 ## DevBox Updates - 2026-11-14
 
