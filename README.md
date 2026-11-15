@@ -296,6 +296,63 @@ Only the networks you select need a secret. If a selected secret or key is
 missing, the launcher stops before creating the VM and prints the exact
 `modal secret create` command to run.
 
+#### Box names and Tailscale access
+
+Every HTB VM Sandbox gets a name of its own instead of a random Modal domain.
+After the network prompt the launcher asks:
+
+```
+🏷️  Name this box?
+Name [devbox-htb-std-7f3a]:
+```
+
+Press Enter for the generated name, or type your own. The generated form is
+`devbox-[htb-]<kind>-<shortid>`, for example `devbox-htb-std-7f3a` or
+`devbox-htb-forensics-7f3a`. A typed name is lowercased and reduced to a
+DNS-safe label, so `HTB Lab 3` becomes `htb-lab-3`.
+
+The name is applied inside the VM, where the box has its own kernel:
+
+| Surface | What it shows |
+| --- | --- |
+| `hostname`, `uname -n`, shell prompt | the DevBox name |
+| `/etc/hostname`, `/etc/hosts` | the name, so `hostname -f` resolves |
+| `/etc/devbox/name` | the name, read by tmux and helper scripts |
+| login banner | the name in the `🏷️` row |
+| tmux status bar | the name instead of the fixed session name |
+
+To reach the box by name rather than by tunnel, give it a Tailscale identity.
+Generate an **ephemeral + reusable** auth key in the Tailscale admin console
+(Settings → Keys), then store it as a Modal Secret:
+
+```bash
+modal secret create tailscale-devbox-auth TS_AUTHKEY="tskey-auth-..."
+```
+
+The key is injected as `TS_AUTHKEY`, never written to `/data`, and redacted
+from error output. Tailscale runs in kernel mode inside the VM, before the HTB
+VPN connects. The HTB profile is a split tunnel (the default route stays on
+`eth0`), so the two route tables coexist: the tailnet reaches the box, and the
+box reaches the HTB lab ranges.
+
+When Tailscale comes up, the connection block prints the short MagicDNS name
+first, then the tailnet IP and the full DNS name:
+
+```
+🔗 Tailscale (recommended):
+   SSH:        ssh root@devbox-htb-std-7f3a -p 22 -t "tmux attach -t devbox"
+   Tailnet IP: 100.x.y.z
+   Full DNS:   devbox-htb-std-7f3a.<tailnet>.ts.net
+
+🚪 Modal tunnel (break-glass):
+   SSH:        ssh root@<host> -p <port> -t "tmux attach -t devbox"
+```
+
+Tailscale is optional. If the secret is missing or enrollment fails, the box
+still launches and the block shows only the Modal tunnel with a warning. The
+tailnet reaches the box itself, never the HTB lab subnets: no routes are
+advertised.
+
 The VM waits for each tunnel's `Initialization Sequence Completed` message
 before it starts SSH, OpenCode, or (for Forensics) the RDP desktop, so nothing
 is exposed while the VPN is still negotiating. VM Sandboxes are CPU-only; GPU
@@ -615,6 +672,7 @@ DevBox uses Modal Secrets to securely pass credentials into containers at runtim
 | `gemini-api-key` | `GEMINI_API_KEY` | AI Coding Box | Gemini CLI prompts for key on first use |
 | `exa-api-key` | `EXA_API_KEY` | llama.cpp Research Center | EXA Search disabled, everything else works |
 | `opencode-server-password` | `OPENCODE_SERVER_PASSWORD` | AI Coding and Forensics boxes (optional) | No password auth; tunnel URL is the only secret |
+| `tailscale-devbox-auth` | `TS_AUTHKEY` | HTB VM boxes (optional) | Box still launches on the Modal tunnel, with a warning |
 
 ### Understanding GGUF Model Names
 
@@ -697,6 +755,8 @@ The codebase is organized into domain packages. Entrypoints stay at the root so 
 | `runtime/persistence_utils.py` | Symlink management for dotfiles persistence across sessions |
 | `runtime/backup_utils.py` | Backup registration and data persistence helpers |
 | `runtime/htb_vm.py` | Modal VM Sandbox launcher for HTB VPN mode (SSH, OpenCode, RDP) |
+| `devbox_core/box_identity.py` | Box naming, hostname rewriting, and the shared login banner |
+| `runtime/tailscale_runtime.py` | Starts `tailscaled`, enrolls the box, and reads its MagicDNS name and address back |
 | `integrations/exa_helper.py` | EXA Search integration for llama.cpp Research Center |
 | `integrations/exa_proxy.py` | EXA reverse proxy (browser port → llama-server) with tool-call loop |
 | `ui/ui_utils.py` | UI helper functions — `create_box()`, `show_spinner()` |
@@ -707,6 +767,9 @@ The codebase is organized into domain packages. Entrypoints stay at the root so 
 | `tests/test_image_packaging.py` | Structural tests that every runtime/UI module is packaged into the images |
 | `tests/test_rdp_session.py` | Structural tests for RDP session startup, persistence-safe dirs, and idle detection |
 | `tests/test_forensic_desktop.py` | Structural tests for the RDP-backed Forensics desktop and HTB VM |
+| `tests/test_tailscale.py` | Structural tests for the pinned Tailscale image layer and runtime |
+| `tests/test_htb_identity.py` | Structural tests for HTB box naming, identity, and Tailscale wiring |
+| `tests/test_banners.py` | Structural tests for the shared login banner and the tmux name label |
 | `tests/test_wpscan.py` | Structural tests for the WPScan/Ruby stack in the Forensics image |
 
 ## Roadmap

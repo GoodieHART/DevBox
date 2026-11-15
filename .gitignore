@@ -21,3 +21,4 @@ MODAL_KNOWLEDGE.md
 *.egg-info/
 dist/
 build/
+ts.key

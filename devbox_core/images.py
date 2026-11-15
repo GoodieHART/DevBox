@@ -26,6 +26,10 @@ from devbox_core.config import (
     OPENCODE_VERSION,
     PSPY_VERSION,
     ZSH_COMPLETIONS_VERSION,
+    TAILSCALE_SHA256,
+    TAILSCALE_TARBALL_URL,
+    TAILSCALE_BIN,
+    TAILSCALED_BIN,
     RDP_PASSWORD,
     RDP_USER,
     FORENSIC_APT_PACKAGES,
@@ -46,6 +50,39 @@ def _apt_install(image: modal.Image, *packages: str) -> modal.Image:
     baked into a published DevBox image."""
     validate_prohibited_packages(packages)
     return image.apt_install(*packages)
+
+
+def _tailscale_layer(image: modal.Image) -> modal.Image:
+    """Bake the Tailscale client into an image.
+
+    The client is a pinned static tarball, so nothing here depends on the
+    distribution's package manager, and the SHA-256 is checked while the image
+    is built.
+
+    `iptables` belongs to the layer: `NetfilterMode` defaults to on and the
+    netfilter rules that make inbound tailnet traffic work need it.
+
+    The layer has no add_local_* call. Modal rejects build steps after a
+    local-file mount, so every concrete image appends those last.
+    """
+    return (
+        # curl verifies the download over TLS, so ca-certificates is needed;
+        # tar is not guaranteed in a slim base image.
+        _apt_install(image, "iptables", "ca-certificates", "tar")
+        .run_commands(
+            f"curl -fsSL -o /tmp/tailscale.tgz {TAILSCALE_TARBALL_URL}",
+            # Checksum-verified so a compromised mirror cannot inject a binary.
+            f"echo '{TAILSCALE_SHA256}  /tmp/tailscale.tgz' | sha256sum -c -",
+            "mkdir -p /tmp/tailscale",
+            # The tarball root is tailscale_<version>_amd64/.
+            "tar -xzf /tmp/tailscale.tgz -C /tmp/tailscale --strip-components=1",
+            f"install -m 755 /tmp/tailscale/tailscale {TAILSCALE_BIN}",
+            f"install -m 755 /tmp/tailscale/tailscaled {TAILSCALED_BIN}",
+            "rm -rf /tmp/tailscale /tmp/tailscale.tgz",
+            # The daemon socket path the runtime uses.
+            "mkdir -p /run/tailscale",
+        )
+    )
 
 
 def get_ssh_setup_commands():
@@ -79,9 +116,11 @@ def create_base_devbox_image(python_version="3.10"):
         modal.Image: Base DevBox image with SSH and core tools
     """
     return (
-        _apt_install(
-            modal.Image.debian_slim(python_version=python_version),
-            *CORE_DEV_PACKAGES, *EXTENDED_DEV_PACKAGES, *DOWNLOAD_APT_PACKAGES,
+        _tailscale_layer(
+            _apt_install(
+                modal.Image.debian_slim(python_version=python_version),
+                *CORE_DEV_PACKAGES, *EXTENDED_DEV_PACKAGES, *DOWNLOAD_APT_PACKAGES,
+            )
         )
         .pip_install(*DOWNLOAD_PIP_PACKAGES)
         .run_commands(
@@ -140,9 +179,11 @@ def create_base_minimal_image(python_version="3.10"):
         modal.Image: Minimal base image with SSH only
     """
     return (
-        _apt_install(
-            modal.Image.debian_slim(python_version=python_version),
-            *CORE_DEV_PACKAGES, *DOWNLOAD_APT_PACKAGES,
+        _tailscale_layer(
+            _apt_install(
+                modal.Image.debian_slim(python_version=python_version),
+                *CORE_DEV_PACKAGES, *DOWNLOAD_APT_PACKAGES,
+            )
         )
         .pip_install(*DOWNLOAD_PIP_PACKAGES)
         .run_commands(
@@ -197,20 +238,25 @@ standard_devbox_image = (
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "ui", "quotes.json"), "/etc/quotes.json", copy=True)
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
-        "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader"
+        "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader",
+        "runtime.tailscale_runtime", "devbox_core.box_identity"
     )
 )
 cuda_devbox_image = (
-    _apt_install(
-        modal.Image.from_registry(
-            "nvidia/cuda:12.1.1-devel-ubuntu22.04",
-            add_python="3.11"
-        ),
-        *CORE_DEV_PACKAGES,
-        *DOWNLOAD_APT_PACKAGES,
-        "nano",
-        "libcudnn9-cuda-12",
-        "libcudnn9-dev-cuda-12",
+    # Starts from the NVIDIA registry, so it cannot use the base builders and
+    # needs its own copy of the Tailscale layer.
+    _tailscale_layer(
+        _apt_install(
+            modal.Image.from_registry(
+                "nvidia/cuda:12.1.1-devel-ubuntu22.04",
+                add_python="3.11"
+            ),
+            *CORE_DEV_PACKAGES,
+            *DOWNLOAD_APT_PACKAGES,
+            "nano",
+            "libcudnn9-cuda-12",
+            "libcudnn9-dev-cuda-12",
+        )
     )
     .run_commands(
         *get_ssh_setup_commands(),
@@ -243,7 +289,8 @@ cuda_devbox_image = (
     )
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
-        "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader"
+        "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader",
+        "runtime.tailscale_runtime", "devbox_core.box_identity"
     )
 )
 
@@ -263,7 +310,8 @@ assisted_coding_image = (
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "ui", "quotes.json"), "/etc/quotes.json", copy=True)
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
-        "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader"
+        "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader",
+        "runtime.tailscale_runtime", "devbox_core.box_identity"
     )
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "opencode-coding.json"), "/etc/devbox/opencode.json")
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "opencode-coding.json"), "/etc/devbox/opencode-coding.json")
@@ -526,7 +574,8 @@ forensic_analysis_image = (
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "ui", "quotes.json"), "/etc/quotes.json", copy=True)
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
-        "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader"
+        "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader",
+        "runtime.tailscale_runtime", "devbox_core.box_identity"
     )
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "opencode.json"), "/etc/devbox/opencode.json")
 )
@@ -547,7 +596,8 @@ llm_playroom_image = (
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "ui", "quotes.json"), "/etc/quotes.json", copy=True)
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
-        "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader"
+        "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader",
+        "runtime.tailscale_runtime", "devbox_core.box_identity"
     )
 )
 
@@ -586,7 +636,8 @@ llamacpp_cpu_image = (
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
         "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "integrations.exa_helper", "integrations.exa_proxy", "ui.quotes_loader",
-        "runtime.llamacpp_runtime", "devbox_core.llamacpp_models"
+        "runtime.llamacpp_runtime", "devbox_core.llamacpp_models",
+        "runtime.tailscale_runtime", "devbox_core.box_identity"
     )
 )
 
@@ -596,6 +647,7 @@ rdp_devbox_image = (
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "ui", "quotes.json"), "/etc/quotes.json", copy=True)
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
-        "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader"
+        "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader",
+        "runtime.tailscale_runtime", "devbox_core.box_identity"
     )
 )

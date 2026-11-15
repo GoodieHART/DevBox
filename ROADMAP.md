@@ -6,8 +6,8 @@ Planned improvements and future work for DevBox.
 
 - [x] Per-launch cost tracking (estimated USD, persisted to `/data/.cost`)
 
-- [ ] Better shell welcome with oh-my-zsh/starship
-- [ ] Startup banner
+- [x] Better shell welcome with oh-my-zsh/starship
+- [x] Startup banner (all box types, including RDP Desktop and llama.cpp Research Center)
 - [ ] Move into the `/data` directory on login
 - [ ] Try to add support for systemd
 - [ ] Clear screen on login
@@ -19,7 +19,7 @@ Planned improvements and future work for DevBox.
 - [ ] Session restore/backup function
 - [x] Allow for `tmux` sessions (done: every box starts a detached `devbox` tmux session with 3 windows; printed SSH command bundles `tmux attach -t devbox`)
 - [ ] Dynamically select llama-cpp version (currently hardcoded)
-- [ ] Setup forensics image with welcome banner
+- [ ] Setup forensics image with welcome banner (HTB Forensics VM now shows one; the Function-based Forensics box uses the shared OpenCode banner)
 - [ ] Add support for VS Code Server
 - [ ] Add `oh-my-opencode` to `assisted_coding_image`
 - [ ] Add Ollama models

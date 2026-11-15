@@ -30,6 +30,29 @@ OPENCODE_VERSION = "1.19.0"
 PSPY_VERSION = "v1.2.1"
 ZSH_COMPLETIONS_VERSION = "0.36.0"
 
+# ---------------------------------------------------------------------------
+# Tailscale
+# ---------------------------------------------------------------------------
+# The client is a pinned static tarball, so the image does not depend on the
+# distribution's package manager. The checksum is verified while the image is
+# built, so a compromised mirror cannot inject a binary into every DevBox.
+TAILSCALE_VERSION = "1.104.7"
+TAILSCALE_SHA256 = "e56693ff74a64f2591b7e819c280635a100aae1ddfb0ef058fcd052b7cd8d16c"
+TAILSCALE_TARBALL_URL = f"https://pkgs.tailscale.com/stable/tailscale_{TAILSCALE_VERSION}_amd64.tgz"
+# The Modal secret that carries the enrollment key.
+TAILSCALE_SECRET_NAME = "tailscale-devbox-auth"
+# The environment variable the key is injected as inside the container.
+TAILSCALE_AUTH_KEY_ENV = "TS_AUTHKEY"
+# The daemon socket path; every invocation passes it explicitly.
+TAILSCALE_SOCKET = "/run/tailscale/tailscaled.sock"
+# Node state lives in memory only: nothing about the node is written to disk.
+TAILSCALE_STATE = "mem:"
+# Seconds to wait for the node to reach the "Running" state.
+TAILSCALE_READY_TIMEOUT = 90
+# Where the image layer installs the client.
+TAILSCALE_BIN = "/usr/local/bin/tailscale"
+TAILSCALED_BIN = "/usr/local/bin/tailscaled"
+
 # Resource configurations for different DevBox types
 
 # CPU-only DevBox resource arguments

@@ -37,6 +37,9 @@ dev_volume = modal.Volume.from_name("my-dev-volume", create_if_missing=True)
 ssh_secret = modal.Secret.from_name("ssh-public-key")
 gemini_secret = modal.Secret.from_name("gemini-api-key")
 exa_secret = modal.Secret.from_name("exa-api-key")
+# Tailscale auth for the HTB VM boxes. Optional: the VM launcher warns and
+# falls back to the Modal tunnel when the secret is missing.
+tailscale_secret = modal.Secret.from_name("tailscale-devbox-auth")
 
 _wiring = build_devbox_args(
     [ssh_secret],
@@ -69,10 +72,18 @@ def launch_devbox(extra_packages=None):
 
 
 @app.function(image=standard_devbox_image, **cpu_devbox_args)
-def launch_devbox_htb(network="labs"):
+def launch_devbox_htb(network="labs", box_name=None):
     """Standard DevBox as a VM Sandbox on an HTB VPN network."""
     from runtime.htb_vm import run_htb_vm
-    run_htb_vm(standard_devbox_image, dev_volume, ssh_secret, resources=cpu_devbox_args, network=network)
+    run_htb_vm(
+        standard_devbox_image,
+        dev_volume,
+        ssh_secret,
+        resources=cpu_devbox_args,
+        network=network,
+        box_name=box_name,
+        tailscale_secret=tailscale_secret,
+    )
 
 
 @_unless_cpu_only(app.function(image=cuda_devbox_image, gpu="t4", **gpu_devbox_args))
@@ -146,7 +157,7 @@ def launch_forensics_image():
 
 
 @app.function(image=forensic_analysis_image, **forensics_devbox_args)
-def launch_forensics_htb(network="labs"):
+def launch_forensics_htb(network="labs", box_name=None):
     """Forensics box as a VM Sandbox on an HTB VPN network (RDP, SSH, OpenCode)."""
     from runtime.htb_vm import run_htb_vm
     run_htb_vm(
@@ -156,6 +167,8 @@ def launch_forensics_htb(network="labs"):
         forensic=True,
         resources=forensics_devbox_args,
         network=network,
+        box_name=box_name,
+        tailscale_secret=tailscale_secret,
     )
 
 # llama.cpp Research Center - Curated Model Catalog lives in

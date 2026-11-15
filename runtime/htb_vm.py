@@ -5,8 +5,14 @@ provide, so HTB networks run here rather than in the Function-based boxes.
 
 A box can join Labs, Starting Point, or both: each network gets its own tun
 device, and their non-overlapping machine ranges let both route tables coexist.
+
+The VM Sandbox is the only DevBox runtime that can carry an identity of its
+own: it has its own kernel, so the hostname can be rewritten, and Tailscale
+runs in kernel mode alongside the HTB VPN. The HTB profile is a split tunnel
+(the default route stays on eth0), so the two route tables coexist.
 """
 
+import sys
 import time
 
 import modal
@@ -17,6 +23,16 @@ from devbox_core.config import (
     HTB_VPN_NETWORKS,
 )
 from runtime.shared_runtime import format_banner
+
+# Tailscale auth for the HTB VM boxes. The secret injects TS_AUTHKEY into the
+# sandbox environment. The key is never written to the persistent volume and is
+# redacted from error output. The secret is optional: without it the box still
+# launches, on the Modal tunnel alone.
+
+# Written inside the VM by the Tailscale step: the connection details on
+# success, and the outcome either way.
+TAILSCALE_ENV_PATH = "/run/devbox/tailscale.env"
+TAILSCALE_STATUS_PATH = "/run/devbox/tailscale.status"
 
 # One `case` arm per network, generated from config so the secret key, device,
 # and name cannot drift apart. VM_SCRIPT is not an f-string (it is full of shell
@@ -84,10 +100,102 @@ def _require_vpn_secrets(profiles):
     return secrets
 
 
+def _resolve_tailscale_secret(tailscale_secret):
+    """Return a usable Tailscale secret, or None when there is none.
+
+    Tailscale is optional: the box still launches with the Modal tunnel alone,
+    so a missing secret is a warning and never a failed launch. `from_name()`
+    is lazy, so `hydrate()` is what turns a missing secret into that warning
+    instead of a failed sandbox creation.
+    """
+    if tailscale_secret is None:
+        return None
+    try:
+        tailscale_secret.hydrate()
+    except Exception as error:  # noqa: BLE001 - Tailscale must never be fatal
+        print(
+            f"⚠️  Tailscale is unavailable ({error}); "
+            "the box will use the Modal tunnel only."
+        )
+        return None
+    return tailscale_secret
+
+
 VM_SCRIPT = (
     r'''#!/bin/sh
 set -eu
 mkdir -p /run/devbox
+
+# The box identity and the box type arrive as environment variables, so they
+# never show up in the arguments of anything below.
+DEVBOX_NAME="${DEVBOX_NAME:-devbox-htb-box}"
+DEVBOX_MODE="${1:-standard}"
+export DEVBOX_NAME DEVBOX_MODE
+# The image mounts the DevBox python packages under /root.
+export PYTHONPATH="/root${PYTHONPATH:+:$PYTHONPATH}"
+cd /root
+
+TS_STATUS=/run/devbox/tailscale.status
+TS_ENV=/run/devbox/tailscale.env
+TS_LOG=/run/devbox/tailscale.log
+
+# Tailscale comes up before the VPN. The HTB profile is a split tunnel, so the
+# default route stays on eth0 and the tailnet reaches its control plane over
+# the normal route. A failure here is never fatal: the box still gets a Modal
+# tunnel.
+parse_tailscale_result() {
+    python3 -c 'import json, os, sys
+
+data = {}
+try:
+    data = json.loads(sys.stdin.read() or "{}")
+except Exception:
+    data = {}
+
+ip = str(data.get("ip") or "").strip()
+dns = str(data.get("dns_name") or "").strip().rstrip(".")
+name = os.environ.get("DEVBOX_NAME", "").strip()
+if dns and "." in dns:
+    name = dns.split(".")[0]
+reason = " ".join(str(data.get("error") or "").split())[:300]
+
+if data.get("ok") and name:
+    with open("/run/devbox/tailscale.env", "w") as handle:
+        handle.write("DEVBOX_TAILSCALE_NAME=%s\n" % name)
+        handle.write("DEVBOX_TAILSCALE_IP=%s\n" % ip)
+        handle.write("DEVBOX_TAILSCALE_DNS=%s\n" % dns)
+    with open("/run/devbox/tailscale.status", "w") as handle:
+        handle.write("ok\n")
+    print("Tailscale up as %s (%s)" % (name, ip))
+else:
+    with open("/run/devbox/tailscale.status", "w") as handle:
+        handle.write("failed: %s\n" % (reason or "no tailnet address"))
+    print("Tailscale unavailable: %s" % (reason or "no tailnet address"))
+'
+}
+
+start_tailscale() {
+    ts_json=""
+    if ! ts_json=$(python3 -m runtime.tailscale_runtime up --hostname "$DEVBOX_NAME" 2>"$TS_LOG"); then
+        # A failed enrollment is never fatal: the box keeps the Modal tunnel.
+        # The runtime still prints its JSON result, which explains the failure.
+        if [ -n "$ts_json" ]; then
+            printf '%s' "$ts_json" | parse_tailscale_result
+            return 0
+        fi
+        ts_reason=$(tail -n 1 "$TS_LOG" 2>/dev/null || true)
+        [ -n "$ts_reason" ] || ts_reason="tailscale up failed"
+        printf 'failed: %s\n' "$ts_reason" > "$TS_STATUS"
+        return 0
+    fi
+    printf '%s' "$ts_json" | parse_tailscale_result
+}
+
+start_tailscale
+ts_status=$(cat "$TS_STATUS" 2>/dev/null || printf 'failed: unknown error')
+if [ "$ts_status" != "ok" ]; then
+    printf 'WARNING: Tailscale is not available (%s); continuing with the Modal tunnel only.\n' "$ts_status" >&2
+fi
 
 connect_vpn() {
     label=$1
@@ -198,29 +306,169 @@ exit 0
 ).replace("__VPN_DISPATCH__", _VPN_DISPATCH)
 
 
-def run_htb_vm(image, volume, ssh_secret, *, forensic=False, resources=None, network=None):
+def _read_sandbox_file(sandbox, path):
+    """Read a file from the sandbox, returning "" when it is not there yet."""
+    try:
+        return sandbox.filesystem.read_text(path)
+    except Exception:  # noqa: BLE001 - a missing file is the normal case here
+        return ""
+
+
+def _wait_for_tailscale(sandbox, process=None, timeout=120):
+    """Wait for the VM script to publish its Tailscale result.
+
+    Returns the connection details as a dict, or an empty dict when Tailscale
+    did not come up (the box then runs on the Modal tunnel alone).
+    """
+    deadline = time.time() + timeout
+    status = ""
+    while time.time() < deadline:
+        status = _read_sandbox_file(sandbox, TAILSCALE_STATUS_PATH).strip()
+        if status:
+            break
+        if process is not None and process.poll() is not None:
+            # The VM script died before publishing a result.
+            return {}
+        time.sleep(2)
+
+    if not status.startswith("ok"):
+        return {}
+
+    values = {}
+    for line in _read_sandbox_file(sandbox, TAILSCALE_ENV_PATH).splitlines():
+        key, _, value = line.partition("=")
+        if key.strip():
+            values[key.strip()] = value.strip()
+
+    if not values.get("DEVBOX_TAILSCALE_NAME"):
+        return {}
+    return values
+
+
+def _print_field(label, value):
+    """One aligned row of the connection block."""
+    print(f"   {label:<12}{value}")
+
+
+def _print_ready_block(
+    tailscale,
+    tunnels,
+    forensic=False,
+    *,
+    opencode_port=4096,
+    rdp_port=3389,
+    rdp_user="root",
+    rdp_password="",
+):
+    """Print the connection block for a ready HTB box.
+
+    The Tailscale address comes first and the Modal tunnel is the labelled
+    break-glass fallback. When Tailscale did not come up, only the Modal
+    tunnel block is printed, never a half-empty Tailscale address.
+    """
+    title = (
+        "🔍  Your HTB Forensics DevBox is ready!"
+        if forensic
+        else "🛡️  Your HTB DevBox is ready!"
+    )
+    print()
+    print("=" * 60)
+    print(title)
+    print("=" * 60)
+    print()
+
+    short = (tailscale or {}).get("DEVBOX_TAILSCALE_NAME", "")
+    if short:
+        print("🔗 Tailscale (recommended):")
+        _print_field(
+            "SSH:", f'ssh root@{short} -p 22 -t "tmux attach -t devbox"'
+        )
+        tailnet_ip = tailscale.get("DEVBOX_TAILSCALE_IP", "")
+        if tailnet_ip:
+            _print_field("Tailnet IP:", tailnet_ip)
+        dns_name = tailscale.get("DEVBOX_TAILSCALE_DNS", "")
+        if dns_name:
+            _print_field("Full DNS:", dns_name)
+        if forensic:
+            _print_field("OpenCode:", f"http://{short}:{opencode_port}")
+            _print_field("RDP:", f"{short}:{rdp_port}")
+        print()
+    else:
+        print("⚠️  Tailscale is not available - use the Modal tunnel below.")
+        print()
+
+    print("🚪 Modal tunnel (break-glass):")
+    ssh_tunnel = tunnels[22]
+    _print_field(
+        "SSH:",
+        f'ssh root@{ssh_tunnel.unencrypted_host} -p {ssh_tunnel.unencrypted_port} '
+        '-t "tmux attach -t devbox"',
+    )
+    if forensic:
+        web_tunnel = tunnels[opencode_port]
+        _print_field(
+            "OpenCode:",
+            f"http://{web_tunnel.unencrypted_host}:{web_tunnel.unencrypted_port}",
+        )
+        rdp_tunnel = tunnels[rdp_port]
+        _print_field(
+            "RDP:",
+            f"{rdp_tunnel.unencrypted_host}:{rdp_tunnel.unencrypted_port} "
+            f"(username {rdp_user}, password {rdp_password})",
+        )
+    print("=" * 60)
+
+
+def run_htb_vm(
+    image,
+    volume,
+    ssh_secret,
+    *,
+    forensic=False,
+    resources=None,
+    network=None,
+    box_name=None,
+    tailscale_secret=None,
+):
+    from devbox_core.box_identity import apply_sandbox_identity, resolve_box_name
     from devbox_core.config import (
         IDLE_TIMEOUT_SECONDS,
         OPENCODE_IDLE_TIMEOUT_SECONDS,
+        OPENCODE_PORT,
         RDP_PASSWORD,
         RDP_PORT,
         RDP_USER,
     )
+
+    devbox_type = "forensic_analysis" if forensic else "standard_devbox"
+    name = resolve_box_name(devbox_type, htb=True, custom=box_name)
 
     names, profiles = resolve_htb_networks(network)
     vpn_secrets = _require_vpn_secrets(profiles)
     labels = ", ".join(profile["label"] for profile in profiles)
 
     idle_timeout = OPENCODE_IDLE_TIMEOUT_SECONDS if forensic else IDLE_TIMEOUT_SECONDS
-    exposed_ports = [22, 4096, RDP_PORT] if forensic else [22]
+    exposed_ports = [22, OPENCODE_PORT, RDP_PORT] if forensic else [22]
+
+    secrets = [ssh_secret, *vpn_secrets]
+    ts_secret = _resolve_tailscale_secret(tailscale_secret)
+    if ts_secret is not None:
+        secrets.append(ts_secret)
+
     sandbox = modal.Sandbox.create(
         "sleep",
         "infinity",
         app=modal.App.lookup("personal-devbox-launcher", create_if_missing=True),
         image=image,
         runtime="vm",
-        secrets=[ssh_secret, *vpn_secrets],
-        env={"DEVBOX_IDLE_TIMEOUT": str(idle_timeout)},
+        secrets=secrets,
+        env={
+            "DEVBOX_IDLE_TIMEOUT": str(idle_timeout),
+            "DEVBOX_NAME": name,
+            "DEVBOX_MODE": "forensic" if forensic else "standard",
+            # The image mounts the DevBox python packages under /root.
+            "PYTHONPATH": "/root",
+        },
         volumes={"/data": volume},
         cpu=resources.get("cpu") if resources else None,
         memory=resources.get("memory") if resources else None,
@@ -228,14 +476,25 @@ def run_htb_vm(image, volume, ssh_secret, *, forensic=False, resources=None, net
         unencrypted_ports=exposed_ports,
     )
     print(f"HTB network(s): {labels}")
+    print(f"Box name: {name}")
+    extra_lines = (
+        ("🌐 OpenCode web on :4096", "🖥️ RDP desktop on :3389") if forensic else ()
+    )
     banner = format_banner(
         "forensic_analysis" if forensic else "standard_devbox",
-        ("🌐 OpenCode web on :4096", "🖥️ RDP desktop on :3389")
-        if forensic
-        else (),
+        extra_lines,
+        name=name,
     )
     sandbox.filesystem.write_text(banner, "/etc/devbox-banner")
     try:
+        # The VM has its own kernel, so the box can rename itself. This runs
+        # before the VM script, so SSH lands on the named box.
+        identity = apply_sandbox_identity(sandbox, name)
+        if not identity.get("hostname_changed"):
+            print(
+                f"⚠️  Hostname unchanged: "
+                f"{identity.get('reason') or 'unknown reason'}"
+            )
         sandbox.filesystem.write_text(VM_SCRIPT, "/run/devbox-vm.sh")
         process = sandbox.exec(
             "sh",
@@ -244,23 +503,17 @@ def run_htb_vm(image, volume, ssh_secret, *, forensic=False, resources=None, net
             str(idle_timeout),
             ",".join(names),
         )
+        tailscale = _wait_for_tailscale(sandbox, process)
         tunnels = sandbox.tunnels(timeout=120)
-        ssh_tunnel = tunnels[22]
-        print(
-            f"SSH: ssh root@{ssh_tunnel.unencrypted_host} "
-            f"-p {ssh_tunnel.unencrypted_port} -t \"tmux attach -t devbox\""
+        _print_ready_block(
+            tailscale,
+            tunnels,
+            forensic,
+            opencode_port=OPENCODE_PORT,
+            rdp_port=RDP_PORT,
+            rdp_user=RDP_USER,
+            rdp_password=RDP_PASSWORD,
         )
-        if forensic:
-            web_tunnel = tunnels[4096]
-            print(
-                f"OpenCode web: http://{web_tunnel.unencrypted_host}:"
-                f"{web_tunnel.unencrypted_port}"
-            )
-            rdp_tunnel = tunnels[RDP_PORT]
-            print(
-                f"RDP: {rdp_tunnel.unencrypted_host}:{rdp_tunnel.unencrypted_port} "
-                f"(username {RDP_USER}, password {RDP_PASSWORD})"
-            )
         for line in process.stdout:
             print(line, end="")
         while process.poll() is None:
@@ -268,7 +521,7 @@ def run_htb_vm(image, volume, ssh_secret, *, forensic=False, resources=None, net
         exit_code = process.wait()
         stderr = process.stderr.read()
         if stderr:
-            print(stderr, end="", file=__import__("sys").stderr)
+            print(stderr, end="", file=sys.stderr)
         if exit_code != 0:
             raise RuntimeError(f"HTB VM Sandbox exited with status {exit_code}")
     finally:

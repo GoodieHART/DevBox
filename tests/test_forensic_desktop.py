@@ -119,8 +119,12 @@ def test_desktop_layer_helpers_exist_and_use_the_rdp_port():
 
 def test_htb_forensic_vm_exposes_rdp_and_starts_xrdp():
     htb = source("runtime/htb_vm.py")
+    config = source("devbox_core/config.py")
     assert "RDP_PORT" in htb
-    assert "[22, 4096, RDP_PORT] if forensic else [22]" in htb
+    # The forensics VM exposes SSH, the OpenCode web port and RDP; the
+    # standard VM exposes SSH only.
+    assert "[22, OPENCODE_PORT, RDP_PORT] if forensic else [22]" in htb
+    assert "OPENCODE_PORT = 4096" in config
     assert "xrdp" in htb
     assert "startxfce4-wrapper" in htb
     assert "pgrep -f 'xrdp-chansrv|xfce4-session'" in htb

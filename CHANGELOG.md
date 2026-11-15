@@ -4,15 +4,28 @@
 
 ### Added
 
+### Added
+
 - zsh is now the login shell on every box, with `zsh-autosuggestions`, `zsh-syntax-highlighting`, and `zsh-completions`.
 - The setup lives in `/etc/devbox/zshrc`, baked into each image and sourced from `/etc/zsh/zshrc`, so Function boxes, RDP terminals, and the HTB VM get the same shell.
 - zsh keeps the bash behaviour: Starship, the login banner, and the Forensics aliases and environment.
 - `.zsh_history` is persisted alongside `.bash_history`.
 - `zsh-completions` is pinned to 0.36.0 and installed from its release tarball, because Debian does not package it.
+- HTB VM boxes get a name. The launcher prompts `Name [devbox-htb-std-7f3a]:`; Enter keeps the generated `devbox-[htb-]<kind>-<shortid>` name, and a typed name is sanitised to a DNS-safe label.
+- The name is applied inside the VM: kernel hostname (`hostname`, `uname -n`), `/etc/hostname`, an `/etc/hosts` entry so `hostname -f` resolves, `/etc/devbox/name`, the login banner, and the tmux status bar.
+- Tailscale access for HTB VM boxes. A pinned, checksum-verified Tailscale 1.104.7 client is added to every image, and the VM enrolls in kernel mode before the VPN connects. The connection block prints the short MagicDNS name, the tailnet IP and the full DNS name ahead of the Modal tunnel fallback.
+- The `tailscale-devbox-auth` Modal Secret (`TS_AUTHKEY`) carries an ephemeral, reusable auth key. Tailscale is optional: if the secret is missing or enrollment fails, the box launches on the Modal tunnel alone with a warning.
+- The RDP Desktop Box and the llama.cpp Research Center now write a login banner.
+
+### Changed
+
+- Every box type writes its login banner through `devbox_core.box_identity.banner_text`, so the format is the same everywhere.
+- The tmux status bar shows the name from `/etc/devbox/name` and falls back to `devbox`, instead of the session name that was identical in every box.
+- `iptables`, `ca-certificates` and `tar` are part of the Tailscale image layer, so the netfilter rules and the verified download work on a slim base image.
 
 ### Validation
 
-- Test suite: 229 tests passed.
+- Test suite: 306 tests passed.
 - Verified on Modal: root logs in as `/usr/bin/zsh`, `ZSH_HIGHLIGHT_VERSION` is `0.7.1-2_debian`, the autosuggestion style and functions are loaded, 180 completion files register `compdef`, and the banner prints in an interactive login shell.
 - Verified in an HTB VM Sandbox: `/etc/devbox/zshrc` is present, all three tmux panes run `zsh`, and the banner renders with a quote in the pane.
 

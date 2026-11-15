@@ -172,6 +172,16 @@ def run_llamacpp_playroom(mode, resources=None):
         import sys
         print(f"[cost_tracker] init failed: {_e}", file=sys.stderr)
 
+    # --- Login banner ---
+    # Written before the model download and the server start. The playroom
+    # runs as a Modal Function, so it has no DevBox identity.
+    from runtime.shared_runtime import write_banner_file
+
+    write_banner_file(
+        "llamacpp_gpu" if mode == "gpu" else "llamacpp_cpu",
+        ["🧠 llama-server on :8080"],
+    )
+
     # --- Model Selection ---
     print("\n📦 Model Selection:")
     for key, model in LLAMACPP_MODELS.items():

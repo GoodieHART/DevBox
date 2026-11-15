@@ -291,33 +291,64 @@ DEVBOX_BANNERS = {
     "opencode": ("🤖", "OpenCode Box"),
     "llm_playroom": ("🧠", "LLM Playroom"),
     "forensic_analysis": ("🔍", "Forensics Analysis Box"),
+    "rdp_devbox": ("🖥️", "RDP Desktop Box"),
+    "llamacpp_cpu": ("🔬", "llama.cpp Research Center"),
+    "llamacpp_gpu": ("🔬", "llama.cpp Research Center"),
 }
 
 
-def format_banner(devbox_type, extra_lines=()):
-    """Login banner: box header, extra rows, and a random quote when found."""
-    icon, name = DEVBOX_BANNERS.get(devbox_type, ("🚀", "DevBox"))
-    rows = [
-        f"║  {icon} {name:<30} ║",
-        f"║  {'💾 Persistent: /data':<36} ║",
-        *(f"║  {line:<36} ║" for line in extra_lines),
-    ]
-    banner = "\n".join(
-        [
-            "╔══════════════════════════════════════╗",
-            *rows,
-            "╚══════════════════════════════════════╝",
-            "",
-        ]
-    )
+# The login banner every DevBox type shows. `/etc/profile.d/devbox-banner.sh`
+# prints it for interactive bash shells, and `/etc/devbox/zshrc` prints it for
+# zsh.
+BANNER_PATH = "/etc/devbox-banner"
+
+
+def current_box_name():
+    """The DevBox identity of this container, or None when it has none.
+
+    A Modal Function container cannot change its kernel hostname, so the
+    Function-based boxes have no identity and show no name row.
+    """
     try:
-        quote = get_random_quote()
-        banner += f"\n{quote['text']}\n- {quote['author']}\n"
+        from devbox_core.box_identity import read_name_file
+
+        return read_name_file()
     except Exception:
-        pass  # Quotes are optional; the header still renders.
+        return None
+
+
+def format_banner(devbox_type, extra_lines=(), name=None, quote=True):
+    """Render the login banner: header, rows, and a random quote when found.
+
+    The box is drawn by `devbox_core.box_identity.banner_text`, so every box
+    type shares one format. `name` adds a name row and is None for a box that
+    has no identity.
+    """
+    from devbox_core.box_identity import banner_text
+
+    icon, title = DEVBOX_BANNERS.get(devbox_type, ("🚀", "DevBox"))
+    rows = ["💾 Persistent: /data", *extra_lines]
+    banner = banner_text(name, icon, title, rows)
+    if quote:
+        try:
+            quote_data = get_random_quote()
+            banner += f"\n{quote_data['text']}\n- {quote_data['author']}\n"
+        except Exception:
+            pass  # Quotes are optional; the header still renders.
     return banner
 
 
+def write_banner_file(devbox_type, extra_lines=(), name=None, quote=True,
+                      path=BANNER_PATH):
+    """Write the login banner to disk. Never raises."""
+    try:
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(format_banner(devbox_type, extra_lines, name=name,
+                                       quote=quote))
+    except Exception as error:
+        print(f"⚠️ could not write the DevBox banner: {error}", file=sys.stderr)
+        return None
+    return path
 
 TMUX_SESSION_SCRIPT = "/usr/local/bin/devbox-tmux"
 
@@ -381,8 +412,7 @@ def run_devbox_shared(extra_packages=None, devbox_type="ssh", resources=None):
     inject_ssh_key()
 
     # Write devbox banner with quote
-    with open("/etc/devbox-banner", "w") as f:
-        f.write(format_banner(devbox_type))
+    write_banner_file(devbox_type, name=current_box_name())
 
     install_extra_packages(extra_packages)
     
@@ -508,6 +538,10 @@ def run_rdp_devbox_shared(extra_packages=None, devbox_type="rdp_devbox", resourc
     except Exception as _e:
         print(f"[cost_tracker] init failed: {_e}", file=sys.stderr)
 
+    # Login banner for the desktop box, written before the desktop services
+    # come up. The RDP box runs as a Modal Function, so it has no identity.
+    write_banner_file("rdp_devbox", ["🖥️  RDP on :3389"], name=current_box_name())
+
     install_extra_packages(extra_packages)
 
     prepare_xfce_session()
@@ -626,13 +660,11 @@ def run_opencode_shared(extra_packages=None, resources=None, forensic=False):
     extra_lines = ()
     if forensic:
         extra_lines = ("🌐 OpenCode web on :4096", "🖥️ RDP desktop on :3389")
-    with open("/etc/devbox-banner", "w") as f:
-        f.write(
-            format_banner(
-                "forensic_analysis" if forensic else "assisted_coding",
-                extra_lines,
-            )
-        )
+    write_banner_file(
+        "forensic_analysis" if forensic else "assisted_coding",
+        extra_lines,
+        name=current_box_name(),
+    )
 
     install_extra_packages(extra_packages)
 

@@ -13,12 +13,13 @@ def _network_label(network):
     }.get(network, network)
 
 
-def prompt_htb_vm():
-    """Ask whether to use HTB VPN VM mode, then which network.
+def prompt_htb_vm(devbox_type="standard_devbox"):
+    """Ask whether to use HTB VPN VM mode, then which network and what to call it.
 
-    Returns `labs`, `starting-point`, `both`, or None to launch normally.
-    Defaults to Labs when the network prompt is skipped.
+    Returns `{"network": ..., "box_name": ...}` or None to launch normally.
+    Defaults to Labs and a generated name when a prompt is skipped.
     """
+    from devbox_core.box_identity import resolve_box_name
     from ui.ui_utils import create_box
 
     try:
@@ -39,7 +40,27 @@ def prompt_htb_vm():
         answer = input("Select network [1]: ").strip()
     except EOFError:
         answer = "1"
-    return {"1": "labs", "2": "starting-point", "3": "both"}.get(answer, "labs")
+    network = {"1": "labs", "2": "starting-point", "3": "both"}.get(answer, "labs")
+
+    # The name is the hostname, the tailnet machine name and what the user
+    # types to SSH in.
+    default_name = resolve_box_name(devbox_type, htb=True)
+    name_box = """
+    🏷️  Name this box?
+    The name is the hostname, the tailnet machine name, and what you type to SSH in.
+    (press Enter for the generated name)
+    """
+    create_box(name_box, "🏷️  BOX NAME")
+    try:
+        answer = input(f"Name [{default_name}]: ").strip()
+    except EOFError:
+        answer = ""
+    # Enter keeps the generated name. A typed name is sanitised by
+    # `resolve_box_name` into a DNS-safe label.
+    box_name = (
+        resolve_box_name(devbox_type, htb=True, custom=answer) if answer else default_name
+    )
+    return {"network": network, "box_name": box_name}
 
 
 def handle_standard_choice(launch_devbox, launch_devbox_t4, launch_devbox_l4, launch_devbox_a10g, launch_devbox_l40s, cpu_only, launch_devbox_htb=None):
@@ -67,19 +88,20 @@ def handle_standard_choice(launch_devbox, launch_devbox_t4, launch_devbox_l4, la
 
     # HTB mode runs in a CPU-only VM Sandbox, so it is offered before the GPU
     # question; answering yes skips GPU dispatch.
-    htb_network = prompt_htb_vm()
-    if htb_network is not None:
+    htb = prompt_htb_vm("standard_devbox")
+    if htb is not None:
         if launch_devbox_htb is None:
             create_box("HTB VPN mode is unavailable in this launcher build.", "🌐 HTB VPN")
             return
         htb_box = f"""
         🌐 Launching Standard DevBox in HTB VPN VM mode...
-        🔗 Network(s): {_network_label(htb_network)}
+        🔗 Network(s): {_network_label(htb["network"])}
+        🏷️  Name: {htb["box_name"]}
         ⏳ The VM waits for the VPN handshake before starting SSH.
         """
         create_box(htb_box, "🚀 STANDARD DEVBOX + HTB VPN")
         show_spinner("Bringing up the HTB VPN VM", 3)
-        launch_devbox_htb.remote(network=htb_network)
+        launch_devbox_htb.remote(network=htb["network"], box_name=htb["box_name"])
         return
 
     gpu_box = """
@@ -229,19 +251,20 @@ def handle_simple_choice(choice, launch_llamacpp_playroom, launch_forensics_imag
         """
         create_box(forensics_box, "Forensics Machine")
         show_spinner("Interleaving Bits... Hold On Tight!", 3)
-        htb_network = prompt_htb_vm()
-        if htb_network is not None:
+        htb = prompt_htb_vm("forensic_analysis")
+        if htb is not None:
             if launch_forensics_htb is None:
                 print("HTB VPN mode is unavailable in this launcher build.")
                 return
             htb_box = f"""
             🌐 Forensics box in HTB VPN VM mode...
-            🔗 Network(s): {_network_label(htb_network)}
+            🔗 Network(s): {_network_label(htb["network"])}
+            🏷️  Name: {htb["box_name"]}
             🖥️  RDP desktop + OpenCode + SSH start after the VPN handshake.
             """
             create_box(htb_box, "🔍 FORENSICS + HTB VPN")
             show_spinner("Bringing up the HTB VPN VM", 3)
-            launch_forensics_htb.remote(network=htb_network)
+            launch_forensics_htb.remote(network=htb["network"], box_name=htb["box_name"])
         else:
             launch_forensics_image.remote()
 
