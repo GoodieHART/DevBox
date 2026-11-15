@@ -13,9 +13,8 @@ pin the properties that make that safe:
 * the connection block always keeps the Modal tunnel as a labelled fallback
   and never prints a half-empty Tailscale address.
 
-`runtime.tailscale_runtime` is deliberately NOT imported here: it is a
-Modal-coupled module written alongside these tests, so the VM script is
-inspected as source instead.
+`runtime.tailscale_runtime` is exercised in `tests/test_tailscale.py`; here
+the VM script that calls it is inspected as source.
 """
 
 import ast

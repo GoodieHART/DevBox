@@ -38,8 +38,8 @@ from devbox_core.config import (
     TAILSCALED_BIN,
 )
 
-# The daemon writes its log here. The tail of this file is what makes a
-# failed startup debuggable, so it lives for as long as the container.
+# The daemon log. A failed startup reports its tail, so the file lives for as
+# long as the container.
 TAILSCALE_LOG_PATH = "/tmp/tailscaled.log"
 
 # Kernel mode: the daemon creates the WireGuard device itself. A Modal VM
@@ -62,7 +62,7 @@ _DAEMONS = []
 
 
 def _socket_flag():
-    """The global `--socket` flag, so no invocation is ambiguous."""
+    """The global `--socket` flag that every invocation passes."""
     return f"--socket={TAILSCALE_SOCKET}"
 
 
@@ -119,9 +119,9 @@ def _cli(*args, timeout=30):
 def _status_payload():
     """The parsed `tailscale status --json` document, or None.
 
-    None means "the daemon did not answer". The exit code is not enough to
-    tell that apart from "the daemon answered but the node is logged out",
-    so the JSON document itself is what decides.
+    None means the daemon did not answer. The exit code alone cannot tell that
+    apart from a daemon that answered while the node was logged out, so the
+    JSON document decides.
     """
     _code, out, _err = _cli("status", "--json")
     text = out.strip()
@@ -152,11 +152,7 @@ def _daemon_answers():
 
 
 def _self_ip(status):
-    """The node address out of a status document.
-
-    The IPv4 address comes first when there is one; the IPv6 address is only
-    used when the node has no IPv4 address.
-    """
+    """The node's Tailscale address: IPv4 when it has one, IPv6 otherwise."""
     self_node = (status or {}).get("Self") or {}
     addresses = self_node.get("TailscaleIPs") or []
     for address in addresses:
@@ -243,7 +239,7 @@ def tailscale_ip():
 
 def tailscale_logout():
     """Remove this node from the tailnet. True when the logout went through."""
-    code, _out, err = _cli("logout")
+    code, _out, _err = _cli("logout")
     return code == 0
 
 

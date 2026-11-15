@@ -1,11 +1,10 @@
 """
 DevBox identity: box names, hostname rewriting, and the identity surfaces.
 
-Every Modal container gets the same generic hostname, so `hostname`,
-`uname -n` and the shell prompt are identical in every box, and the only way
-in is a random Modal domain on a random port. This module gives a box a name
-derived from its launch context and applies that name wherever the runtime
-allows.
+Every Modal container starts with the same generic hostname, so `hostname`,
+`uname -n` and the shell prompt give no clue which box is which. This module
+gives a box a name derived from its launch context and applies that name
+wherever the runtime allows.
 
 Two runtimes, two capabilities:
 
@@ -15,13 +14,13 @@ Two runtimes, two capabilities:
   name and the name resolves as a local FQDN.
 * **Modal Function**: an ordinary container. ``socket.sethostname`` fails
   with EPERM (no CAP_SYS_ADMIN) and ``unshare --uts`` is blocked, so the
-  kernel hostname stays whatever Modal set it to. The name still reaches the
-  name file, the login banner, the tmux status bar and the shell prompt.
+  kernel hostname keeps the value Modal set. The name still reaches the name
+  file, the login banner, the tmux status bar and the shell prompt.
 
 A failure is reported and never fatal.
 
-This module has no ``modal`` import: the HTB VM Sandbox image ships it, and
-that image has no ``modal`` package.
+This module imports no ``modal`` package: the HTB VM Sandbox image ships it,
+and that image has none.
 """
 
 import os
@@ -34,8 +33,8 @@ import uuid
 # bar and the shell prompt read it, so neither needs the name at build time.
 BOX_NAME_FILE = "/etc/devbox/name"
 
-# Prefix on every generated name, so DevBox nodes are recognisable in a
-# tailnet and cannot collide with anything else the user runs.
+# Prefix on every generated name, so DevBox nodes are recognisable in a tailnet
+# and do not collide with other nodes.
 BOX_NAME_PREFIX = "devbox"
 
 # DNS label limit. Tailscale machine names and /etc/hosts entries both have to

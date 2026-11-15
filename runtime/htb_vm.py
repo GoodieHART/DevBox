@@ -6,10 +6,10 @@ provide, so HTB networks run here rather than in the Function-based boxes.
 A box can join Labs, Starting Point, or both: each network gets its own tun
 device, and their non-overlapping machine ranges let both route tables coexist.
 
-The VM Sandbox is the only DevBox runtime that can carry an identity of its
-own: it has its own kernel, so the hostname can be rewritten, and Tailscale
-runs in kernel mode alongside the HTB VPN. The HTB profile is a split tunnel
-(the default route stays on eth0), so the two route tables coexist.
+The VM Sandbox is the only DevBox runtime that can rewrite its own hostname:
+it has its own kernel, and Tailscale runs in kernel mode alongside the HTB VPN.
+The HTB profile is a split tunnel, so the default route stays on eth0 and the
+tailnet and the lab ranges do not contend for it.
 """
 
 import sys
@@ -24,13 +24,8 @@ from devbox_core.config import (
 )
 from runtime.shared_runtime import format_banner
 
-# Tailscale auth for the HTB VM boxes. The secret injects TS_AUTHKEY into the
-# sandbox environment. The key is never written to the persistent volume and is
-# redacted from error output. The secret is optional: without it the box still
-# launches, on the Modal tunnel alone.
-
-# Written inside the VM by the Tailscale step: the connection details on
-# success, and the outcome either way.
+# Files the in-VM Tailscale step writes: the connection details on success, and
+# the outcome either way. Both live under /run, never on the persistent volume.
 TAILSCALE_ENV_PATH = "/run/devbox/tailscale.env"
 TAILSCALE_STATUS_PATH = "/run/devbox/tailscale.status"
 

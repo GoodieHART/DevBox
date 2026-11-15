@@ -298,8 +298,8 @@ missing, the launcher stops before creating the VM and prints the exact
 
 #### Box names and Tailscale access
 
-Every HTB VM Sandbox gets a name of its own instead of a random Modal domain.
-After the network prompt the launcher asks:
+Every HTB VM Sandbox is given a name, so it no longer answers only to the
+generic container hostname. After the network prompt the launcher asks:
 
 ```
 🏷️  Name this box?

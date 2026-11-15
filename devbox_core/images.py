@@ -71,7 +71,6 @@ def _tailscale_layer(image: modal.Image) -> modal.Image:
         _apt_install(image, "iptables", "ca-certificates", "tar")
         .run_commands(
             f"curl -fsSL -o /tmp/tailscale.tgz {TAILSCALE_TARBALL_URL}",
-            # Checksum-verified so a compromised mirror cannot inject a binary.
             f"echo '{TAILSCALE_SHA256}  /tmp/tailscale.tgz' | sha256sum -c -",
             "mkdir -p /tmp/tailscale",
             # The tarball root is tailscale_<version>_amd64/.
@@ -79,7 +78,7 @@ def _tailscale_layer(image: modal.Image) -> modal.Image:
             f"install -m 755 /tmp/tailscale/tailscale {TAILSCALE_BIN}",
             f"install -m 755 /tmp/tailscale/tailscaled {TAILSCALED_BIN}",
             "rm -rf /tmp/tailscale /tmp/tailscale.tgz",
-            # The daemon socket path the runtime uses.
+            # Directory for the daemon socket the runtime connects to.
             "mkdir -p /run/tailscale",
         )
     )

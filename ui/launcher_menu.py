@@ -42,8 +42,6 @@ def prompt_htb_vm(devbox_type="standard_devbox"):
         answer = "1"
     network = {"1": "labs", "2": "starting-point", "3": "both"}.get(answer, "labs")
 
-    # The name is the hostname, the tailnet machine name and what the user
-    # types to SSH in.
     default_name = resolve_box_name(devbox_type, htb=True)
     name_box = """
     🏷️  Name this box?

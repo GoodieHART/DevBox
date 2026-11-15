@@ -2,9 +2,8 @@
 
 Every box type renders its banner through one implementation,
 `devbox_core.box_identity.banner_text`, wrapped by
-`runtime.shared_runtime.format_banner`. The RDP desktop box and the llama.cpp
-research center gained banners; the tmux status bar shows the box name when
-the box has one and falls back to `devbox`.
+`runtime.shared_runtime.format_banner`. The tmux status bar shows the box name
+when the box has one and falls back to `devbox`.
 
 These tests are offline: they import the modules and inspect the
 Modal-coupled files as source.
@@ -136,7 +135,7 @@ def test_write_banner_file_is_never_fatal(tmp_path):
     assert shared.write_banner_file("standard_devbox", path=str(missing)) is None
 
 
-# --- the two boxes that previously had no banner ---------------------------
+# --- the RDP desktop and llama.cpp banners ---------------------------------
 
 
 def test_rdp_box_writes_a_banner():
@@ -164,7 +163,7 @@ def test_rdp_and_llamacpp_banners_do_not_fabricate_a_name():
                 assert kw.value.func.id == "current_box_name"
 
 
-# --- the boxes that already had a banner -----------------------------------
+# --- the SSH and OpenCode boxes -------------------------------------------
 
 
 def test_existing_boxes_use_the_shared_writer():

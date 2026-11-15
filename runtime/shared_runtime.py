@@ -304,10 +304,10 @@ BANNER_PATH = "/etc/devbox-banner"
 
 
 def current_box_name():
-    """The DevBox identity of this container, or None when it has none.
+    """The DevBox identity recorded for this container, or None.
 
-    A Modal Function container cannot change its kernel hostname, so the
-    Function-based boxes have no identity and show no name row.
+    Only the HTB VM boxes write a name file; the Function-based boxes have no
+    identity and therefore show no name row.
     """
     try:
         from devbox_core.box_identity import read_name_file
@@ -349,6 +349,7 @@ def write_banner_file(devbox_type, extra_lines=(), name=None, quote=True,
         print(f"⚠️ could not write the DevBox banner: {error}", file=sys.stderr)
         return None
     return path
+
 
 TMUX_SESSION_SCRIPT = "/usr/local/bin/devbox-tmux"
 
