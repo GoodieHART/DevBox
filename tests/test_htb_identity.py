@@ -137,14 +137,10 @@ def test_the_name_prompt_runs_on_both_htb_paths():
     assert menu.count("= prompt_htb_vm(") == 2
     assert 'prompt_htb_vm("standard_devbox")' in menu
     assert 'prompt_htb_vm("forensic_analysis")' in menu
-    assert (
-        'launch_devbox_htb.remote(network=htb["network"], box_name=htb["box_name"])'
-        in menu
-    )
-    assert (
-        'launch_forensics_htb.remote(network=htb["network"], box_name=htb["box_name"])'
-        in menu
-    )
+    for launcher in ("launch_devbox_htb", "launch_forensics_htb"):
+        call = menu.split(f"{launcher}.remote(", 1)[1][:400]
+        assert 'network=htb["network"]' in call
+        assert 'box_name=htb["box_name"]' in call
 
 
 def test_the_name_prompt_uses_a_box_banner():
@@ -528,3 +524,61 @@ def test_the_vm_script_publishes_the_connection_details_on_success(tmp_path):
     assert published["DEVBOX_TAILSCALE_NAME"] == "devbox-htb-std-7f3a"
     assert published["DEVBOX_TAILSCALE_IP"] == "100.101.102.103"
     assert published["DEVBOX_TAILSCALE_DNS"] == "devbox-htb-std-7f3a.tail1234.ts.net"
+
+
+# --- RDP quality on the forensic VM ----------------------------------------
+
+
+def test_the_vm_applies_the_quality_profile_before_xrdp_starts():
+    """The daemon reads xrdp.ini at startup, so the order matters."""
+    assert "python3 -m runtime.rdp_quality apply" in VM_SCRIPT
+    assert VM_SCRIPT.index("runtime.rdp_quality apply") < VM_SCRIPT.index(
+        "/usr/sbin/xrdp-sesman"
+    )
+    assert VM_SCRIPT.index("runtime.rdp_quality apply") < VM_SCRIPT.index(
+        "/usr/sbin/xrdp;"
+    )
+    # A profile that cannot be applied must not stop the desktop.
+    assert "xrdp defaults" in VM_SCRIPT
+
+
+def test_the_launcher_forwards_the_quality_profile_to_the_vm():
+    function = _functions("runtime/htb_vm.py")["run_htb_vm"]
+    arguments = [argument.arg for argument in function.args.kwonlyargs]
+    assert "rdp_quality" in arguments
+    assert "rdp_max_bpp" in arguments
+
+    call = _sandbox_create_call()
+    env = next(keyword.value for keyword in call.keywords if keyword.arg == "env")
+    keys = {key.value for key in env.keys}
+    assert {"RDP_QUALITY", "RDP_MAX_BPP"} <= keys
+
+    src = source("runtime/htb_vm.py")
+    assert "resolve_profile(rdp_quality, rdp_max_bpp)" in src
+    assert "rdp_profile=rdp_profile" in src
+
+
+def test_the_forensic_connection_block_shows_the_quality_profile(capsys):
+    from runtime.rdp_quality import resolve_profile
+
+    _print_ready_block(
+        _fake_tailscale(),
+        _fake_tunnels(),
+        True,
+        rdp_password="devbox123",
+        rdp_profile=resolve_profile("low", None, {}),
+    )
+    out = capsys.readouterr().out
+    assert "RDP quality:" in out
+    assert "Profile:" in out
+    assert "16-bit" in out
+    assert "1024x768" in out
+    assert "mstsc:" in out
+    assert "FreeRDP:" in out
+    assert "/network:modem" in out
+    assert "/bpp:16" in out
+
+
+def test_the_standard_connection_block_has_no_quality_line(capsys):
+    _print_ready_block(_fake_tailscale(), _fake_tunnels(), False)
+    assert "RDP quality" not in capsys.readouterr().out

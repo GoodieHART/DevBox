@@ -21,28 +21,17 @@ from runtime.utils import inject_ssh_key
 from devbox_core.config import IDLE_TIMEOUT_SECONDS, OPENCODE_PORT, validate_prohibited_packages
 from ui.quotes_loader import get_random_quote
 from runtime.cost_tracker import start_session, register_cost_flush, checkpoint
+import runtime.rdp_quality as rdp_quality_module
+from runtime.rdp_quality import (
+    RDP_QUALITY_FILE,
+    client_hint as rdp_client_hint,
+    profile_summary as rdp_profile_summary,
+)
 
 
 # Debian's /etc/xrdp/startwm.sh execs /etc/X11/Xsession, which only honors
 # ~/.xsession when it is executable, so the runtime reinstalls it on each launch.
 XSESSION_LAUNCHER = "/usr/local/bin/startxfce4-wrapper"
-
-# RDP color-depth presets.  Lower values reduce bandwidth at the cost of
-# color fidelity; the RDP client can still choose a smaller value.
-RDP_QUALITY_PRESETS = {
-    "low": 16,
-    "medium": 24,
-    "balanced": 24,
-    "high": 32,
-    "auto": 32,
-}
-RDP_RECOMMENDED_RESOLUTIONS = {
-    "low": "800x600 or 1024x768",
-    "medium": "1024x768 or 1280x720",
-    "balanced": "1024x768 or 1280x720",
-    "high": "your native display resolution",
-    "auto": "your native display resolution",
-}
 
 # Processes that only exist while somebody is using the desktop: xrdp's
 # per-session channel server and the XFCE session itself. The xrdp and
@@ -60,59 +49,24 @@ RDP_DESKTOP_ITEMS = [
 ]
 
 
-def _resolve_rdp_max_bpp(rdp_quality="auto", rdp_max_bpp=None):
-    """Resolve an xrdp max_bpp value from a quality preset or explicit value."""
-    if rdp_max_bpp is not None:
-        try:
-            value = int(rdp_max_bpp)
-        except (TypeError, ValueError) as error:
-            raise ValueError(f"invalid RDP max_bpp value: {rdp_max_bpp!r}") from error
-        if value in (8, 15, 16, 24, 32):
-            return value
-        # xrdp only supports a small fixed set of color depths.
-        return min((8, 15, 16, 24, 32), key=lambda candidate: abs(candidate - value))
+def apply_rdp_quality(rdp_quality="auto", rdp_max_bpp=None, marker=RDP_QUALITY_FILE):
+    """Apply the pre-session stage of an RDP profile inside this container.
 
-    env_value = os.environ.get("RDP_MAX_BPP")
-    if env_value is not None:
-        try:
-            value = int(env_value)
-        except ValueError as error:
-            raise ValueError(f"invalid RDP_MAX_BPP value: {env_value!r}") from error
-        if value in (8, 15, 16, 24, 32):
-            return value
-        return min((8, 15, 16, 24, 32), key=lambda candidate: abs(candidate - value))
-
-    quality = str(os.environ.get("RDP_QUALITY", rdp_quality)).strip().lower()
-    return RDP_QUALITY_PRESETS.get(quality, 32)
-
-
-def _configure_xrdp_quality(max_bpp):
-    """Apply the resolved color depth to xrdp's configuration."""
-    config_path = "/etc/xrdp/xrdp.ini"
-    if not os.path.isfile(config_path):
-        return
-
-    with open(config_path, "r", encoding="utf-8") as handle:
-        lines = handle.readlines()
-
-    replaced = False
-    for index, line in enumerate(lines):
-        stripped = line.strip()
-        if stripped.startswith("max_bpp=") or stripped.startswith("max_bpp ="):
-            lines[index] = f"max_bpp={max_bpp}\n"
-            replaced = True
-            break
-
-    if not replaced:
-        for index, line in enumerate(lines):
-            if line.strip() == "[Globals]":
-                lines.insert(index + 1, f"max_bpp={max_bpp}\n")
-                break
-        else:
-            lines.insert(0, f"max_bpp={max_bpp}\n")
-
-    with open(config_path, "w", encoding="utf-8") as handle:
-        handle.writelines(lines)
+    The logic lives in `runtime.rdp_quality` because the same profile has to be
+    applied inside the HTB VM Sandbox, which has no `modal` package. This
+    wrapper only adds the logging for a Function container.
+    """
+    result = rdp_quality_module.apply(rdp_quality, rdp_max_bpp, home="/root", marker=marker)
+    print(f"[RDP] Quality: {result.get('summary', 'unknown')}", file=sys.stderr)
+    if result.get("xrdp_configured"):
+        print(f"[RDP] xrdp max_bpp={result['max_bpp']} written to /etc/xrdp/xrdp.ini",
+              file=sys.stderr)
+    elif result.get("error"):
+        print(f"[RDP] Profile not fully applied: {result['error']}", file=sys.stderr)
+    hints = rdp_quality_module.client_hint(result)
+    print(f"[RDP] Client settings: mstsc -> {hints['mstsc']}", file=sys.stderr)
+    print(f"[RDP] Client settings: FreeRDP -> {hints['freerdp']}", file=sys.stderr)
+    return result
 
 
 def install_xsession_launcher(home: str = "/root") -> None:
@@ -236,8 +190,8 @@ def start_rdp_services() -> None:
     subprocess.Popen(["/usr/sbin/xrdp-sesman"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-def print_rdp_connection(tunnel) -> None:
-    """Print the RDP address and static credentials for a Modal tunnel."""
+def print_rdp_connection(tunnel, profile=None) -> None:
+    """Print the RDP address, credentials, and the active quality profile."""
     from devbox_core.config import RDP_PASSWORD, RDP_USER
 
     print("\n" + "=" * 60)
@@ -246,6 +200,11 @@ def print_rdp_connection(tunnel) -> None:
     print(f"\n📡 RDP Address: {tunnel.host}:{tunnel.unencrypted_port}")
     print(f"👤 Username: {RDP_USER}")
     print(f"🔑 Password: {RDP_PASSWORD}")
+    if profile:
+        hints = rdp_client_hint(profile)
+        print(f"\n📶 Quality: {rdp_profile_summary(profile)}")
+        print(f"   mstsc:   {hints['mstsc']}")
+        print(f"   FreeRDP: {hints['freerdp']}")
     print("\n" + "=" * 60)
 
 
@@ -547,26 +506,17 @@ def run_rdp_devbox_shared(extra_packages=None, devbox_type="rdp_devbox", resourc
 
     prepare_xfce_session()
 
-    # Apply the requested RDP color-depth preset before xrdp starts.  RDP
-    # resolution itself is negotiated by the client, so the server-side knob is
-    # max_bpp; the recommended client settings are printed below.
-    resolved_rdp_quality = str(os.environ.get("RDP_QUALITY", rdp_quality)).strip().lower()
-    resolved_max_bpp = _resolve_rdp_max_bpp(rdp_quality, rdp_max_bpp)
-    _configure_xrdp_quality(resolved_max_bpp)
-    print(f"[RDP] Quality preset: {resolved_rdp_quality} "
-          f"(max_bpp={resolved_max_bpp})", file=sys.stderr)
-    print(f"[RDP] Recommended client resolution: "
-          f"{RDP_RECOMMENDED_RESOLUTIONS.get(resolved_rdp_quality, 'your native display resolution')}",
-          file=sys.stderr)
-    print("[RDP] Also set the mstsc color depth to match or below the server max_bpp.",
-          file=sys.stderr)
+    # Apply the requested RDP profile before xrdp starts. The display mode is
+    # applied in-session by `startxfce4-wrapper`; compositing and the backdrop
+    # are applied by the XDG autostart entry, once the session bus exists.
+    profile = apply_rdp_quality(rdp_quality, rdp_max_bpp)
 
     start_rdp_services()
 
     from devbox_core.config import RDP_PORT
 
     with modal.forward(RDP_PORT, unencrypted=True) as tunnel:
-        print_rdp_connection(tunnel)
+        print_rdp_connection(tunnel, profile)
         
         idle_time = 0
         check_interval = 15
@@ -594,7 +544,8 @@ def run_rdp_devbox_shared(extra_packages=None, devbox_type="rdp_devbox", resourc
         print("\nIdle timeout reached. Shutting down RDP Desktop.", file=sys.stderr)
 
 
-def run_opencode_shared(extra_packages=None, resources=None, forensic=False):
+def run_opencode_shared(extra_packages=None, resources=None, forensic=False,
+                        rdp_quality="auto", rdp_max_bpp=None):
     """Run the OpenCode box: SSH plus an `opencode web` server.
 
     Same provisioning as the SSH boxes, then sshd and the web server. SSH, web,
@@ -777,15 +728,11 @@ def run_opencode_shared(extra_packages=None, resources=None, forensic=False):
     print(auth_note, file=sys.stderr)
 
     # Desktop only for the forensics box; the AI Coding box stays headless.
+    forensic_profile = None
     if forensic:
         prepare_xfce_session()
-        forensic_max_bpp = _resolve_rdp_max_bpp("auto", None)
-        _configure_xrdp_quality(forensic_max_bpp)
+        forensic_profile = apply_rdp_quality(rdp_quality, rdp_max_bpp)
         start_rdp_services()
-        print(
-            f"[RDP] Forensics desktop ready (max_bpp={forensic_max_bpp}).",
-            file=sys.stderr,
-        )
 
     # ExitStack keeps every tunnel open for the whole session; leaving a `with`
     # block closes it. RDP is forwarded only when the desktop runs.
@@ -807,7 +754,7 @@ def run_opencode_shared(extra_packages=None, resources=None, forensic=False):
         print(f"\n🔐 SSH: {ssh_cmd}")
         print(f"📁 Workdir: {workdir} (persistent)")
         if rdp_tunnel is not None:
-            print_rdp_connection(rdp_tunnel)
+            print_rdp_connection(rdp_tunnel, forensic_profile)
         activity = "SSH, an open OpenCode tab, or RDP" if forensic else "SSH or an open OpenCode tab"
         print(f"⏰ Idle timeout: {OPENCODE_IDLE_TIMEOUT_SECONDS // 60} minutes ({activity} activity resets it)")
         print(f"{auth_note}")

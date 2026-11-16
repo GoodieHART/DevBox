@@ -151,13 +151,14 @@ def launch_llm_playroom():
     run_devbox_shared(extra_packages=None, devbox_type="llm_playroom", resources=gpu_devbox_args_rdp)
 
 @app.function(image=forensic_analysis_image, **forensics_devbox_args)
-def launch_forensics_image():
+def launch_forensics_image(rdp_quality="auto", rdp_max_bpp=None):
   """Launches the forensic and reverse-engineering environment."""
-  run_opencode_shared(extra_packages=None, resources=forensics_devbox_args, forensic=True)
+  run_opencode_shared(extra_packages=None, resources=forensics_devbox_args,
+                      forensic=True, rdp_quality=rdp_quality, rdp_max_bpp=rdp_max_bpp)
 
 
 @app.function(image=forensic_analysis_image, **forensics_devbox_args)
-def launch_forensics_htb(network="labs", box_name=None):
+def launch_forensics_htb(network="labs", box_name=None, rdp_quality="auto", rdp_max_bpp=None):
     """Forensics box as a VM Sandbox on an HTB VPN network (RDP, SSH, OpenCode)."""
     from runtime.htb_vm import run_htb_vm
     run_htb_vm(
@@ -169,6 +170,8 @@ def launch_forensics_htb(network="labs", box_name=None):
         network=network,
         box_name=box_name,
         tailscale_secret=tailscale_secret,
+        rdp_quality=rdp_quality,
+        rdp_max_bpp=rdp_max_bpp,
     )
 
 # llama.cpp Research Center - Curated Model Catalog lives in

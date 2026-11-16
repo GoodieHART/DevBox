@@ -151,3 +151,12 @@ def test_rdp_image_matches_the_standard_image_packaging():
     standard = set(packaged["standard_devbox_image"])
     rdp = set(packaged["rdp_devbox_image"])
     assert standard <= rdp, f"rdp image is missing: {sorted(standard - rdp)}"
+
+
+def test_every_image_packages_the_rdp_quality_module():
+    """The VM Sandbox imports it before xrdp starts."""
+    for image, modules in _packaged_modules().items():
+        assert "runtime.rdp_quality" in modules, (
+            f"{image} does not bake runtime.rdp_quality; the desktop cannot "
+            "apply a quality profile"
+        )

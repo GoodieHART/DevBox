@@ -244,7 +244,7 @@ standard_devbox_image = (
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
         "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader",
-        "runtime.tailscale_runtime", "devbox_core.box_identity",
+        "runtime.tailscale_runtime", "runtime.rdp_quality", "devbox_core.box_identity",
         copy=True,
     )
 )
@@ -296,7 +296,7 @@ cuda_devbox_image = (
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
         "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader",
-        "runtime.tailscale_runtime", "devbox_core.box_identity",
+        "runtime.tailscale_runtime", "runtime.rdp_quality", "devbox_core.box_identity",
         copy=True,
     )
 )
@@ -318,7 +318,7 @@ assisted_coding_image = (
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
         "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader",
-        "runtime.tailscale_runtime", "devbox_core.box_identity",
+        "runtime.tailscale_runtime", "runtime.rdp_quality", "devbox_core.box_identity",
         copy=True,
     )
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "opencode-coding.json"), "/etc/devbox/opencode.json")
@@ -337,6 +337,8 @@ _rdp_desktop_layer = (
         "xorgxrdp",
         "dbus-x11",
         "xorg",
+        "x11-xserver-utils",
+        "xfconf",
         "tightvncserver",
     )
     .run_commands(
@@ -358,6 +360,10 @@ _rdp_desktop_layer = (
         "echo 'mkdir -p /tmp/xdg-runtime' >> /usr/local/bin/startxfce4-wrapper",
         "echo 'chmod 700 /tmp/xdg-runtime' >> /usr/local/bin/startxfce4-wrapper",
         "echo '' >> /usr/local/bin/startxfce4-wrapper",
+        "echo '# Apply the RDP quality profile: the display mode only, since the' >> /usr/local/bin/startxfce4-wrapper",
+        "echo '# XFCE stage needs the session bus and runs from XDG autostart.' >> /usr/local/bin/startxfce4-wrapper",
+        "echo '( cd /root && python3 -m runtime.rdp_quality session --part resolution --home /root ) >>/tmp/rdp-quality.log 2>&1 || true' >> /usr/local/bin/startxfce4-wrapper",
+        "echo '' >> /usr/local/bin/startxfce4-wrapper",
         "echo '# Start XFCE with proper environment' >> /usr/local/bin/startxfce4-wrapper",
         "echo '' >> /usr/local/bin/startxfce4-wrapper",
         "echo '# Start PipeWire for RDP audio output only' >> /usr/local/bin/startxfce4-wrapper",
@@ -373,6 +379,13 @@ _rdp_desktop_layer = (
         "echo 'sleep 0.5' >> /usr/local/bin/startxfce4-wrapper",
         "echo 'exec startxfce4' >> /usr/local/bin/startxfce4-wrapper",
         "chmod +x /usr/local/bin/startxfce4-wrapper",
+        # The XFCE stage of a profile must run inside the session: only there do
+        # the session bus and xfdesktop's RDP backdrop properties exist. The
+        # retries cover xfdesktop creating those properties a moment later.
+        "printf '#!/bin/sh\\nsleep 3\\ncd /root || exit 0\\npython3 -m runtime.rdp_quality session --part xfce --home /root --retries 4 --delay 2 >>/tmp/rdp-quality.log 2>&1 || true\\n' > /usr/local/bin/devbox-rdp-xfce",
+        "chmod +x /usr/local/bin/devbox-rdp-xfce",
+        "mkdir -p /etc/xdg/autostart",
+        "printf '[Desktop Entry]\\nType=Application\\nName=DevBox RDP quality\\nComment=Apply the selected RDP profile to the XFCE session\\nExec=/usr/local/bin/devbox-rdp-xfce\\nTerminal=false\\nNoDisplay=true\\nX-GNOME-Autostart-enabled=true\\n' > /etc/xdg/autostart/devbox-rdp-quality.desktop",
         # Configure XFCE session using wrapper
         "printf '#!/bin/sh\\nexec /usr/local/bin/startxfce4-wrapper\\n' > /etc/skel/.xsession",
         "chmod +x /etc/skel/.xsession",
@@ -386,6 +399,11 @@ _rdp_desktop_layer = (
         # Output-only xrdp audio: do not load module-xrdp-source.
         '''cat > /etc/xrdp/load_pw_modules.sh <<'EOF'
 #!/bin/sh
+# The low-bandwidth profile turns RDP audio off: no sink means no stream.
+if [ "$(cat /run/devbox/rdp-quality 2>/dev/null)" = "low" ] || [ "${RDP_QUALITY:-}" = "low" ]; then
+  echo 'RDP audio disabled by the low quality profile'
+  exit 0
+fi
 if ! command -v pw-cli >/dev/null; then
   echo 'pw-cli not found, exiting'
   exit 0
@@ -583,7 +601,7 @@ forensic_analysis_image = (
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
         "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader",
-        "runtime.tailscale_runtime", "devbox_core.box_identity",
+        "runtime.tailscale_runtime", "runtime.rdp_quality", "devbox_core.box_identity",
         copy=True,
     )
     .add_local_file(os.path.join(_IMAGES_DIR, "..", "integrations", "opencode.json"), "/etc/devbox/opencode.json")
@@ -606,7 +624,7 @@ llm_playroom_image = (
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
         "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader",
-        "runtime.tailscale_runtime", "devbox_core.box_identity",
+        "runtime.tailscale_runtime", "runtime.rdp_quality", "devbox_core.box_identity",
         copy=True,
     )
 )
@@ -647,7 +665,7 @@ llamacpp_cpu_image = (
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
         "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "integrations.exa_helper", "integrations.exa_proxy", "ui.quotes_loader",
         "runtime.llamacpp_runtime", "devbox_core.llamacpp_models",
-        "runtime.tailscale_runtime", "devbox_core.box_identity",
+        "runtime.tailscale_runtime", "runtime.rdp_quality", "devbox_core.box_identity",
         copy=True,
     )
 )
@@ -659,7 +677,7 @@ rdp_devbox_image = (
     .add_local_python_source(
         "devbox_core.images", "runtime.shared_runtime", "runtime.utils", "devbox_core.config",
         "runtime.persistence_utils", "runtime.backup_utils", "runtime.cost_tracker", "runtime.htb_vm", "ui.quotes_loader",
-        "runtime.tailscale_runtime", "devbox_core.box_identity",
+        "runtime.tailscale_runtime", "runtime.rdp_quality", "devbox_core.box_identity",
         copy=True,
     )
 )

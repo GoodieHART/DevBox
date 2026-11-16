@@ -14,9 +14,19 @@
 - Tailscale access for HTB VM boxes. A pinned, checksum-verified Tailscale 1.104.7 client is part of every image, and the VM enrolls in kernel mode before the VPN connects. The connection block lists the short MagicDNS name, the tailnet address, and the full DNS name ahead of the Modal tunnel fallback.
 - The `tailscale-devbox-auth` Modal Secret (`TS_AUTHKEY`) carries an ephemeral, reusable auth key. Tailscale is optional: without the secret, or when enrollment fails, the box launches on the Modal tunnel alone with a warning.
 - The RDP Desktop Box and the llama.cpp Research Center now write a login banner.
+- RDP quality profiles. The launcher asks for Low, Balanced, or High (default) before launching the RDP Desktop Box (CPU and GPU), the Forensics Function box, or the Forensics HTB VM. The standard HTB box does not ask because it runs no RDP server.
+- Low uses 16-bit color at 1024x768 with compositing, wallpaper, and RDP audio off. Balanced uses 24-bit at 1280x720 with those features on. High uses 32-bit at the client's native resolution.
+- Server-side resolution is set with `xrandr`; a mode the display does not offer is generated with `cvt` first. If the switch fails, the client resolution stays and the reason goes to `/tmp/rdp-quality.log`.
+- XFCE compositing and backdrop changes are applied inside the session from an XDG autostart entry, because settings written before the session bus exists do not reach the running desktop. Low backs up the previous values to `~/.config/xfce4/devbox-rdp-backup.json`, and the next Balanced or High launch restores them.
+- The connection block lists the active profile and the matching `mstsc` and FreeRDP settings.
 
 ### Changed
 
+- The three-way profile selection replaces the low-bandwidth yes/no prompt.
+- RDP quality code moved from `runtime/shared_runtime.py` to `runtime/rdp_quality.py`, and the Function boxes and the HTB VM Sandbox now share it. The module exposes `apply`, `session`, and `show` for scripted launches.
+- The Forensics Function box takes its color depth from the selected profile, not only from `RDP_MAX_BPP`.
+- The low profile skips the PipeWire xrdp audio module, so no audio sink is created.
+- The RDP desktop image includes `xrandr`, `cvt`, and `xfconf-query`.
 - Every box type renders its login banner through `devbox_core.box_identity.banner_text`.
 - The tmux status bar shows the name from `/etc/devbox/name` and falls back to `devbox`, instead of the session name that was the same in every box.
 - `iptables`, `ca-certificates`, and `tar` are part of the Tailscale image layer, so the netfilter rules and the verified download work on a slim base image.
@@ -28,7 +38,8 @@
 
 ### Validation
 
-- Test suite: 312 tests passed.
+- Test suite: 404 tests passed.
+- Validated on Modal and with real `xfreerdp` sessions against xrdp: Low came up at 1024x768 with compositing off and the wallpaper cleared; the next High launch restored compositing, the wallpaper, and the client resolution.
 - Verified on Modal: root logs in as `/usr/bin/zsh`, `ZSH_HIGHLIGHT_VERSION` is `0.7.1-2_debian`, the autosuggestion style and functions are loaded, 180 completion files register `compdef`, and the banner prints in an interactive login shell.
 - Verified in an HTB VM Sandbox: `/etc/devbox/zshrc` is present, all three tmux panes run `zsh`, and the banner renders with a quote in the pane.
 - Verified in a Modal VM Sandbox with `standard_devbox_image`: the Tailscale 1.104.7 client installs from the pinned, checksum-verified tarball; `socket.sethostname` renames the box, `hostname -f` resolves through the new `/etc/hosts` entry, and `tailscale status` reports the node under its MagicDNS name with a tailnet address.

@@ -240,3 +240,61 @@ def test_readme_documents_rdp_instead_of_novnc():
     assert "noVNC" not in readme
     assert "vnc.html" not in readme
     assert "devbox123" in readme
+
+
+# --- RDP quality profiles --------------------------------------------------
+
+
+def _desktop_layer() -> str:
+    images = source("devbox_core/images.py")
+    return images.split("_rdp_desktop_layer = (", 1)[1].split(
+        "def _forensic_shortcut_commands", 1
+    )[0]
+
+
+def test_the_desktop_layer_ships_the_resolution_tools():
+    layer = _desktop_layer()
+    assert '"x11-xserver-utils"' in layer, "xrandr/cvt would be missing"
+    assert '"xfconf"' in layer, "xfconf-query would be missing"
+
+
+def test_the_session_launcher_applies_the_profile_before_xfce():
+    layer = _desktop_layer()
+    assert "runtime.rdp_quality session" in layer
+    assert layer.index("runtime.rdp_quality session") < layer.index("exec startxfce4")
+    # A profile that cannot be applied must not stop the desktop.
+    assert "|| true" in layer
+
+
+def test_the_profile_stages_run_in_the_right_place():
+    """Resolution is safe pre-session; XFCE needs the session bus."""
+    layer = _desktop_layer()
+    assert "--part resolution" in layer
+    assert "--part xfce" in layer
+
+
+def test_xfce_settings_are_applied_from_session_autostart():
+    layer = _desktop_layer()
+    autostart = layer.split("/etc/xdg/autostart/devbox-rdp-quality.desktop", 1)[0]
+    assert "/usr/local/bin/devbox-rdp-xfce" in autostart
+    assert "/etc/xdg/autostart" in layer
+    assert "--retries" in layer
+
+
+def test_low_quality_disables_the_xrdp_audio_sink():
+    layer = _desktop_layer()
+    assert "/run/devbox/rdp-quality" in layer
+    assert "RDP audio disabled" in layer
+    # The gate must come before the PipeWire module load.
+    assert layer.index("/run/devbox/rdp-quality") < layer.index("pw-cli")
+
+
+def test_the_function_boxes_share_the_quality_module():
+    shared = source("runtime/shared_runtime.py")
+    assert "rdp_quality_module.apply(" in shared
+    # The duplicated helpers were removed so the two runtimes cannot drift.
+    assert "def _resolve_rdp_max_bpp" not in shared
+    assert "def _configure_xrdp_quality" not in shared
+    assert "profile" in shared.split("def print_rdp_connection", 1)[1].split(
+        "def install_extra_packages", 1
+    )[0]

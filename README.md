@@ -190,7 +190,7 @@ Comes with **Ollama** pre-installed. Pull and run any open-source model with a s
 
 ### 4. 🖥️ RDP Desktop Box
 
-A full **XFCE graphical desktop** accessible via RDP. Comes with `xrdp`, `xfce4`, and a suite of desktop goodies. Username is `root`, password is `devbox123`. Optional GPU acceleration available.
+A full **XFCE graphical desktop** accessible via RDP. Comes with `xrdp`, `xfce4`, and a suite of desktop goodies. Username is `root`, password is `devbox123`. Optional GPU acceleration available. The launcher also asks for a [quality profile](#rdp-quality-profiles), so a slow client connection still gets a usable desktop.
 
 **Best for:** When you need a full desktop environment — GUI apps, browsers, visual workflows.
 
@@ -378,8 +378,10 @@ activity: RDP, SSH, and an open OpenCode tab all reset the idle timer, so an
 active analysis session is never shut down mid-task.
 
 For the Forensics HTB VM specifically, the VPN comes up first: the launcher
-waits for OpenVPN's `Initialization Sequence Completed`, then starts xrdp
-alongside SSH and OpenCode.
+waits for OpenVPN's `Initialization Sequence Completed`, then applies the
+selected [RDP quality profile](#rdp-quality-profiles) and starts xrdp alongside
+SSH and OpenCode. The profile prompt appears once, before the box is created,
+and the connection block repeats the chosen settings.
 
 #### Tooling shortcuts
 
@@ -487,6 +489,9 @@ The RDP Desktop Box and both Forensics boxes give you a full XFCE graphical desk
 📡 RDP Address: <host>:<port>
 👤 Username: root
 🔑 Password: devbox123
+📶 Quality: low (16-bit, 1024x768 forced, effects off, no wallpaper, audio off)
+   mstsc:   1024x768, 16-bit, Low-speed broadband
+   FreeRDP: /size:1024x768 /bpp:16 /network:modem
 
 ============================================================
 ```
@@ -499,6 +504,55 @@ Use those credentials with an RDP client:
 | **Windows** | Built-in Remote Desktop (`mstsc.exe`) |
 | **macOS** | [Microsoft Remote Desktop](https://apps.apple.com/app/microsoft-remote-desktop/id1295203466) (App Store) |
 | **Linux** | [Remmina](https://remmina.org/) |
+
+### RDP quality profiles
+
+The RDP Desktop Box, the Forensics Function box, and the Forensics HTB VM all
+ask for the same profile before launch. High is the default (press Enter).
+
+| | High | Balanced | Low |
+| --- | --- | --- | --- |
+| Color depth (`max_bpp`) | 32-bit | 24-bit | 16-bit |
+| Resolution | client native | 1280x720 | 1024x768 |
+| XFCE compositing | on | on | off |
+| Wallpaper | on | on | off (solid color) |
+| RDP audio | on | on | off |
+| Client hint | native, 32-bit, LAN | 1280x720, 24-bit, broadband | 1024x768, 16-bit, modem |
+
+The profile is applied in two stages:
+
+- **Before xrdp starts**, `max_bpp` is written to `/etc/xrdp/xrdp.ini` and the
+  choice is recorded in `/run/devbox/rdp-quality`.
+- **Inside the session**, `startxfce4-wrapper` runs
+  `python3 -m runtime.rdp_quality session --part resolution`, which resizes the
+  X display with `xrandr` (generating and adding a modeline with `cvt` when the
+  size is not offered). Compositing and the backdrop are then set through
+  `xfconf-query` by an XDG autostart entry (`devbox-rdp-quality.desktop`),
+  because those settings only reach a live session once the session bus and
+  xfdesktop exist.
+
+Nothing is fatal. If `xrandr` cannot change the mode (an unsupported client, a
+multi-monitor agent, or no connected output), the session keeps the client
+resolution and logs the reason to `/tmp/rdp-quality.log`. The XFCE values
+changed by the low profile are backed up to
+`~/.config/xfce4/devbox-rdp-backup.json` and restored on the next
+Balanced/High launch. The autostart entry retries for a few seconds and merges
+new properties into the backup, so backdrops that xfdesktop publishes late are
+still captured.
+
+The printed quality block is the reliable fallback: set the same resolution
+and color depth in the client. For FreeRDP, the exact flags are printed
+(`/size:1024x768 /bpp:16 /network:modem`); for `mstsc`, use **Display →
+Resolution**, the color-depth dropdown, and **Experience → Low-speed
+broadband**.
+
+Overrides for scripted launches:
+
+```bash
+RDP_QUALITY=low modal run devbox.py            # profile name
+RDP_MAX_BPP=16 modal run devbox.py             # explicit depth, wins over the profile
+DEVBOX_RDP_FORCE_RESOLUTION=0 modal run devbox.py   # keep the client resolution
+```
 
 ### WebUI (llama.cpp Research Center)
 
@@ -755,6 +809,7 @@ The codebase is organized into domain packages. Entrypoints stay at the root so 
 | `runtime/persistence_utils.py` | Symlink management for dotfiles persistence across sessions |
 | `runtime/backup_utils.py` | Backup registration and data persistence helpers |
 | `runtime/htb_vm.py` | Modal VM Sandbox launcher for HTB VPN mode (SSH, OpenCode, RDP) |
+| `runtime/rdp_quality.py` | RDP quality profiles: `xrdp.ini`, `xrandr` mode, XFCE effects, audio gate |
 | `devbox_core/box_identity.py` | Box naming, hostname rewriting, and the shared login banner |
 | `runtime/tailscale_runtime.py` | Starts `tailscaled`, enrolls the box, and reads its MagicDNS name and address back |
 | `integrations/exa_helper.py` | EXA Search integration for llama.cpp Research Center |
@@ -767,6 +822,8 @@ The codebase is organized into domain packages. Entrypoints stay at the root so 
 | `tests/test_image_packaging.py` | Structural tests that every runtime/UI module is packaged into the images |
 | `tests/test_rdp_session.py` | Structural tests for RDP session startup, persistence-safe dirs, and idle detection |
 | `tests/test_forensic_desktop.py` | Structural tests for the RDP-backed Forensics desktop and HTB VM |
+| `tests/test_rdp_quality.py` | Unit tests for the RDP quality profiles, `xrdp.ini`, `xrandr`, XFCE backup/restore, and CLI |
+| `tests/test_rdp_menu.py` | Behavioural tests for the Low/Balanced/High prompt and launcher forwarding |
 | `tests/test_tailscale.py` | Structural tests for the pinned Tailscale image layer and runtime |
 | `tests/test_htb_identity.py` | Structural tests for HTB box naming, identity, and Tailscale wiring |
 | `tests/test_banners.py` | Structural tests for the shared login banner and the tmux name label |

@@ -140,6 +140,38 @@ def handle_standard_choice(launch_devbox, launch_devbox_t4, launch_devbox_l4, la
         launch_devbox.remote(extra_packages=package_list)
 
 
+def prompt_rdp_quality():
+    """Ask for an RDP profile and return `(quality, max_bpp)`.
+
+    High is the default, including on EOF, so piping the launcher keeps the
+    historical 32-bit behaviour. `max_bpp` stays None: the preset decides it,
+    and an explicit value is only available through `RDP_MAX_BPP`.
+    """
+    from ui.ui_utils import create_box
+
+    quality_box = """
+    📶 RDP quality profile
+    • 1: High     — 32-bit, native resolution, effects, wallpaper, audio
+    • 2: Balanced — 24-bit, 1280x720, effects, wallpaper, audio
+    • 3: Low      — 16-bit, 1024x768, no effects, wallpaper, or audio
+    (Enter for High)
+    """
+    create_box(quality_box, "📶 RDP QUALITY")
+    try:
+        choice = input("Quality profile [1/2/3] (default 1): ").strip().lower()
+    except EOFError:
+        choice = ""
+    quality = {
+        "1": "high",
+        "2": "balanced",
+        "3": "low",
+        "high": "high",
+        "balanced": "balanced",
+        "low": "low",
+    }.get(choice, "high")
+    return quality, None
+
+
 def handle_rdp_choice(launch_rdp_devbox, launch_rdp_devbox_t4, launch_rdp_devbox_l4, launch_rdp_devbox_a10g, launch_rdp_devbox_l40s, cpu_only):
     """Choice 4: RDP Desktop Box with optional extra packages + GPU dispatch."""
     from ui.gpu_picker import prompt_gpu_dispatch
@@ -169,17 +201,7 @@ def handle_rdp_choice(launch_rdp_devbox, launch_rdp_devbox_t4, launch_rdp_devbox
     else:
         print("✅ No extra desktop tools requested.")
 
-    quality_box = """
-    📶 Low-bandwidth / remote-desktop tuning?
-    • y: lower color depth and recommend a smaller client resolution
-    • n: keep the default high-quality 32-bit color depth
-    """
-    create_box(quality_box, "📶 RDP QUALITY")
-    try:
-        quality_choice = input("Low bandwidth mode? (y/n): ").lower().strip()
-    except EOFError:
-        quality_choice = "n"
-    rdp_quality = "low" if quality_choice == "y" else "auto"
+    rdp_quality, rdp_max_bpp = prompt_rdp_quality()
 
     gpu_box = """
     🎮 Add GPU acceleration for desktop?
@@ -209,14 +231,16 @@ def handle_rdp_choice(launch_rdp_devbox, launch_rdp_devbox_t4, launch_rdp_devbox
             "3": ("A10G", launch_rdp_devbox_a10g),
             "4": ("L40S", launch_rdp_devbox_l40s),
         }
-        prompt_gpu_dispatch(gpu_types, package_list, "rdp", rdp_quality=rdp_quality)
+        prompt_gpu_dispatch(gpu_types, package_list, "rdp",
+                             rdp_quality=rdp_quality, rdp_max_bpp=rdp_max_bpp)
     else:
         cpu_box = """
         🖥️  Launching RDP Desktop (CPU-only)...
         """
         create_box(cpu_box, "🚀 RDP DESKTOP")
         show_spinner("Preparing your RDP Desktop", 2)
-        launch_rdp_devbox.remote(extra_packages=package_list, rdp_quality=rdp_quality)
+        launch_rdp_devbox.remote(extra_packages=package_list,
+                                 rdp_quality=rdp_quality, rdp_max_bpp=rdp_max_bpp)
 
 
 def handle_simple_choice(choice, launch_llamacpp_playroom, launch_forensics_image, launch_llamacpp_playroom_gpu, cpu_only, launch_forensics_htb=None):
@@ -250,10 +274,11 @@ def handle_simple_choice(choice, launch_llamacpp_playroom, launch_forensics_imag
         create_box(forensics_box, "Forensics Machine")
         show_spinner("Interleaving Bits... Hold On Tight!", 3)
         htb = prompt_htb_vm("forensic_analysis")
+        if htb is not None and launch_forensics_htb is None:
+            print("HTB VPN mode is unavailable in this launcher build.")
+            return
+        rdp_quality, rdp_max_bpp = prompt_rdp_quality()
         if htb is not None:
-            if launch_forensics_htb is None:
-                print("HTB VPN mode is unavailable in this launcher build.")
-                return
             htb_box = f"""
             🌐 Forensics box in HTB VPN VM mode...
             🔗 Network(s): {_network_label(htb["network"])}
@@ -262,9 +287,16 @@ def handle_simple_choice(choice, launch_llamacpp_playroom, launch_forensics_imag
             """
             create_box(htb_box, "🔍 FORENSICS + HTB VPN")
             show_spinner("Bringing up the HTB VPN VM", 3)
-            launch_forensics_htb.remote(network=htb["network"], box_name=htb["box_name"])
+            launch_forensics_htb.remote(
+                network=htb["network"],
+                box_name=htb["box_name"],
+                rdp_quality=rdp_quality,
+                rdp_max_bpp=rdp_max_bpp,
+            )
         else:
-            launch_forensics_image.remote()
+            launch_forensics_image.remote(
+                rdp_quality=rdp_quality, rdp_max_bpp=rdp_max_bpp
+            )
 
     elif choice == "7":
         if cpu_only:

@@ -132,14 +132,10 @@ def test_menu_prompts_for_the_network_on_both_paths():
     assert "def prompt_htb_vm" in menu
     assert "HTB Starting Point" in menu
     assert menu.count("= prompt_htb_vm(") == 2
-    assert (
-        'launch_devbox_htb.remote(network=htb["network"], box_name=htb["box_name"])'
-        in menu
-    )
-    assert (
-        'launch_forensics_htb.remote(network=htb["network"], box_name=htb["box_name"])'
-        in menu
-    )
+    for launcher in ("launch_devbox_htb", "launch_forensics_htb"):
+        call = menu.split(f"{launcher}.remote(", 1)[1][:400]
+        assert 'network=htb["network"]' in call
+        assert 'box_name=htb["box_name"]' in call
 
 
 def test_readme_documents_the_starting_point_secret():

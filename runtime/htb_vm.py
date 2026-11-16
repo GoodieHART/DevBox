@@ -253,6 +253,12 @@ if [ "$1" = "forensic" ]; then
     chmod 700 /tmp/xdg-runtime
     printf '#!/bin/sh\nexec /usr/local/bin/startxfce4-wrapper\n' > /root/.xsession
     chmod +x /root/.xsession
+    # Apply the RDP profile before xrdp starts so the daemon picks it up. The
+    # module is stdlib-only and baked into /root by the image. A profile that
+    # cannot be applied leaves stock xrdp behaviour and does not stop the box.
+    if ! python3 -m runtime.rdp_quality apply --quality "${RDP_QUALITY:-high}" --home /root; then
+        printf 'RDP quality profile could not be applied; using xrdp defaults\n' >&2
+    fi
     if ! dbus-daemon --system --fork; then
         printf 'dbus-daemon failed to start; the desktop may not load\n' >&2
     fi
@@ -361,6 +367,7 @@ def _print_ready_block(
     rdp_port=3389,
     rdp_user="root",
     rdp_password="",
+    rdp_profile=None,
     tailscale_error="",
 ):
     """Print the connection block for a ready HTB box.
@@ -421,6 +428,15 @@ def _print_ready_block(
             f"{rdp_tunnel.unencrypted_host}:{rdp_tunnel.unencrypted_port} "
             f"(username {rdp_user}, password {rdp_password})",
         )
+    if forensic and rdp_profile:
+        from runtime.rdp_quality import client_hint, profile_summary
+
+        hints = client_hint(rdp_profile)
+        print()
+        print("📶 RDP quality:")
+        _print_field("Profile:", profile_summary(rdp_profile))
+        _print_field("mstsc:", hints["mstsc"])
+        _print_field("FreeRDP:", hints["freerdp"])
     print("=" * 60)
 
 
@@ -434,6 +450,8 @@ def run_htb_vm(
     network=None,
     box_name=None,
     tailscale_secret=None,
+    rdp_quality="auto",
+    rdp_max_bpp=None,
 ):
     from devbox_core.box_identity import apply_sandbox_identity, resolve_box_name
     from devbox_core.config import (
@@ -460,6 +478,15 @@ def run_htb_vm(
     if ts_secret is not None:
         secrets.append(ts_secret)
 
+    # Resolved here for the connection block and the VM environment. The VM
+    # applies the same module itself, before xrdp starts.
+    from runtime.rdp_quality import resolve_profile
+
+    rdp_profile = resolve_profile(rdp_quality, rdp_max_bpp) if forensic else None
+    rdp_quality = rdp_profile["quality"] if rdp_profile else "high"
+    # Pin the resolved depth so the VM cannot re-resolve it differently.
+    rdp_max_bpp_env = str(rdp_profile["max_bpp"]) if rdp_profile else ""
+
     sandbox = modal.Sandbox.create(
         "sleep",
         "infinity",
@@ -473,6 +500,9 @@ def run_htb_vm(
             "DEVBOX_MODE": "forensic" if forensic else "standard",
             # The image mounts the DevBox python packages under /root.
             "PYTHONPATH": "/root",
+            # Read by `python3 -m runtime.rdp_quality apply` in the VM script.
+            "RDP_QUALITY": rdp_quality,
+            "RDP_MAX_BPP": rdp_max_bpp_env,
         },
         volumes={"/data": volume},
         cpu=resources.get("cpu") if resources else None,
@@ -518,6 +548,7 @@ def run_htb_vm(
             rdp_port=RDP_PORT,
             rdp_user=RDP_USER,
             rdp_password=RDP_PASSWORD,
+            rdp_profile=rdp_profile,
             tailscale_error=tailscale_error,
         )
         for line in process.stdout:
